@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+
+    <meta name="theme-color" content="#0b0712">
+    <meta name="description" content="MLD Community Intelligence">
+
+    <title>MLD · Community</title>
+
+    <link rel="icon" href="/logo.svg.JPG">
+    <link rel="stylesheet" href="/style.css">
+</head>
+
+<body>
+
+    <div class="glow g1"></div>
+    <div class="glow g2"></div>
+
+    <!-- HEADER -->
+    <header class="topbar">
+
+        <nav class="wrap nav">
+
+            <a class="brand" href="#top">
+
+                <img
+                    src="/logo.svg.JPG"
+                    onerror="this.src='/logo.svg'"
+                    alt="MLD"
+                >
+
+                <span>
+                    <b>MLD</b>
+                    <small>COMMUNITY INTELLIGENCE</small>
+                </span>
+
+            </a>
+
+            <div class="desktop-nav">
+
+                <button data-view="members">
+                    الأعضاء
+                </button>
+
+                <button data-view="top">
+                    TOP
+                </button>
+
+                <button data-view="roles">
+                    الرتب
+                </button>
+
+                <button data-view="message">
+                    رسالة خاصة
+                </button>
+
+                <a
+                    id="invite"
+                    class="invite"
+                    target="_blank"
+                    rel="noopener"
+                >
+                    انضم للسيرفر
+                </a>
+
+            </div>
+
+            <button
+                id="menu"
+                class="menu"
+                aria-label="فتح القائمة"
+                type="button"
+            >
+                ☰
+            </button>
+
+        </nav>
+
+        <div id="mobile-menu" class="mobile-menu">
+
+            <button data-view="members">
+                الأعضاء
+            </button>
+
+            <button data-view="top">
+                TOP
+            </button>
+
+            <button data-view="roles">
+                الرتب القيادية
+            </button>
+
+            <button data-view="message">
+                إرسال رسالة خاصة
+            </button>
+
+            <a
+                id="invite-mobile"
+                class="invite"
+                target="_blank"
+                rel="noopener"
+            >
+                انضم للسيرفر
+            </a>
+
+        </div>
+
+    </header>
+
+
+    <!-- MAIN -->
+    <main id="top" class="wrap">
+
+        <!-- HERO -->
+        <section class="hero">
+
+            <div class="hero-copy">
+
+                <span class="pill">
+                    <i></i>
+                    LIVE COMMUNITY SYSTEM
+                </span>
+
+                <h1>
+                    مجتمع
+                    <span>MLD</span>
+                    <br>
+                    بشكل مختلف.
+                </h1>
+
+                <p>
+                    منصة مجتمع متكاملة تعرض أعضاء السيرفر،
+                    الرتب، الإحصائيات، النشاط والتواصل
+                    بشكل مباشر وسريع.
+                </p>
+
+                <div class="hero-actions">
+
+                    <a
+                        class="primary"
+                        href="#directory"
+                    >
+                        ابدأ الاستكشاف ←
+                    </a>
+
+                    <span class="creator">
+                        صُنع بواسطة
+                        <b>فهد المطيري</b>
+                    </span>
+
+                </div>
+
+            </div>
+
+
+            <div class="hero-art">
+
+                <i></i>
+                <i></i>
+
+                <img
+                    src="/logo.svg.JPG"
+                    onerror="this.src='/logo.svg'"
+                    alt="MLD Logo"
+                >
+
+            </div>
+
+        </section>
+
+
+        <!-- SERVER INFO -->
+        <section class="server-strip">
+
+            <div>
+                <small>السيرفر</small>
+                <strong id="server-name">
+                    MLD
+                </strong>
+            </div>
+
+            <div>
+                <small>المنشئ</small>
+                <strong>
+                    فهد المطيري
+                </strong>
+            </div>
+
+            <div>
+                <small>الأعضاء</small>
+                <strong id="server-count">
+                    —
+                </strong>
+            </div>
+
+            <div>
+                <small>الحالة</small>
+                <strong class="online">
+                    ● متصل
+                </strong>
+            </div>
+
+        </section>
+
+
+        <!-- FEATURES -->
+        <section class="features">
+
+            <div class="feature">
+
+                <span class="feature-icon">
+                    ◈
+                </span>
+
+                <div>
+                    <h3>إدارة المجتمع</h3>
+                    <p>
+                        متابعة الأعضاء والرتب
+                        والبيانات بشكل مباشر.
+                    </p>
+                </div>
+
+            </div>
+
+
+            <div class="feature">
+
+                <span class="feature-icon">
+                    ↗
+                </span>
+
+                <div>
+                    <h3>إحصائيات مباشرة</h3>
+                    <p>
+                        الرسائل والمنشنات والنشاط
+                        الصوتي في مكان واحد.
+                    </p>
+                </div>
+
+            </div>
+
+
+            <div class="feature">
+
+                <span class="feature-icon">
+                    ✦
+                </span>
+
+                <div>
+                    <h3>تواصل مباشر</h3>
+                    <p>
+                        إرسال رسائل خاصة لأعضاء
+                        السيرفر من المنصة.
+                    </p>
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <!-- DIRECTORY -->
+        <section
+            id="directory"
+            class="panel"
+        >
+
+            <div class="section-head">
+
+                <div>
+
+                    <p class="eyebrow">
+                        MLD DIRECTORY
+                    </p>
+
+                    <h2 id="view-title">
+                        أعضاء المجتمع
+                    </h2>
+
+                    <p
+                        id="subtitle"
+                        class="muted"
+                    >
+                        كل الأعضاء والبيانات تتحدث تلقائيًا.
+                    </p>
+
+                </div>
+
+
+                <div
+                    id="search-wrap"
+                    class="search-wrap"
+                >
+
+                    <span>⌕</span>
+
+                    <input
+                        id="search"
+                        type="search"
+                        placeholder="ابحث بالاسم أو اليوزر..."
+                        autocomplete="off"
+                        spellcheck="false"
+                    >
+
+                </div>
+
+            </div>
+
+
+            <div
+                id="status"
+                class="status"
+            >
+                جاري التحميل...
+            </div>
+
+
+            <div
+                id="content"
+                class="grid"
+            ></div>
+
+        </section>
+
+    </main>
+
+
+    <!-- MODAL -->
+    <div
+        id="modal"
+        class="modal hidden"
+        aria-hidden="true"
+    >
+
+        <div
+            class="modal-card"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modal-content"
+        >
+
+            <button
+                id="close"
+                class="close"
+                type="button"
+                aria-label="إغلاق"
+            >
+                ×
+            </button>
+
+            <div id="modal-content"></div>
+
+        </div>
+
+    </div>
+
+
+    <!-- FOOTER -->
+    <footer class="wrap footer">
+
+        <span>MLD</span>
+
+        <span>·</span>
+
+        <span id="year"></span>
+
+        <span>·</span>
+
+        <span>Community Intelligence</span>
+
+    </footer>
+
+
+    <script src="/site.js"></script>
+
+</body>
+</html>
