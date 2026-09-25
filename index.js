@@ -1,4 +1,5 @@
 "use strict";
+const crypto = require("crypto");
 require("dotenv").config();
 
 const path = require("path");
@@ -200,6 +201,68 @@ app.get("/health", (req, res) => {
     membersCachedCount: memberSnapshot?.length || 0,
     membersUpdatedAt: memberSnapshotAt || null
   });
+});
+
+const siteReviews = [];
+let siteVisits = 0;
+const visitorHits = new Map();
+const reviewHits = new Map();
+
+app.post("/api/public/visit", (req, res) => {
+  const ip = String(req.ip || req.headers["x-forwarded-for"] || "unknown");
+  const now = Date.now();
+  const last = visitorHits.get(ip) || 0;
+  if (now - last > 30 * 60 * 1000) {
+    siteVisits += 1;
+    visitorHits.set(ip, now);
+  }
+  res.json({ visits: siteVisits });
+});
+
+app.get("/api/public/community", (req, res) => {
+  const average = siteReviews.length
+    ? siteReviews.reduce((sum, item) => sum + item.rating, 0) / siteReviews.length
+    : 0;
+  res.json({
+    visits: siteVisits,
+    reviews: siteReviews.length,
+    averageRating: Number(average.toFixed(1)),
+    updatedAt: new Date().toISOString()
+  });
+});
+
+app.get("/api/public/reviews", (req, res) => {
+  res.json({ reviews: siteReviews.slice(0, 12) });
+});
+
+app.post("/api/public/reviews", (req, res) => {
+  const ip = String(req.ip || req.headers["x-forwarded-for"] || "unknown");
+  const now = Date.now();
+  const last = reviewHits.get(ip) || 0;
+  if (now - last < 60 * 1000) {
+    return res.status(429).json({ error: "انتظر دقيقة قبل إرسال تقييم آخر" });
+  }
+
+  const name = String(req.body?.name || "زائر").trim().slice(0, 40);
+  const comment = String(req.body?.comment || "").trim().slice(0, 600);
+  const rating = Number(req.body?.rating);
+
+  if (!name || comment.length < 3 || !Number.isInteger(rating) || rating < 1 || rating > 5) {
+    return res.status(400).json({ error: "الاسم والتعليق والتقييم من 1 إلى 5 مطلوبة" });
+  }
+
+  const review = {
+    id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+    name,
+    comment,
+    rating,
+    createdAt: new Date().toISOString()
+  };
+
+  siteReviews.unshift(review);
+  if (siteReviews.length > 100) siteReviews.length = 100;
+  reviewHits.set(ip, now);
+  res.status(201).json({ review });
 });
 
 app.get("/api/public/server", async (req, res) => {
