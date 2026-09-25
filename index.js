@@ -552,6 +552,47 @@ app.patch("/api/auth/profile", requireAuth, (req, res) => {
   req.user.discordId = discordId;
   res.json({ user: userJson(req.user) });
 });
+// -------------------- Public site analytics --------------------
+let siteVisits = 0;
+const recentVisitors = new Map();
+
+app.post("/api/public/visit", (req, res) => {
+  const key = req.ip || req.headers["x-forwarded-for"] || "unknown";
+  const nowMs = Date.now();
+  const last = recentVisitors.get(key) || 0;
+  if (nowMs - last > 30 * 60 * 1000) {
+    siteVisits += 1;
+    recentVisitors.set(key, nowMs);
+  }
+  res.json({ visits: siteVisits });
+});
+
+app.get("/api/public/stats", async (req, res) => {
+  try {
+    const guild = await getGuild();
+    const allMembers = await getAllMembers(guild);
+    const allReviews = [...reviews.values()].flat();
+    const avg = allReviews.length ? allReviews.reduce((sum, r) => sum + Number(r.rating || 0), 0) / allReviews.length : 0;
+    res.json({
+      visits: siteVisits,
+      members: guild.memberCount,
+      websiteUsers: users.size,
+      groups: groups.size,
+      reviews: allReviews.length,
+      averageRating: Number(avg.toFixed(1)),
+      online: allMembers.filter((m) => m.presence?.status && m.presence.status !== "offline").length
+    });
+  } catch (error) {
+    console.error("Public stats endpoint:", error);
+    res.status(503).json({ error: "Stats temporarily unavailable" });
+  }
+});
+
+app.get("/api/public/reviews", (req, res) => {
+  const allReviews = [...reviews.values()].flat().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  res.json({ reviews: allReviews.slice(0, 8) });
+});
+
 // -------------------- Public Discord API --------------------
 
 app.get("/api/public/server", async (req, res) => {
