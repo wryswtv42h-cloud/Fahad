@@ -1322,67 +1322,43 @@ function renderReviews(reviews) {
 }
 
 async function createReview() {
-  if (!requireLogin()) {
-    return;
-  }
-
-  const targetType =
-    prompt(
-      "نوع العنصر: site / game / service"
-    );
-
-  if (!targetType) return;
-
-  const targetId =
-    prompt("معرف العنصر:");
-
-  if (!targetId) return;
-
-  const targetName =
-    prompt("اسم العنصر:");
-
-  const rating =
-    Number(
-      prompt("التقييم من 1 إلى 5:")
-    );
-
-  const comment =
-    prompt("اكتب تعليقك:");
-
-  if (!comment) return;
-
-  try {
-
-    await api(
-      "/api/reviews",
-      {
-        method: "POST",
-        body: {
-          targetType,
-          targetId,
-          targetName:
-            targetName || targetId,
-          rating,
-          comment
-        }
-      }
-    );
-
-    showToast(
-      "تم إرسال التقييم للمراجعة"
-    );
-
-    await loadReviews();
-
-  } catch (error) {
-
-    showToast(
-      error.message,
-      "error"
-    );
-  }
+  openModal(`
+    <div class="modal-head">
+      <p class="eyebrow">COMMUNITY VOICE</p>
+      <h2>قيّم تجربتك</h2>
+      <p class="modal-description">ما يحتاج تسجيل دخول. اكتب اسمك، اختر تقييمك، وشارك رأيك.</p>
+    </div>
+    <form id="public-review-form" class="auth-panel" style="width:100%;margin:0;padding:0;border:0;box-shadow:none;background:transparent">
+      <label>اسمك
+        <input name="visitorName" maxlength="40" placeholder="مثلاً: فهد" required>
+      </label>
+      <label>التقييم
+        <select name="rating" required style="width:100%;min-height:47px;padding:0 13px;color:var(--text);background:rgba(255,255,255,.035);border:1px solid var(--border);border-radius:12px">
+          <option value="">اختر التقييم</option><option value="5">★★★★★ — ممتاز</option><option value="4">★★★★☆ — رائع</option><option value="3">★★★☆☆ — جيد</option><option value="2">★★☆☆☆ — يحتاج تحسين</option><option value="1">★☆☆☆☆ — ضعيف</option>
+        </select>
+      </label>
+      <label>رأيك
+        <textarea name="comment" maxlength="1000" required placeholder="وش رأيك بالموقع والمجتمع؟" style="width:100%;min-height:130px;padding:13px;color:var(--text);background:rgba(255,255,255,.035);border:1px solid var(--border);border-radius:12px;outline:0;resize:vertical"></textarea>
+      </label>
+      <button class="primary full" type="submit">نشر التقييم ⭐</button>
+    </form>
+  `);
+  $("#public-review-form")?.addEventListener("submit", async event => {
+    event.preventDefault();
+    const form=event.currentTarget;
+    const data=new FormData(form);
+    try{
+      await api("/api/reviews",{method:"POST",body:{
+        targetType:"site",targetId:"fahad",targetName:"Fahad Community",
+        visitorName:String(data.get("visitorName")||"زائر").trim(),
+        rating:Number(data.get("rating")),comment:String(data.get("comment")||"").trim()
+      }});
+      closeModal();
+      showToast("تم نشر تقييمك ❤️");
+      await Promise.allSettled([loadReviews(),loadHomeReviews(),loadHomePulse()]);
+    }catch(error){showToast(error.message,"error");}
+  });
 }
-
 
 // =========================
 // TICKETS
