@@ -1,0 +1,15 @@
+{
+  "name": "discord-community-platform",
+  "version": "1.0.0",
+  "description": "Discord Community Platform with Cinema, Games, Tickets, and Admin Panel",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.14.1",
+    "express": "^4.19.2",
+    "ws": "^8.16.0",
+    "dotenv": "^16.4.5"
+  }
+}
