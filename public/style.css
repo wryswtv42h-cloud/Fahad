@@ -1,0 +1,31 @@
+/* --- تنسيقات الأقسام الإضافية (السينما، الألعاب، التذاكر، والتقديمات) --- */
+.card button.primary {
+  width: 100%;
+  margin-top: 10px;
+  padding: 10px;
+  font-size: 13px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--accent), #e5a8d6);
+  color: #241329;
+  border: none;
+  font-weight: 900;
+  cursor: pointer;
+  transition: 0.2s;
+}
+.card button.primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px #f799d855;
+}
+
+/* تنسيق عام لأزرار القائمة العلوية الجديدة عند التصغير */
+@media(max-width: 950px) {
+  .desktop-nav {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
+  }
+  .desktop-nav button, .desktop-nav .invite {
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+}
