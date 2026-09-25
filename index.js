@@ -1,431 +1,757 @@
 "use strict";
+
 require("dotenv").config();
 
 const path = require("path");
+const http = require("http");
+const crypto = require("crypto");
+const bcrypt = require("bcryptjs");
+
 const express = require("express");
 const cors = require("cors");
-const { Client, GatewayIntentBits, EmbedBuilder } = require("discord.js");
+const helmet = require("helmet");
+const session = require("express-session");
 
-const token = process.env.DISCORD_BOT_TOKEN;
-const guildId = process.env.DISCORD_GUILD_ID;
-const port = Number(process.env.PORT || 3000);
+const {
+    Client,
+    GatewayIntentBits,
+    Partials,
+    EmbedBuilder,
+    ChannelType
+} = require("discord.js");
 
-if (!token || !guildId) {
-  console.error("Missing DISCORD_BOT_TOKEN or DISCORD_GUILD_ID");
-  process.exit(1);
-}
-
-const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildVoiceStates
-  ]
-});
+const { Server } = require("socket.io");
 
 const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+    cors: {
+        origin: true,
+        credentials: true
+    }
+});
+
+const PORT = Number(process.env.PORT || 3000);
+
+const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
+const DISCORD_GUILD_ID = process.env.DISCORD_GUILD_ID;
+
+const OWNER_ID = process.env.OWNER_ID || "";
+const OWNER_USERNAME = process.env.OWNER_USERNAME || "owner";
+const OWNER_PASSWORD = process.env.OWNER_PASSWORD || "change-me";
+
+const SESSION_SECRET =
+    process.env.SESSION_SECRET ||
+    crypto.randomBytes(32).toString("hex");
+
+const DISCORD_NOTIFICATION_CHANNEL_ID =
+    process.env.DISCORD_NOTIFICATION_CHANNEL_ID || "";
+
+const PUBLIC_SITE_URL =
+    process.env.PUBLIC_SITE_URL || "";
+
+if (!DISCORD_BOT_TOKEN || !DISCORD_GUILD_ID) {
+    console.error("Missing DISCORD_BOT_TOKEN or DISCORD_GUILD_ID");
+    process.exit(1);
+}
+
 app.disable("x-powered-by");
-app.use(cors());
-app.use(express.json({ limit: "20kb" }));
+
+app.use(
+    helmet({
+        contentSecurityPolicy: false
+    })
+);
+
+app.use(
+    cors({
+        origin: true,
+        credentials: true
+    })
+);
+
+app.use(express.json({ limit: "100kb" }));
+app.use(express.urlencoded({ extended: true }));
+
+app.use(
+    session({
+        secret: SESSION_SECRET,
+        resave: false,
+        saveUninitialized: false,
+        cookie: {
+            httpOnly: true,
+            sameSite: "lax",
+            secure: process.env.NODE_ENV === "production",
+            maxAge: 1000 * 60 * 60 * 24 * 30
+        }
+    })
+);
+
 app.use(express.static(path.join(__dirname, "public")));
 
-const leadershipRoleIds = [
-  "1530712642384040027", // Owner
-  "1521187079336362024", // Co-Owner
-  "1531109479264026706", // Founder
-  "1548732297669255259", // Senior Staff
-  "1548732341185155103", // Staff
-  "1548732606508703744"  // Junior Staff
-];
+/* =========================================================
+   DISCORD
+========================================================= */
 
-const leadershipRoleSet = new Set(leadershipRoleIds);
-const importantPermissionNames = new Set([
-  "Administrator",
-  "ManageGuild",
-  "ManageRoles",
-  "ManageChannels",
-  "ManageMessages",
-  "ManageWebhooks",
-  "ManageNicknames",
-  "BanMembers",
-  "KickMembers",
-  "ModerateMembers",
-  "MentionEveryone",
-  "ViewAuditLog",
-  "ManageEvents",
-  "ManageThreads",
-  "ManageEmojisAndStickers"
-]);
+const discord = new Client({
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildVoiceStates,
+        GatewayIntentBits.DirectMessages
+    ],
+    partials: [
+        Partials.Channel,
+        Partials.Message
+    ]
+});
+
+/* =========================================================
+   MEMORY DATABASE
+========================================================= */
+
+const db = {
+    users: [],
+    admins: [],
+    groups: [],
+    groupMembers: [],
+    groupJoinRequests: [],
+    groupMessages: [],
+    tickets: [],
+    ticketMessages: [],
+    applications: [],
+    logs: [],
+    privateMessageLogs: [],
+    watchRooms: [],
+    reviews: [],
+    games: [],
+    gamePlayers: [],
+    notifications: []
+};
+
+let ids = {
+    user: 1,
+    admin: 1,
+    group: 1,
+    groupMember: 1,
+    groupJoinRequest: 1,
+    groupMessage: 1,
+    ticket: 1,
+    ticketMessage: 1,
+    application: 1,
+    log: 1,
+    privateMessageLog: 1,
+    watchRoom: 1,
+    review: 1,
+    game: 1,
+    gamePlayer: 1,
+    notification: 1
+};
+
+/* =========================================================
+   HELPERS
+========================================================= */
+
+function clean(value, max = 200) {
+    return String(value ?? "")
+        .trim()
+        .slice(0, max);
+}
+
+function now() {
+    return new Date().toISOString();
+}
+
+function hashPassword(password) {
+    return bcrypt.hashSync(String(password), 12);
+}
+
+function comparePassword(password, hash) {
+    try {
+        return bcrypt.compareSync(String(password), hash);
+    } catch {
+        return false;
+    }
+}
+
+function publicUser(user) {
+    if (!user) return null;
+
+    return {
+        id: user.id,
+        username: user.username,
+        displayName: user.displayName,
+        role: user.role,
+        discordId: user.discordId || null,
+        createdAt: user.createdAt
+    };
+}
+
+function currentUser(req) {
+    if (!req.session?.userId) return null;
+
+    return (
+        db.users.find(
+            user => user.id === Number(req.session.userId)
+        ) || null
+    );
+}
+
+function requireAuth(req, res, next) {
+    const user = currentUser(req);
+
+    if (!user) {
+        return res.status(401).json({
+            error: "يجب تسجيل الدخول أولًا"
+        });
+    }
+
+    req.user = user;
+    next();
+}
+
+function isOwner(user) {
+    return Boolean(
+        user &&
+        (
+            user.role === "owner" ||
+            user.id === 1
+        )
+    );
+}
+
+function isAdmin(user) {
+    return Boolean(
+        user &&
+        (
+            user.role === "owner" ||
+            user.role === "admin"
+        )
+    );
+}
+
+function requireAdmin(req, res, next) {
+    const user = currentUser(req);
+
+    if (!user || !isAdmin(user)) {
+        return res.status(403).json({
+            error: "ليس لديك صلاحية الإدارة"
+        });
+    }
+
+    req.user = user;
+    next();
+}
+
+function makeSlug(text) {
+    return clean(text, 80)
+        .toLowerCase()
+        .replace(/[^\p{L}\p{N}\s-_]/gu, "")
+        .replace(/\s+/g, "-")
+        .slice(0, 60);
+}
+
+function findUser(id) {
+    return db.users.find(
+        user => user.id === Number(id)
+    ) || null;
+}
+
+function findGroup(id) {
+    return db.groups.find(
+        group => group.id === Number(id)
+    ) || null;
+}
+
+function isGroupOwner(group, userId) {
+    return Boolean(
+        group &&
+        Number(group.ownerId) === Number(userId)
+    );
+}
+
+function isGroupMember(groupId, userId) {
+    const group = findGroup(groupId);
+
+    if (!group || group.status !== "approved") {
+        return false;
+    }
+
+    if (isGroupOwner(group, userId)) {
+        return true;
+    }
+
+    return db.groupMembers.some(member =>
+        Number(member.groupId) === Number(groupId) &&
+        Number(member.userId) === Number(userId) &&
+        member.status === "approved"
+    );
+}
+
+function groupView(group) {
+    if (!group) return null;
+
+    const owner = findUser(group.ownerId);
+
+    const members = db.groupMembers
+        .filter(member =>
+            Number(member.groupId) === Number(group.id) &&
+            member.status === "approved"
+        )
+        .map(member => {
+            const user = findUser(member.userId);
+
+            return {
+                id: member.id,
+                userId: member.userId,
+                username: user?.username || "unknown",
+                displayName: user?.displayName || user?.username || "unknown",
+                joinedAt: member.createdAt
+            };
+        });
+
+    return {
+        ...group,
+        owner: publicUser(owner),
+        members,
+        membersCount: members.length
+    };
+}
+
+/* =========================================================
+   OWNER ACCOUNT
+========================================================= */
+
+if (!db.users.length) {
+    db.users.push({
+        id: ids.user++,
+        username: OWNER_USERNAME,
+        displayName: "فهد المطيري",
+        passwordHash: hashPassword(OWNER_PASSWORD),
+        discordId: OWNER_ID || null,
+        role: "owner",
+        createdAt: now()
+    });
+}
+
+/* =========================================================
+   DISCORD CACHE
+========================================================= */
+
+let guildCache = null;
+let guildCacheAt = 0;
+let guildFetchPromise = null;
+
+let memberSnapshot = null;
+let memberSnapshotAt = 0;
+let memberFetchPromise = null;
+
+const GUILD_CACHE_TTL = 15000;
+const MEMBER_CACHE_TTL = 45000;
 
 const activity = new Map();
 const voiceSessions = new Map();
 const sendHits = new Map();
 
-let guildCache = null;
-let guildCacheAt = 0;
-let guildFetchPromise = null;
-let memberSnapshot = null;
-let memberSnapshotAt = 0;
-let memberFetchPromise = null;
+const leadershipRoleIds = [
+    "1530712642384040027",
+    "1521187079336362024",
+    "1531109479264026706",
+    "1548732297669255259",
+    "1548732341185155103",
+    "1548732606508703744"
+];
 
-const MEMBER_CACHE_TTL = 45_000;
-const GUILD_CACHE_TTL = 15_000;
+const leadershipRoleSet =
+    new Set(leadershipRoleIds);
 
-function getActivity(id) {
-  if (!activity.has(id)) {
-    activity.set(id, {
-      messages: 0,
-      mentionsReceived: 0,
-      mentionsSent: 0,
-      voiceMinutes: 0,
-      voiceJoins: 0,
-      chatRounds: 0
-    });
-  }
+const importantPermissionNames = new Set([
+    "Administrator",
+    "ManageGuild",
+    "ManageRoles",
+    "ManageChannels",
+    "ManageMessages",
+    "ManageWebhooks",
+    "ManageNicknames",
+    "BanMembers",
+    "KickMembers",
+    "ModerateMembers",
+    "MentionEveryone",
+    "ViewAuditLog",
+    "ManageEvents",
+    "ManageThreads",
+    "ManageEmojisAndStickers"
+]);
 
-  return activity.get(id);
+function getStats(id) {
+    if (!activity.has(id)) {
+        activity.set(id, {
+            messages: 0,
+            mentionsReceived: 0,
+            mentionsSent: 0,
+            voiceMinutes: 0,
+            voiceJoins: 0,
+            chatRounds: 0
+        });
+    }
+
+    return activity.get(id);
 }
 
 async function getGuild() {
-  if (guildCache && Date.now() - guildCacheAt < GUILD_CACHE_TTL) {
-    return guildCache;
-  }
+    if (
+        guildCache &&
+        Date.now() - guildCacheAt < GUILD_CACHE_TTL
+    ) {
+        return guildCache;
+    }
 
-  if (guildFetchPromise) return guildFetchPromise;
+    if (guildFetchPromise) {
+        return guildFetchPromise;
+    }
 
-  guildFetchPromise = client.guilds.fetch(guildId)
-    .then((guild) => {
-      guildCache = guild;
-      guildCacheAt = Date.now();
-      return guild;
-    })
-    .finally(() => {
-      guildFetchPromise = null;
-    });
+    guildFetchPromise = discord.guilds
+        .fetch(DISCORD_GUILD_ID)
+        .then(guild => {
+            guildCache = guild;
+            guildCacheAt = Date.now();
+            return guild;
+        })
+        .finally(() => {
+            guildFetchPromise = null;
+        });
 
-  return guildFetchPromise;
+    return guildFetchPromise;
 }
 
 function invalidateMemberSnapshot() {
-  memberSnapshotAt = 0;
+    memberSnapshotAt = 0;
 }
 
-async function getAllMembers(guild) {
-  const fresh = memberSnapshot && Date.now() - memberSnapshotAt < MEMBER_CACHE_TTL;
-  if (fresh) return memberSnapshot;
-  if (memberFetchPromise) return memberFetchPromise;
+async function fetchMembers(guild) {
+    const fresh =
+        memberSnapshot &&
+        Date.now() - memberSnapshotAt < MEMBER_CACHE_TTL;
 
-  memberFetchPromise = guild.members.fetch()
-    .then((collection) => {
-      // لا نستبعد البوتات: هذه القائمة تمثل كل أعضاء السيرفر فعلًا.
-      memberSnapshot = [...collection.values()];
-      memberSnapshotAt = Date.now();
-      return memberSnapshot;
-    })
-    .catch((error) => {
-      // عند حدوث Rate Limit أو فشل مؤقت، نستخدم آخر لقطة صحيحة بدل قائمة فارغة.
-      if (memberSnapshot?.length) return memberSnapshot;
-      throw error;
-    })
-    .finally(() => {
-      memberFetchPromise = null;
-    });
+    if (fresh) {
+        return memberSnapshot;
+    }
 
-  return memberFetchPromise;
+    if (memberFetchPromise) {
+        return memberFetchPromise;
+    }
+
+    memberFetchPromise = guild.members
+        .fetch()
+        .then(collection => {
+            memberSnapshot = [
+                ...collection.values()
+            ];
+
+            memberSnapshotAt = Date.now();
+
+            return memberSnapshot;
+        })
+        .catch(error => {
+            if (memberSnapshot?.length) {
+                return memberSnapshot;
+            }
+
+            throw error;
+        })
+        .finally(() => {
+            memberFetchPromise = null;
+        });
+
+    return memberFetchPromise;
 }
 
 function importantPermissions(permissionCollection) {
-  return permissionCollection.toArray()
-    .filter((permission) => importantPermissionNames.has(permission));
-}
-
-function roleJson(role, membersCount = role.members?.size || 0) {
-  return {
-    id: role.id,
-    name: role.name,
-    color: role.hexColor,
-    position: role.position,
-    permissions: importantPermissions(role.permissions),
-    membersCount,
-    mentionable: role.mentionable
-  };
-}
-
-function memberJson(member) {
-  const roles = member.roles.cache
-    .filter((role) => role.id !== member.guild.id)
-    .sort((a, b) => b.position - a.position)
-    .map((role) => roleJson(role));
-
-  const leadershipRoles = roles.filter((role) => leadershipRoleSet.has(role.id));
-
-  return {
-    id: member.id,
-    name: member.displayName,
-    username: member.user.username,
-    globalName: member.user.globalName,
-    bot: member.user.bot,
-    avatar: member.user.displayAvatarURL({ extension: "png", size: 256 }),
-    joinedAt: member.joinedAt,
-    roles,
-    importantRoles: leadershipRoles,
-    rank: leadershipRoles[0]?.name || roles[0]?.name || "عضو",
-    stats: getActivity(member.id)
-  };
-}
-
-function sortedMemberJson(members) {
-  return [...members]
-    .sort((a, b) => {
-      const aRole = a.roles.cache
-        .filter((role) => leadershipRoleSet.has(role.id))
-        .sort((x, y) => y.position - x.position)
-        .first();
-      const bRole = b.roles.cache
-        .filter((role) => leadershipRoleSet.has(role.id))
-        .sort((x, y) => y.position - x.position)
-        .first();
-      return (bRole?.position || 0) - (aRole?.position || 0);
-    })
-    .map(memberJson);
-}
-
-app.get("/health", (req, res) => {
-  res.json({
-    ok: true,
-    botReady: client.isReady(),
-    membersCached: Boolean(memberSnapshot),
-    membersCachedCount: memberSnapshot?.length || 0,
-    membersUpdatedAt: memberSnapshotAt || null
-  });
-});
-
-app.get("/api/public/server", async (req, res) => {
-  try {
-    const guild = await getGuild();
-    res.json({
-      id: guild.id,
-      name: guild.name,
-      icon: guild.iconURL({ extension: "png", size: 256 }),
-      memberCount: guild.memberCount,
-      ownerName: process.env.SERVER_FOUNDER_NAME || "فهد المطيري",
-      invite: process.env.DISCORD_INVITE_URL || ""
-    });
-  } catch (error) {
-    console.error("Server endpoint:", error);
-    res.status(503).json({ error: "Discord server unavailable" });
-  }
-});
-
-app.get("/api/public/members", async (req, res) => {
-  try {
-    const guild = await getGuild();
-    const allMembers = await getAllMembers(guild);
-    const query = String(req.query.q || "").trim().toLocaleLowerCase("ar");
-    const cleanQuery = query.replace(/^@/, "");
-
-    const filtered = cleanQuery
-      ? allMembers.filter((member) => {
-          const searchable = [
-            member.displayName,
-            member.user.username,
-            member.user.globalName,
-            member.user.tag,
-            member.id
-          ]
-            .filter(Boolean)
-            .join(" ")
-            .toLocaleLowerCase("ar");
-          return searchable.includes(cleanQuery);
-        })
-      : allMembers;
-
-    res.json({
-      members: sortedMemberJson(filtered),
-      total: filtered.length,
-      totalServerMembers: allMembers.length,
-      updatedAt: memberSnapshotAt,
-      cached: Boolean(memberSnapshot)
-    });
-  } catch (error) {
-    console.error("Members endpoint:", error);
-    res.status(503).json({ error: "Members are temporarily unavailable" });
-  }
-});
-
-app.get("/api/public/roles", async (req, res) => {
-  try {
-    const guild = await getGuild();
-    const allMembers = await getAllMembers(guild);
-
-    const roles = leadershipRoleIds
-      .map((id) => guild.roles.cache.get(id))
-      .filter(Boolean)
-      .map((role) => {
-        const count = allMembers.reduce(
-          (total, member) => total + (member.roles.cache.has(role.id) ? 1 : 0),
-          0
+    return permissionCollection
+        .toArray()
+        .filter(permission =>
+            importantPermissionNames.has(permission)
         );
-        return roleJson(role, count);
-      });
+}
 
-    res.json({ roles, updatedAt: memberSnapshotAt });
-  } catch (error) {
-    console.error("Roles endpoint:", error);
-    res.status(503).json({ error: "Roles are temporarily unavailable" });
-  }
-});
+function roleObject(role, membersCount = role.members?.size || 0) {
+    return {
+        id: role.id,
+        name: role.name,
+        color: role.hexColor,
+        position: role.position,
+        permissions: importantPermissions(
+            role.permissions
+        ),
+        membersCount,
+        mentionable: role.mentionable
+    };
+}
 
-app.get("/api/public/roles/:id/members", async (req, res) => {
-  try {
-    const guild = await getGuild();
-    const role = guild.roles.cache.get(req.params.id);
+function memberObject(member) {
+    const roles = member.roles.cache
+        .filter(role =>
+            role.id !== member.guild.id
+        )
+        .sort((a, b) =>
+            b.position - a.position
+        )
+        .map(role => roleObject(role));
 
-    if (!role || !leadershipRoleSet.has(role.id)) {
-      return res.status(404).json({ error: "Role not found" });
+    const importantRoles =
+        roles.filter(role =>
+            leadershipRoleSet.has(role.id)
+        );
+
+    const permissions = [];
+
+    for (const permission of importantPermissionNames) {
+        try {
+            if (
+                member.permissions.has(permission)
+            ) {
+                permissions.push(permission);
+            }
+        } catch {}
     }
 
-    const roleMembers = (await getAllMembers(guild))
-      .filter((member) => member.roles.cache.has(role.id));
+    let rank = "عضو";
 
-    res.json({
-      role: roleJson(role, roleMembers.length),
-      members: sortedMemberJson(roleMembers),
-      updatedAt: memberSnapshotAt
-    });
-  } catch (error) {
-    console.error("Role members endpoint:", error);
-    res.status(503).json({ error: "Role members are temporarily unavailable" });
-  }
-});
+    if (
+        member.permissions.has(
+            "Administrator"
+        )
+    ) {
+        rank = "إدارة";
+    } else if (importantRoles.length) {
+        rank = importantRoles[0].name;
+    }
 
-app.get("/api/public/top", async (req, res) => {
-  try {
-    const members = (await getAllMembers(await getGuild())).map(memberJson);
-    const top = (key) => [...members]
-      .sort((a, b) => (b.stats[key] || 0) - (a.stats[key] || 0))
-      .slice(0, 10);
+    return {
+        id: member.id,
+        name:
+            member.displayName ||
+            member.user.username,
+        username: member.user.username,
+        globalName: member.user.globalName,
+        avatar: member.user.displayAvatarURL({
+            size: 256,
+            extension: "png"
+        }),
+        bot: member.user.bot,
+        joinedAt: member.joinedAt,
+        rank,
+        roles,
+        importantRoles,
+        permissions,
+        stats: getStats(member.id)
+    };
+}
 
-    res.json({
-      messages: top("messages"),
-      mentions: top("mentionsReceived"),
-      voice: top("voiceMinutes"),
-      joins: top("voiceJoins"),
-      updatedAt: memberSnapshotAt
-    });
-  } catch (error) {
-    console.error("Top endpoint:", error);
-    res.status(503).json({ error: "Top is temporarily unavailable" });
-  }
-});
+function sortedMemberObjects(members) {
+    return [...members]
+        .sort((a, b) => {
+            const aRole = a.roles.cache
+                .filter(role =>
+                    leadershipRoleSet.has(role.id)
+                )
+                .sort((x, y) =>
+                    y.position - x.position
+                )
+                .first();
 
-app.get("/api/public/member/:id", async (req, res) => {
-  try {
+            const bRole = b.roles.cache
+                .filter(role =>
+                    leadershipRoleSet.has(role.id)
+                )
+                .sort((x, y) =>
+                    y.position - x.position
+                )
+                .first();
+
+            return (
+                (bRole?.position || 0) -
+                (aRole?.position || 0)
+            );
+        })
+        .map(memberObject);
+}
+
+/* =========================================================
+   DISCORD NOTIFICATIONS
+========================================================= */
+
+async function getNotificationChannel() {
     const guild = await getGuild();
-    const member = await guild.members.fetch(req.params.id).catch(() => null);
 
-    if (!member) return res.status(404).json({ error: "Member not found" });
+    if (DISCORD_NOTIFICATION_CHANNEL_ID) {
+        const configured =
+            guild.channels.cache.get(
+                DISCORD_NOTIFICATION_CHANNEL_ID
+            );
 
-    const highest = member.roles.cache
-      .filter((role) => role.id !== guild.id && !role.managed)
-      .sort((a, b) => b.position - a.position)
-      .first();
+        if (
+            configured &&
+            configured.type === ChannelType.GuildText
+        ) {
+            return configured;
+        }
+    }
 
-    res.json({
-      ...memberJson(member),
-      highestRole: highest ? roleJson(highest) : null,
-      permissions: highest ? importantPermissions(highest.permissions) : [],
-      upcomingRoles: guild.roles.cache
-        .filter((role) => role.position > (highest?.position || 0) && !role.managed)
-        .sort((a, b) => a.position - b.position)
-        .first(8)
-        .map((role) => roleJson(role))
+    return guild.channels.cache.find(channel => {
+        if (
+            channel.type !==
+            ChannelType.GuildText
+        ) {
+            return false;
+        }
+
+        const name =
+            String(channel.name || "")
+                .toLowerCase();
+
+        return (
+            name.includes("website") ||
+            name.includes("site") ||
+            name.includes("admin") ||
+            name.includes("طلبات") ||
+            name.includes("الموقع")
+        );
+    }) || null;
+}
+
+async function notifyDiscordWebsite({
+    title,
+    description,
+    color = "#ff9cdc",
+    fields = []
+}) {
+    try {
+        const channel =
+            await getNotificationChannel();
+
+        if (!channel) {
+            console.warn(
+                "No Discord notification channel found."
+            );
+            return null;
+        }
+
+        const embed = new EmbedBuilder()
+            .setTitle(title)
+            .setDescription(description || "")
+            .setColor(color)
+            .setTimestamp();
+
+        if (fields.length) {
+            embed.addFields(fields);
+        }
+
+        await channel.send({
+            embeds: [embed]
+        });
+
+        return true;
+    } catch (error) {
+        console.error(
+            "Discord notification error:",
+            error.message
+        );
+
+        return false;
+    }
+}
+
+/* =========================================================
+   DISCORD GROUP SYSTEM
+========================================================= */
+
+async function setupDiscordGroup(group) {
+    const guild = await getGuild();
+
+    let role = null;
+
+    role = await guild.roles.create({
+        name: `مجموعة · ${group.name}`.slice(0, 100),
+        reason: `Website group #${group.id}`
     });
-  } catch (error) {
-    console.error("Member endpoint:", error);
-    res.status(404).json({ error: "Member not found" });
-  }
-});
 
-app.post("/api/public/message", async (req, res) => {
-  const now = Date.now();
-  const ip = req.ip || "unknown";
-  const last = sendHits.get(ip) || 0;
+    const category = await guild.channels.create({
+        name: `مجموعة · ${group.name}`.slice(0, 100),
+        type: ChannelType.GuildCategory,
+        reason: `Website group #${group.id}`
+    });
 
-  if (now - last < 10_000) {
-    return res.status(429).json({ error: "انتظر 10 ثواني قبل الإرسال مرة أخرى" });
-  }
+    const textChannel = await guild.channels.create({
+        name: "الدردشة",
+        type: ChannelType.GuildText,
+        parent: category.id,
+        reason: `Website group #${group.id}`
+    });
 
-  const title = String(req.body?.title || "رسالة من إدارة MLD").trim();
-  const text = String(req.body?.message || "").trim();
-  const targetId = String(req.body?.memberId || "").trim();
+    const voiceChannel = await guild.channels.create({
+        name: "الصوت",
+        type: ChannelType.GuildVoice,
+        parent: category.id,
+        reason: `Website group #${group.id}`
+    });
 
-  if (!targetId || !text || text.length > 2000 || title.length > 120) {
-    return res.status(400).json({ error: "بيانات الرسالة غير صحيحة" });
-  }
+    group.discordRoleId = role.id;
+    group.discordCategoryId = category.id;
+    group.discordTextChannelId = textChannel.id;
+    group.discordVoiceChannelId = voiceChannel.id;
 
-  try {
-    const member = await (await getGuild()).members.fetch(targetId).catch(() => null);
-    if (!member) return res.status(404).json({ error: "العضو غير موجود" });
+    return {
+        role,
+        category,
+        textChannel,
+        voiceChannel
+    };
+}
 
-    const embed = new EmbedBuilder()
-      .setTitle(title)
-      .setDescription(text)
-      .setColor("#ff9cdc")
-      .setFooter({ text: "MLD Community" })
-      .setTimestamp();
+async function syncGroupMemberToDiscord(
+    group,
+    user
+) {
+    if (!group?.discordRoleId || !user?.discordId) {
+        return false;
+    }
 
-    await member.send({ embeds: [embed] });
-    sendHits.set(ip, now);
-    res.json({ ok: true });
-  } catch (error) {
-    console.error("DM endpoint:", error);
-    res.status(500).json({ error: "تعذر الإرسال؛ قد يكون الخاص مقفلًا" });
-  }
-});
+    try {
+        const guild = await getGuild();
 
-client.on("guildMemberAdd", invalidateMemberSnapshot);
-client.on("guildMemberRemove", invalidateMemberSnapshot);
-client.on("guildMemberUpdate", invalidateMemberSnapshot);
+        const member =
+            await guild.members
+                .fetch(user.discordId)
+                .catch(() => null);
 
-client.on("messageCreate", (message) => {
-  if (message.author.bot) return;
+        if (!member) {
+            return false;
+        }
 
-  const sender = getActivity(message.author.id);
-  sender.messages += 1;
-  sender.chatRounds += 1;
+        const role =
+            guild.roles.cache.get(
+                group.discordRoleId
+            );
 
-  for (const id of message.mentions.users.keys()) {
-    getActivity(id).mentionsReceived += 1;
-    sender.mentionsSent += 1;
-  }
-});
+        if (!role) {
+            return false;
+        }
 
-client.on("voiceStateUpdate", (oldState, newState) => {
-  const id = newState.id;
+        await member.roles.add(
+            role,
+            `Website group: ${group.name}`
+        );
 
-  if (!oldState.channelId && newState.channelId) {
-    voiceSessions.set(id, Date.now());
-    getActivity(id).voiceJoins += 1;
-  }
+        return true;
+    } catch (error) {
+        console.error(
+            "Group Discord sync:",
+            error.message
+        );
 
-  if (oldState.channelId && !newState.channelId && voiceSessions.has(id)) {
-    getActivity(id).voiceMinutes += Math.round(
-      (Date.now() - voiceSessions.get(id)) / 60000
-    );
-    voiceSessions.delete(id);
-  }
-});
-
-app.get("*", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
-});
-
-app.listen(port, () => console.log(`MLD listening on port ${port}`));
-client.once("ready", () => console.log(`Logged in as ${client.user.tag}`));
-client.login(token).catch((error) => {
-  console.error("Discord login failed:", error.message);
-  process.exit(1);
-});
+        return false;
+    }
+}
