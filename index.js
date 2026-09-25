@@ -3,4722 +3,1169 @@
 require("dotenv").config();
 
 const path = require("path");
-const http = require("http");
 const crypto = require("crypto");
-const bcrypt = require("bcryptjs");
-
 const express = require("express");
 const cors = require("cors");
-const helmet = require("helmet");
+const bcrypt = require("bcryptjs");
 const session = require("express-session");
-
+const helmet = require("helmet");
 const {
-    Client,
-    GatewayIntentBits,
-    Partials,
-    EmbedBuilder,
-    ChannelType
+  Client,
+  GatewayIntentBits,
+  EmbedBuilder,
+  ChannelType,
+  PermissionFlagsBits
 } = require("discord.js");
 
-const { Server } = require("socket.io");
+const token = process.env.DISCORD_BOT_TOKEN;
+const guildId = process.env.DISCORD_GUILD_ID;
+const port = Number(process.env.PORT || 3000);
+
+if (!token || !guildId) {
+  console.error("Missing DISCORD_BOT_TOKEN or DISCORD_GUILD_ID");
+  process.exit(1);
+}
+
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildVoiceStates
+  ]
+});
 
 const app = express();
-const server = http.createServer(app);
-
-const io = new Server(server, {
-    cors: {
-        origin: true,
-        credentials: true
-    }
-});
-
-const PORT = Number(process.env.PORT || 3000);
-
-const DISCORD_BOT_TOKEN =
-    process.env.DISCORD_BOT_TOKEN;
-
-const DISCORD_GUILD_ID =
-    process.env.DISCORD_GUILD_ID;
-
-const OWNER_ID =
-    process.env.OWNER_ID || "";
-
-const OWNER_USERNAME =
-    process.env.OWNER_USERNAME || "owner";
-
-const OWNER_PASSWORD =
-    process.env.OWNER_PASSWORD || "change-me";
-
-const SESSION_SECRET =
-    process.env.SESSION_SECRET ||
-    crypto.randomBytes(32).toString("hex");
-
-const DISCORD_NOTIFICATION_CHANNEL_ID =
-    process.env.DISCORD_NOTIFICATION_CHANNEL_ID || "";
-
-if (!DISCORD_BOT_TOKEN || !DISCORD_GUILD_ID) {
-    console.error(
-        "Missing DISCORD_BOT_TOKEN or DISCORD_GUILD_ID"
-    );
-
-    process.exit(1);
-}
-
-/* =========================================================
-   EXPRESS
-========================================================= */
-
 app.disable("x-powered-by");
+app.use(helmet({ crossOriginResourcePolicy: false }));
+app.use(cors({ origin: true, credentials: true }));
+app.use(express.json({ limit: "50kb" }));
+app.use(express.urlencoded({ extended: false, limit: "50kb" }));
+app.use(session({
+  secret: process.env.SESSION_SECRET || crypto.randomBytes(32).toString("hex"),
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    maxAge: 1000 * 60 * 60 * 24 * 7
+  }
+}));
+app.use(express.static(path.join(__dirname, "public")));
 
-app.use(
-    helmet({
-        contentSecurityPolicy: false
-    })
-);
+const leadershipRoleIds = [
+  "1530712642384040027",
+  "1521187079336362024",
+  "1531109479264026706",
+  "1548732297669255259",
+  "1548732341185155103",
+  "1548732606508703744"
+];
 
-app.use(
-    cors({
-        origin: true,
-        credentials: true
-    })
-);
+const leadershipRoleSet = new Set(leadershipRoleIds);
+const importantPermissionNames = new Set([
+  "Administrator",
+  "ManageGuild",
+  "ManageRoles",
+  "ManageChannels",
+  "ManageMessages",
+  "ManageWebhooks",
+  "ManageNicknames",
+  "BanMembers",
+  "KickMembers",
+  "ModerateMembers",
+  "MentionEveryone",
+  "ViewAuditLog",
+  "ManageEvents",
+  "ManageThreads",
+  "ManageEmojisAndStickers"
+]);
 
-app.use(
-    express.json({
-        limit: "100kb"
-    })
-);
+// Temporary in-memory storage. Replace with a real database later.
+const users = new Map();
+const admins = new Set();
+const groups = new Map();
+const groupMembers = new Map();
+const groupJoinRequests = new Map();
+const groupMessages = new Map();
+const tickets = new Map();
+const ticketMessages = new Map();
+const applications = new Map();
+const logs = [];
+const privateMessageLogs = [];
+const watchRooms = new Map();
+const reviews = new Map();
+const notifications = new Map();
+const games = new Map();
+const gameInvites = new Map();
+const gameStats = new Map();
 
-app.use(
-    express.urlencoded({
-        extended: true
-    })
-);
-
-app.use(
-    session({
-        secret: SESSION_SECRET,
-        resave: false,
-        saveUninitialized: false,
-        cookie: {
-            httpOnly: true,
-            sameSite: "lax",
-            secure:
-                process.env.NODE_ENV ===
-                "production",
-            maxAge:
-                1000 *
-                60 *
-                60 *
-                24 *
-                30
-        }
-    })
-);
-
-app.use(
-    express.static(
-        path.join(__dirname, "public")
-    )
-);
-
-/* =========================================================
-   DISCORD CLIENT
-========================================================= */
-
-const discord = new Client({
-    intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMembers,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildVoiceStates,
-        GatewayIntentBits.DirectMessages
-    ],
-    partials: [
-        Partials.Channel,
-        Partials.Message
-    ]
-});
-
-/* =========================================================
-   MEMORY DATABASE
-========================================================= */
-
-const db = {
-    users: [],
-    admins: [],
-    groups: [],
-    groupMembers: [],
-    groupJoinRequests: [],
-    groupMessages: [],
-    tickets: [],
-    ticketMessages: [],
-    applications: [],
-    logs: [],
-    privateMessageLogs: [],
-    watchRooms: [],
-    reviews: [],
-    games: [],
-    gamePlayers: [],
-    notifications: []
-};
-
-let ids = {
-    user: 1,
-    admin: 1,
-    group: 1,
-    groupMember: 1,
-    groupJoinRequest: 1,
-    groupMessage: 1,
-    ticket: 1,
-    ticketMessage: 1,
-    application: 1,
-    log: 1,
-    privateMessageLog: 1,
-    watchRoom: 1,
-    review: 1,
-    game: 1,
-    gamePlayer: 1,
-    notification: 1
-};
-
-/* =========================================================
-   HELPERS
-========================================================= */
-
-function clean(value, max = 200) {
-    return String(value ?? "")
-        .trim()
-        .slice(0, max);
-}
-
-function now() {
-    return new Date().toISOString();
-}
-
-function hashPassword(password) {
-    return bcrypt.hashSync(
-        String(password),
-        12
-    );
-}
-
-function comparePassword(password, hash) {
-    try {
-        return bcrypt.compareSync(
-            String(password),
-            hash
-        );
-    } catch {
-        return false;
-    }
-}
-
-function publicUser(user) {
-    if (!user) {
-        return null;
-    }
-
-    return {
-        id: user.id,
-        username: user.username,
-        displayName: user.displayName,
-        role: user.role,
-        discordId: user.discordId || null,
-        createdAt: user.createdAt
-    };
-}
-
-function currentUser(req) {
-    if (!req.session?.userId) {
-        return null;
-    }
-
-    return (
-        db.users.find(
-            user =>
-                Number(user.id) ===
-                Number(req.session.userId)
-        ) || null
-    );
-}
-
-function requireAuth(req, res, next) {
-    const user = currentUser(req);
-
-    if (!user) {
-        return res.status(401).json({
-            error: "يجب تسجيل الدخول أولًا"
-        });
-    }
-
-    req.user = user;
-    next();
-}
-
-function isOwner(user) {
-    return Boolean(
-        user &&
-        (
-            user.role === "owner" ||
-            Number(user.id) === 1
-        )
-    );
-}
-
-function isAdmin(user) {
-    return Boolean(
-        user &&
-        (
-            user.role === "owner" ||
-            user.role === "admin"
-        )
-    );
-}
-
-function requireAdmin(req, res, next) {
-    const user = currentUser(req);
-
-    if (!user || !isAdmin(user)) {
-        return res.status(403).json({
-            error: "ليس لديك صلاحية الإدارة"
-        });
-    }
-
-    req.user = user;
-    next();
-}
-
-function makeSlug(text) {
-    return clean(text, 80)
-        .toLowerCase()
-        .replace(/[^\p{L}\p{N}\s-_]/gu, "")
-        .replace(/\s+/g, "-")
-        .slice(0, 60);
-}
-
-function findUser(id) {
-    return (
-        db.users.find(
-            user =>
-                Number(user.id) ===
-                Number(id)
-        ) || null
-    );
-}
-
-function findGroup(id) {
-    return (
-        db.groups.find(
-            group =>
-                Number(group.id) ===
-                Number(id)
-        ) || null
-    );
-}
-
-function isGroupOwner(group, userId) {
-    return Boolean(
-        group &&
-        Number(group.ownerId) ===
-            Number(userId)
-    );
-}
-
-function isGroupMember(groupId, userId) {
-    const group = findGroup(groupId);
-
-    if (
-        !group ||
-        group.status !== "approved"
-    ) {
-        return false;
-    }
-
-    if (
-        isGroupOwner(
-            group,
-            userId
-        )
-    ) {
-        return true;
-    }
-
-    return db.groupMembers.some(
-        member =>
-            Number(member.groupId) ===
-                Number(groupId) &&
-            Number(member.userId) ===
-                Number(userId) &&
-            member.status === "approved"
-    );
-}
-
-function groupView(group) {
-    if (!group) {
-        return null;
-    }
-
-    const owner =
-        findUser(group.ownerId);
-
-    const members =
-        db.groupMembers
-            .filter(
-                member =>
-                    Number(member.groupId) ===
-                        Number(group.id) &&
-                    member.status ===
-                        "approved"
-            )
-            .map(member => {
-                const user =
-                    findUser(
-                        member.userId
-                    );
-
-                return {
-                    id: member.id,
-                    userId: member.userId,
-                    username:
-                        user?.username ||
-                        "unknown",
-                    displayName:
-                        user?.displayName ||
-                        user?.username ||
-                        "unknown",
-                    joinedAt:
-                        member.createdAt
-                };
-            });
-
-    return {
-        ...group,
-        owner:
-            publicUser(owner),
-        members,
-        membersCount:
-            members.length
-    };
-}
-
-function addLog(type, data = {}) {
-    db.logs.push({
-        id: ids.log++,
-        type,
-        ...data,
-        createdAt: now()
-    });
-}
-
-/* =========================================================
-   OWNER ACCOUNT
-========================================================= */
-
-if (!db.users.length) {
-    db.users.push({
-        id: ids.user++,
-        username: OWNER_USERNAME,
-        displayName: "فهد المطيري",
-        passwordHash:
-            hashPassword(
-                OWNER_PASSWORD
-            ),
-        discordId:
-            OWNER_ID || null,
-        role: "owner",
-        createdAt: now(),
-        lastLoginAt: null
-    });
-}
-
-/* =========================================================
-   DISCORD CACHE
-========================================================= */
-
-let guildCache = null;
-let guildCacheAt = 0;
-let guildFetchPromise = null;
-
-let memberSnapshot = null;
-let memberSnapshotAt = 0;
-let memberFetchPromise = null;
-
-const GUILD_CACHE_TTL = 15000;
-const MEMBER_CACHE_TTL = 45000;
+let nextUserId = 1;
+let nextGroupId = 1;
+let nextJoinId = 1;
+let nextMessageId = 1;
+let nextTicketId = 1;
+let nextTicketMessageId = 1;
+let nextApplicationId = 1;
+let nextWatchRoomId = 1;
+let nextReviewId = 1;
+let nextNotificationId = 1;
+let nextGameId = 1;
+let nextInviteId = 1;
 
 const activity = new Map();
 const voiceSessions = new Map();
 const sendHits = new Map();
+const guildInviteCache = { value: "", at: 0 };
 
-const leadershipRoleIds = [
-    "1530712642384040027",
-    "1521187079336362024",
-    "1531109479264026706",
-    "1548732297669255259",
-    "1548732341185155103",
-    "1548732606508703744"
-];
+let guildCache = null;
+let guildCacheAt = 0;
+let guildFetchPromise = null;
+let memberSnapshot = null;
+let memberSnapshotAt = 0;
+let memberFetchPromise = null;
 
-const leadershipRoleSet =
-    new Set(leadershipRoleIds);
+const MEMBER_CACHE_TTL = 45_000;
+const GUILD_CACHE_TTL = 15_000;
+const MAX_LOGS = 500;
 
-const importantPermissionNames =
-    new Set([
-        "Administrator",
-        "ManageGuild",
-        "ManageRoles",
-        "ManageChannels",
-        "ManageMessages",
-        "ManageWebhooks",
-        "ManageNicknames",
-        "BanMembers",
-        "KickMembers",
-        "ModerateMembers",
-        "MentionEveryone",
-        "ViewAuditLog",
-        "ManageEvents",
-        "ManageThreads",
-        "ManageEmojisAndStickers"
-    ]);
+function now() {
+  return new Date().toISOString();
+}
 
-function getStats(id) {
-    if (!activity.has(id)) {
-        activity.set(id, {
-            messages: 0,
-            mentionsReceived: 0,
-            mentionsSent: 0,
-            voiceMinutes: 0,
-            voiceJoins: 0,
-            chatRounds: 0
-        });
-    }
+function id(prefix, value) {
+  return `${prefix}_${value}`;
+}
 
-    return activity.get(id);
+function cleanText(value, max = 500) {
+  return String(value ?? "").trim().slice(0, max);
+}
+
+function slugify(value) {
+  return cleanText(value, 80)
+    .toLocaleLowerCase("ar")
+    .replace(/[^\p{L}\p{N}\s_.-]/gu, "")
+    .replace(/[\s_.-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60) || `group-${Date.now()}`;
+}
+
+function randomToken() {
+  return crypto.randomBytes(18).toString("hex");
+}
+
+function pushLog(type, data = {}) {
+  logs.unshift({ id: randomToken(), type, at: now(), ...data });
+  if (logs.length > MAX_LOGS) logs.length = MAX_LOGS;
+}
+
+function getActivity(userId) {
+  if (!activity.has(userId)) {
+    activity.set(userId, {
+      messages: 0,
+      mentionsReceived: 0,
+      mentionsSent: 0,
+      voiceMinutes: 0,
+      voiceJoins: 0,
+      chatRounds: 0
+    });
+  }
+  return activity.get(userId);
+}
+
+function roleJson(role, membersCount = role.members?.size || 0) {
+  return {
+    id: role.id,
+    name: role.name,
+    color: role.hexColor,
+    position: role.position,
+    permissions: role.permissions.toArray().filter((p) => importantPermissionNames.has(p)),
+    membersCount,
+    mentionable: role.mentionable
+  };
+}
+
+function memberJson(member) {
+  const roles = member.roles.cache
+    .filter((role) => role.id !== member.guild.id)
+    .sort((a, b) => b.position - a.position)
+    .map((role) => roleJson(role));
+  const leadershipRoles = roles.filter((role) => leadershipRoleSet.has(role.id));
+
+  return {
+    id: member.id,
+    name: member.displayName,
+    username: member.user.username,
+    globalName: member.user.globalName,
+    bot: member.user.bot,
+    avatar: member.user.displayAvatarURL({ extension: "png", size: 256 }),
+    joinedAt: member.joinedAt,
+    roles,
+    importantRoles: leadershipRoles,
+    rank: leadershipRoles[0]?.name || roles[0]?.name || "عضو",
+    stats: getActivity(member.id)
+  };
+}
+
+function sortedMemberJson(members) {
+  return [...members]
+    .sort((a, b) => {
+      const aRole = a.roles.cache.filter((r) => leadershipRoleSet.has(r.id)).sort((x, y) => y.position - x.position).first();
+      const bRole = b.roles.cache.filter((r) => leadershipRoleSet.has(r.id)).sort((x, y) => y.position - x.position).first();
+      return (bRole?.position || 0) - (aRole?.position || 0);
+    })
+    .map(memberJson);
 }
 
 async function getGuild() {
-    if (
-        guildCache &&
-        Date.now() - guildCacheAt <
-            GUILD_CACHE_TTL
-    ) {
-        return guildCache;
-    }
+  if (guildCache && Date.now() - guildCacheAt < GUILD_CACHE_TTL) return guildCache;
+  if (guildFetchPromise) return guildFetchPromise;
 
-    if (guildFetchPromise) {
-        return guildFetchPromise;
-    }
+  guildFetchPromise = client.guilds.fetch(guildId)
+    .then((guild) => {
+      guildCache = guild;
+      guildCacheAt = Date.now();
+      return guild;
+    })
+    .finally(() => { guildFetchPromise = null; });
 
-    guildFetchPromise =
-        discord.guilds
-            .fetch(DISCORD_GUILD_ID)
-            .then(guild => {
-                guildCache = guild;
-                guildCacheAt = Date.now();
-
-                return guild;
-            })
-            .finally(() => {
-                guildFetchPromise = null;
-            });
-
-    return guildFetchPromise;
+  return guildFetchPromise;
 }
 
 function invalidateMemberSnapshot() {
-    memberSnapshotAt = 0;
+  memberSnapshotAt = 0;
 }
 
-async function fetchMembers(guild) {
-    const fresh =
-        memberSnapshot &&
-        Date.now() -
-            memberSnapshotAt <
-            MEMBER_CACHE_TTL;
+async function getAllMembers(guild) {
+  if (memberSnapshot && Date.now() - memberSnapshotAt < MEMBER_CACHE_TTL) return memberSnapshot;
+  if (memberFetchPromise) return memberFetchPromise;
 
-    if (fresh) {
-        return memberSnapshot;
-    }
+  memberFetchPromise = guild.members.fetch()
+    .then((collection) => {
+      memberSnapshot = [...collection.values()];
+      memberSnapshotAt = Date.now();
+      return memberSnapshot;
+    })
+    .catch((error) => {
+      if (memberSnapshot?.length) return memberSnapshot;
+      throw error;
+    })
+    .finally(() => { memberFetchPromise = null; });
 
-    if (memberFetchPromise) {
-        return memberFetchPromise;
-    }
-
-    memberFetchPromise =
-        guild.members
-            .fetch()
-            .then(collection => {
-                memberSnapshot =
-                    [...collection.values()];
-
-                memberSnapshotAt =
-                    Date.now();
-
-                return memberSnapshot;
-            })
-            .catch(error => {
-                if (
-                    memberSnapshot?.length
-                ) {
-                    return memberSnapshot;
-                }
-
-                throw error;
-            })
-            .finally(() => {
-                memberFetchPromise =
-                    null;
-            });
-
-    return memberFetchPromise;
+  return memberFetchPromise;
 }
 
-function importantPermissions(
-    permissionCollection
-) {
-    return permissionCollection
-        .toArray()
-        .filter(permission =>
-            importantPermissionNames.has(
-                permission
-            )
-        );
+function userJson(user) {
+  if (!user) return null;
+  return {
+    id: user.id,
+    username: user.username,
+    discordId: user.discordId || null,
+    createdAt: user.createdAt,
+    suspended: Boolean(user.suspended),
+    isAdmin: admins.has(user.id)
+  };
 }
 
-function roleObject(
-    role,
-    membersCount =
-        role.members?.size || 0
-) {
-    return {
-        id: role.id,
-        name: role.name,
-        color: role.hexColor,
-        position: role.position,
-        permissions:
-            importantPermissions(
-                role.permissions
-            ),
-        membersCount,
-        mentionable:
-            role.mentionable
-    };
+function createUser(username, password, discordId = "") {
+  const user = {
+    id: String(nextUserId++),
+    username: cleanText(username, 32),
+    passwordHash: bcrypt.hashSync(password, 12),
+    discordId: cleanText(discordId, 30),
+    createdAt: now(),
+    suspended: false
+  };
+  users.set(user.id, user);
+  return user;
 }
 
-function memberObject(member) {
-    const roles =
-        member.roles.cache
-            .filter(
-                role =>
-                    role.id !==
-                    member.guild.id
-            )
-            .sort(
-                (a, b) =>
-                    b.position -
-                    a.position
-            )
-            .map(role =>
-                roleObject(role)
-            );
-
-    const importantRoles =
-        roles.filter(role =>
-            leadershipRoleSet.has(
-                role.id
-            )
-        );
-
-    const permissions = [];
-
-    for (
-        const permission
-        of importantPermissionNames
-    ) {
-        try {
-            if (
-                member.permissions.has(
-                    permission
-                )
-            ) {
-                permissions.push(
-                    permission
-                );
-            }
-        } catch {}
-    }
-
-    let rank = "عضو";
-
-    if (
-        member.permissions.has(
-            "Administrator"
-        )
-    ) {
-        rank = "إدارة";
-    } else if (
-        importantRoles.length
-    ) {
-        rank =
-            importantRoles[0].name;
-    }
-
-    return {
-        id: member.id,
-        name:
-            member.displayName ||
-            member.user.username,
-        username:
-            member.user.username,
-        globalName:
-            member.user.globalName,
-        avatar:
-            member.user.displayAvatarURL({
-                size: 256,
-                extension: "png"
-            }),
-        bot: member.user.bot,
-        joinedAt: member.joinedAt,
-        rank,
-        roles,
-        importantRoles,
-        permissions,
-        stats: getStats(
-            member.id
-        )
-    };
+function findUserByUsername(username) {
+  const target = cleanText(username, 32).toLocaleLowerCase("ar");
+  return [...users.values()].find((u) => u.username.toLocaleLowerCase("ar") === target) || null;
 }
 
-function sortedMemberObjects(
-    members
-) {
-    return [...members]
-        .sort((a, b) => {
-            const aRole =
-                a.roles.cache
-                    .filter(role =>
-                        leadershipRoleSet.has(
-                            role.id
-                        )
-                    )
-                    .sort(
-                        (x, y) =>
-                            y.position -
-                            x.position
-                    )
-                    .first();
-
-            const bRole =
-                b.roles.cache
-                    .filter(role =>
-                        leadershipRoleSet.has(
-                            role.id
-                        )
-                    )
-                    .sort(
-                        (x, y) =>
-                            y.position -
-                            x.position
-                    )
-                    .first();
-
-            return (
-                (bRole?.position || 0) -
-                (aRole?.position || 0)
-            );
-        })
-        .map(memberObject);
+function currentUser(req) {
+  return req.session?.userId ? users.get(req.session.userId) || null : null;
 }
 
-/* =========================================================
-   DISCORD NOTIFICATIONS
-========================================================= */
+function isAdminUser(user) {
+  return Boolean(user && admins.has(user.id));
+}
+
+function requireAuth(req, res, next) {
+  const user = currentUser(req);
+  if (!user) return res.status(401).json({ error: "يجب تسجيل الدخول" });
+  if (user.suspended) return res.status(403).json({ error: "الحساب موقوف" });
+  req.user = user;
+  next();
+}
+
+function requireAdmin(req, res, next) {
+  const user = currentUser(req);
+  if (!user) return res.status(401).json({ error: "يجب تسجيل الدخول" });
+  if (!isAdminUser(user)) return res.status(403).json({ error: "صلاحيات الإدارة مطلوبة" });
+  req.user = user;
+  next();
+}
+
+function isGroupMember(groupId, userId) {
+  const group = groups.get(String(groupId));
+  if (!group) return false;
+  if (group.ownerId === userId) return true;
+  const members = groupMembers.get(group.id) || new Map();
+  return members.get(userId)?.status === "approved";
+}
+
+function groupView(group, includePrivate = false) {
+  const members = groupMembers.get(group.id) || new Map();
+  const result = {
+    id: group.id,
+    name: group.name,
+    slug: group.slug,
+    description: group.description,
+    category: group.category,
+    icon: group.icon,
+    status: group.status,
+    owner: userJson(users.get(group.ownerId)),
+    memberCount: [...members.values()].filter((m) => m.status === "approved").length + 1,
+    createdAt: group.createdAt
+  };
+  if (includePrivate) {
+    result.discordRoleId = group.discordRoleId || null;
+    result.discordTextChannelId = group.discordTextChannelId || null;
+    result.discordVoiceChannelId = group.discordVoiceChannelId || null;
+    result.members = [...members.values()].map((m) => ({ ...m, user: userJson(users.get(m.userId)) }));
+  }
+  return result;
+}
 
 async function getNotificationChannel() {
-    const guild =
-        await getGuild();
+  const guild = await getGuild();
+  const configured = process.env.DISCORD_NOTIFICATION_CHANNEL_ID;
+  if (configured) {
+    const channel = await guild.channels.fetch(configured).catch(() => null);
+    if (channel?.isTextBased()) return channel;
+  }
 
-    if (
-        DISCORD_NOTIFICATION_CHANNEL_ID
-    ) {
-        const configured =
-            guild.channels.cache.get(
-                DISCORD_NOTIFICATION_CHANNEL_ID
-            );
-
-        if (
-            configured &&
-            configured.type ===
-                ChannelType.GuildText
-        ) {
-            return configured;
-        }
-    }
-
-    return (
-        guild.channels.cache.find(
-            channel => {
-                if (
-                    channel.type !==
-                    ChannelType.GuildText
-                ) {
-                    return false;
-                }
-
-                const name =
-                    String(
-                        channel.name || ""
-                    ).toLowerCase();
-
-                return (
-                    name.includes(
-                        "website"
-                    ) ||
-                    name.includes(
-                        "site"
-                    ) ||
-                    name.includes(
-                        "admin"
-                    ) ||
-                    name.includes(
-                        "طلبات"
-                    ) ||
-                    name.includes(
-                        "الموقع"
-                    )
-                );
-            }
-        ) || null
-    );
+  await guild.channels.fetch().catch(() => null);
+  return guild.channels.cache.find((channel) => {
+    if (!channel.isTextBased()) return false;
+    const name = String(channel.name || "").toLocaleLowerCase("ar");
+    return /website|site|admin|طلبات|الموقع|إدارة/.test(name);
+  }) || null;
 }
 
-async function notifyDiscordWebsite({
-    title,
-    description,
-    color = "#ff9cdc",
-    fields = []
-}) {
-    try {
-        const channel =
-            await getNotificationChannel();
-
-        if (!channel) {
-            console.warn(
-                "No Discord notification channel found."
-            );
-
-            return null;
-        }
-
-        const embed =
-            new EmbedBuilder()
-                .setTitle(
-                    clean(title, 256)
-                )
-                .setDescription(
-                    clean(
-                        description,
-                        4000
-                    )
-                )
-                .setColor(color)
-                .setTimestamp();
-
-        if (fields.length) {
-            embed.addFields(
-                fields.map(field => ({
-                    name: clean(
-                        field.name,
-                        256
-                    ),
-                    value: clean(
-                        field.value,
-                        1024
-                    ),
-                    inline:
-                        Boolean(
-                            field.inline
-                        )
-                }))
-            );
-        }
-
-        await channel.send({
-            embeds: [embed]
-        });
-
-        return true;
-    } catch (error) {
-        console.error(
-            "Discord notification error:",
-            error.message
-        );
-
-        return false;
-    }
+async function notifyDiscordWebsite({ title, description, color = 0xff9cdc, fields = [] }) {
+  try {
+    const channel = await getNotificationChannel();
+    if (!channel) return false;
+    const embed = new EmbedBuilder()
+      .setTitle(cleanText(title, 256))
+      .setDescription(cleanText(description, 4000))
+      .setColor(color)
+      .setTimestamp();
+    if (fields.length) embed.addFields(fields.slice(0, 25));
+    await channel.send({ embeds: [embed] });
+    return true;
+  } catch (error) {
+    console.error("Discord notification:", error.message);
+    return false;
+  }
 }
 
-/* =========================================================
-   DISCORD GROUP SYSTEM
-========================================================= */
+async function setupDiscordGroup(group) {
+  const guild = await getGuild();
+  const role = await guild.roles.create({
+    name: `Group · ${cleanText(group.name, 80)}`,
+    reason: `Website group ${group.id}`
+  });
 
-async function setupDiscordGroup(
-    group
-) {
-    const guild =
-        await getGuild();
+  const overwrites = [
+    {
+      id: guild.roles.everyone.id,
+      deny: [PermissionFlagsBits.ViewChannel]
+    },
+    {
+      id: role.id,
+      allow: [
+        PermissionFlagsBits.ViewChannel,
+        PermissionFlagsBits.SendMessages,
+        PermissionFlagsBits.ReadMessageHistory,
+        PermissionFlagsBits.Connect,
+        PermissionFlagsBits.Speak
+      ]
+    }
+  ];
 
-    const role =
-        await guild.roles.create({
-            name:
-                `مجموعة · ${group.name}`
-                    .slice(0, 100),
-            reason:
-                `Website group #${group.id}`
-        });
+  const category = await guild.channels.create({
+    name: `GROUP · ${cleanText(group.name, 70)}`,
+    type: ChannelType.GuildCategory,
+    permissionOverwrites: overwrites,
+    reason: `Website group ${group.id}`
+  });
 
-    const category =
-        await guild.channels.create({
-            name:
-                `مجموعة · ${group.name}`
-                    .slice(0, 100),
-            type:
-                ChannelType.GuildCategory,
-            reason:
-                `Website group #${group.id}`
-        });
+  const textChannel = await guild.channels.create({
+    name: "chat",
+    type: ChannelType.GuildText,
+    parent: category.id,
+    permissionOverwrites: overwrites,
+    reason: `Website group ${group.id}`
+  });
 
-    const textChannel =
-        await guild.channels.create({
-            name: "الدردشة",
-            type:
-                ChannelType.GuildText,
-            parent: category.id,
-            reason:
-                `Website group #${group.id}`
-        });
+  const voiceChannel = await guild.channels.create({
+    name: "voice",
+    type: ChannelType.GuildVoice,
+    parent: category.id,
+    permissionOverwrites: overwrites,
+    reason: `Website group ${group.id}`
+  });
 
-    const voiceChannel =
-        await guild.channels.create({
-            name: "الصوت",
-            type:
-                ChannelType.GuildVoice,
-            parent: category.id,
-            reason:
-                `Website group #${group.id}`
-        });
-
-    group.discordRoleId =
-        role.id;
-
-    group.discordCategoryId =
-        category.id;
-
-    group.discordTextChannelId =
-        textChannel.id;
-
-    group.discordVoiceChannelId =
-        voiceChannel.id;
-
-    return {
-        role,
-        category,
-        textChannel,
-        voiceChannel
-    };
+  group.discordRoleId = role.id;
+  group.discordCategoryId = category.id;
+  group.discordTextChannelId = textChannel.id;
+  group.discordVoiceChannelId = voiceChannel.id;
+  group.discordReadyAt = now();
+  return group;
 }
 
-async function syncGroupMemberToDiscord(
-    group,
-    user
-) {
-    if (
-        !group?.discordRoleId ||
-        !user?.discordId
-    ) {
-        return false;
-    }
-
-    try {
-        const guild =
-            await getGuild();
-
-        const member =
-            await guild.members
-                .fetch(user.discordId)
-                .catch(() => null);
-
-        if (!member) {
-            return false;
-        }
-
-        const role =
-            guild.roles.cache.get(
-                group.discordRoleId
-            );
-
-        if (!role) {
-            return false;
-        }
-
-        await member.roles.add(
-            role,
-            `Website group: ${group.name}`
-        );
-
-        return true;
-    } catch (error) {
-        console.error(
-            "Group Discord sync:",
-            error.message
-        );
-
-        return false;
-    }
+async function syncGroupMemberToDiscord(group, user) {
+  if (!group.discordRoleId || !user?.discordId) return false;
+  const guild = await getGuild();
+  const member = await guild.members.fetch(user.discordId).catch(() => null);
+  if (!member) return false;
+  await member.roles.add(group.discordRoleId, `Website group ${group.id}`).catch(() => null);
+  return true;
 }
 
-/* =========================================================
-   AUTH
-========================================================= */
-
-app.get(
-    "/api/auth/me",
-    (req, res) => {
-        const user =
-            currentUser(req);
-
-        res.json({
-            authenticated:
-                Boolean(user),
-            user:
-                publicUser(user)
-        });
-    }
-);
-
-app.post(
-    "/api/auth/register",
-    (req, res) => {
-        const username =
-            clean(
-                req.body?.username,
-                32
-            );
-
-        const password =
-            String(
-                req.body?.password || ""
-            );
-
-        const displayName =
-            clean(
-                req.body?.displayName,
-                60
-            ) || username;
-
-        if (
-            !username ||
-            username.length < 3
-        ) {
-            return res.status(400).json({
-                error:
-                    "اسم المستخدم يجب أن يكون 3 أحرف على الأقل"
-            });
-        }
-
-        if (
-            password.length < 6
-        ) {
-            return res.status(400).json({
-                error:
-                    "كلمة المرور يجب أن تكون 6 أحرف على الأقل"
-            });
-        }
-
-        if (
-            !/^[\p{L}\p{N}_.-]+$/u.test(
-                username
-            )
-        ) {
-            return res.status(400).json({
-                error:
-                    "اسم المستخدم يحتوي على رموز غير مسموحة"
-            });
-        }
-
-        const exists =
-            db.users.some(
-                user =>
-                    user.username.toLowerCase() ===
-                    username.toLowerCase()
-            );
-
-        if (exists) {
-            return res.status(409).json({
-                error:
-                    "اسم المستخدم مستخدم بالفعل"
-            });
-        }
-
-        const user = {
-            id: ids.user++,
-            username,
-            displayName,
-            passwordHash:
-                hashPassword(password),
-            discordId:
-                clean(
-                    req.body?.discordId,
-                    30
-                ) || null,
-            role: "user",
-            createdAt: now(),
-            lastLoginAt: now()
-        };
-
-        db.users.push(user);
-
-        req.session.userId =
-            user.id;
-
-        res.status(201).json({
-            ok: true,
-            user:
-                publicUser(user)
-        });
-    }
-);
-
-app.post(
-    "/api/auth/login",
-    (req, res) => {
-        const username =
-            clean(
-                req.body?.username,
-                32
-            );
-
-        const password =
-            String(
-                req.body?.password || ""
-            );
-
-        const user =
-            db.users.find(
-                item =>
-                    item.username.toLowerCase() ===
-                    username.toLowerCase()
-            );
-
-        if (
-            !user ||
-            !comparePassword(
-                password,
-                user.passwordHash
-            )
-        ) {
-            return res.status(401).json({
-                error:
-                    "اسم المستخدم أو كلمة المرور غير صحيحة"
-            });
-        }
-
-        user.lastLoginAt =
-            now();
-
-        req.session.userId =
-            user.id;
-
-        res.json({
-            ok: true,
-            user:
-                publicUser(user)
-        });
-    }
-);
-
-app.post(
-    "/api/auth/logout",
-    (req, res) => {
-        req.session.destroy(
-            () => {
-                res.json({
-                    ok: true
-                });
-            }
-        );
-    }
-);
-
-app.patch(
-    "/api/auth/profile",
-    requireAuth,
-    (req, res) => {
-        const displayName =
-            clean(
-                req.body?.displayName,
-                60
-            );
-
-        if (displayName) {
-            req.user.displayName =
-                displayName;
-        }
-
-        if (
-            Object.prototype.hasOwnProperty.call(
-                req.body || {},
-                "discordId"
-            )
-        ) {
-            req.user.discordId =
-                clean(
-                    req.body.discordId,
-                    30
-                ) || null;
-        }
-
-        res.json({
-            ok: true,
-            user:
-                publicUser(
-                    req.user
-                )
-        });
-    }
-);
-
-app.post(
-    "/api/auth/password",
-    requireAuth,
-    (req, res) => {
-        const currentPassword =
-            String(
-                req.body?.currentPassword ||
-                    ""
-            );
-
-        const newPassword =
-            String(
-                req.body?.newPassword ||
-                    ""
-            );
-
-        if (
-            !comparePassword(
-                currentPassword,
-                req.user.passwordHash
-            )
-        ) {
-            return res.status(400).json({
-                error:
-                    "كلمة المرور الحالية غير صحيحة"
-            });
-        }
-
-        if (
-            newPassword.length < 6
-        ) {
-            return res.status(400).json({
-                error:
-                    "كلمة المرور الجديدة يجب أن تكون 6 أحرف على الأقل"
-            });
-        }
-
-        req.user.passwordHash =
-            hashPassword(
-                newPassword
-            );
-
-        res.json({
-            ok: true
-        });
-    }
-);
-
-/* =========================================================
-   PUBLIC DISCORD
-========================================================= */
-
-app.get(
-    "/api/public/server",
-    async (req, res) => {
-        try {
-            const guild =
-                await getGuild();
-
-            res.json({
-                id: guild.id,
-                name: guild.name,
-                icon: guild.iconURL({
-                    extension: "png",
-                    size: 256
-                }),
-                memberCount:
-                    guild.memberCount,
-                ownerName:
-                    process.env
-                        .SERVER_FOUNDER_NAME ||
-                    "فهد المطيري",
-                invite:
-                    process.env
-                        .DISCORD_INVITE_URL ||
-                    ""
-            });
-        } catch (error) {
-            console.error(
-                "Server endpoint:",
-                error
-            );
-
-            res.status(503).json({
-                error:
-                    "Discord server unavailable"
-            });
-        }
-    }
-);
-
-app.get(
-    "/api/public/members",
-    async (req, res) => {
-        try {
-            const guild =
-                await getGuild();
-
-            const allMembers =
-                await fetchMembers(
-                    guild
-                );
-
-            const query =
-                String(
-                    req.query.q || ""
-                )
-                    .trim()
-                    .toLocaleLowerCase(
-                        "ar"
-                    );
-
-            const cleanQuery =
-                query.replace(
-                    /^@/,
-                    ""
-                );
-
-            const filtered =
-                cleanQuery
-                    ? allMembers.filter(
-                          member => {
-                              const searchable =
-                                  [
-                                      member.displayName,
-                                      member.user.username,
-                                      member.user.globalName,
-                                      member.user.tag,
-                                      member.id
-                                  ]
-                                      .filter(
-                                          Boolean
-                                      )
-                                      .join(
-                                          " "
-                                      )
-                                      .toLocaleLowerCase(
-                                          "ar"
-                                      );
-
-                              return searchable.includes(
-                                  cleanQuery
-                              );
-                          }
-                      )
-                    : allMembers;
-
-            res.json({
-                members:
-                    sortedMemberObjects(
-                        filtered
-                    ),
-                total:
-                    filtered.length,
-                totalServerMembers:
-                    allMembers.length,
-                updatedAt:
-                    memberSnapshotAt,
-                cached:
-                    Boolean(
-                        memberSnapshot
-                    )
-            });
-        } catch (error) {
-            console.error(
-                "Members endpoint:",
-                error
-            );
-
-            res.status(503).json({
-                error:
-                    "Members are temporarily unavailable"
-            });
-        }
-    }
-);
-
-app.get(
-    "/api/public/roles",
-    async (req, res) => {
-        try {
-            const guild =
-                await getGuild();
-
-            const allMembers =
-                await fetchMembers(
-                    guild
-                );
-
-            const roles =
-                leadershipRoleIds
-                    .map(id =>
-                        guild.roles.cache.get(
-                            id
-                        )
-                    )
-                    .filter(Boolean)
-                    .map(role => {
-                        const count =
-                            allMembers.reduce(
-                                (
-                                    total,
-                                    member
-                                ) =>
-                                    total +
-                                    (
-                                        member.roles.cache.has(
-                                            role.id
-                                        )
-                                            ? 1
-                                            : 0
-                                    ),
-                                0
-                            );
-
-                        return roleObject(
-                            role,
-                            count
-                        );
-                    });
-
-            res.json({
-                roles,
-                updatedAt:
-                    memberSnapshotAt
-            });
-        } catch (error) {
-            console.error(
-                "Roles endpoint:",
-                error
-            );
-
-            res.status(503).json({
-                error:
-                    "Roles are temporarily unavailable"
-            });
-        }
-    }
-);
-
-app.get(
-    "/api/public/roles/:id/members",
-    async (req, res) => {
-        try {
-            const guild =
-                await getGuild();
-
-            const role =
-                guild.roles.cache.get(
-                    req.params.id
-                );
-
-            if (
-                !role ||
-                !leadershipRoleSet.has(
-                    role.id
-                )
-            ) {
-                return res.status(404).json({
-                    error:
-                        "Role not found"
-                });
-            }
-
-            const roleMembers =
-                (
-                    await fetchMembers(
-                        guild
-                    )
-                ).filter(member =>
-                    member.roles.cache.has(
-                        role.id
-                    )
-                );
-
-            res.json({
-                role:
-                    roleObject(
-                        role,
-                        roleMembers.length
-                    ),
-                members:
-                    sortedMemberObjects(
-                        roleMembers
-                    ),
-                updatedAt:
-                    memberSnapshotAt
-            });
-        } catch (error) {
-            console.error(
-                "Role members endpoint:",
-                error
-            );
-
-            res.status(503).json({
-                error:
-                    "Role members are temporarily unavailable"
-            });
-        }
-    }
-);
-
-app.get(
-    "/api/public/top",
-    async (req, res) => {
-        try {
-            const members =
-                (
-                    await fetchMembers(
-                        await getGuild()
-                    )
-                ).map(
-                    memberObject
-                );
-
-            const top = key =>
-                [...members]
-                    .sort(
-                        (a, b) =>
-                            (b.stats[key] || 0) -
-                            (a.stats[key] || 0)
-                    )
-                    .slice(0, 10);
-
-            res.json({
-                messages:
-                    top("messages"),
-                mentions:
-                    top(
-                        "mentionsReceived"
-                    ),
-                voice:
-                    top(
-                        "voiceMinutes"
-                    ),
-                joins:
-                    top(
-                        "voiceJoins"
-                    ),
-                updatedAt:
-                    memberSnapshotAt
-            });
-        } catch (error) {
-            console.error(
-                "Top endpoint:",
-                error
-            );
-
-            res.status(503).json({
-                error:
-                    "Top is temporarily unavailable"
-            });
-        }
-    }
-);
-
-app.get(
-    "/api/public/member/:id",
-    async (req, res) => {
-        try {
-            const guild =
-                await getGuild();
-
-            const member =
-                await guild.members
-                    .fetch(
-                        req.params.id
-                    )
-                    .catch(
-                        () => null
-                    );
-
-            if (!member) {
-                return res.status(404).json({
-                    error:
-                        "Member not found"
-                });
-            }
-
-            const highest =
-                member.roles.cache
-                    .filter(
-                        role =>
-                            role.id !==
-                                guild.id &&
-                            !role.managed
-                    )
-                    .sort(
-                        (a, b) =>
-                            b.position -
-                            a.position
-                    )
-                    .first();
-
-            res.json({
-                ...memberObject(
-                    member
-                ),
-
-                highestRole:
-                    highest
-                        ? roleObject(
-                              highest
-                          )
-                        : null,
-
-                permissions:
-                    highest
-                        ? importantPermissions(
-                              highest.permissions
-                          )
-                        : [],
-
-                upcomingRoles:
-                    guild.roles.cache
-                        .filter(
-                            role =>
-                                role.position >
-                                    (
-                                        highest?.position ||
-                                        0
-                                    ) &&
-                                !role.managed
-                        )
-                        .sort(
-                            (a, b) =>
-                                a.position -
-                                b.position
-                        )
-                        .map(role =>
-                            roleObject(
-                                role
-                            )
-                        )
-                        .slice(0, 8)
-            });
-        } catch (error) {
-            console.error(
-                "Member endpoint:",
-                error
-            );
-
-            res.status(404).json({
-                error:
-                    "Member not found"
-            });
-        }
-    }
-);
-
-/* =========================================================
-   PRIVATE DISCORD MESSAGE
-========================================================= */
-
-app.post(
-    "/api/public/message",
-    async (req, res) => {
-        const nowTime =
-            Date.now();
-
-        const ip =
-            req.ip || "unknown";
-
-        const last =
-            sendHits.get(ip) || 0;
-
-        if (
-            nowTime - last <
-            10000
-        ) {
-            return res.status(429).json({
-                error:
-                    "انتظر 10 ثواني قبل الإرسال مرة أخرى"
-            });
-        }
-
-        const title =
-            String(
-                req.body?.title ||
-                    "رسالة من إدارة MLD"
-            ).trim();
-
-        const text =
-            String(
-                req.body?.message || ""
-            ).trim();
-
-        const targetId =
-            String(
-                req.body?.memberId || ""
-            ).trim();
-
-        if (
-            !targetId ||
-            !text ||
-            text.length > 2000 ||
-            title.length > 120
-        ) {
-            return res.status(400).json({
-                error:
-                    "بيانات الرسالة غير صحيحة"
-            });
-        }
-
-        try {
-            const guild =
-                await getGuild();
-
-            const member =
-                await guild.members
-                    .fetch(targetId)
-                    .catch(
-                        () => null
-                    );
-
-            if (!member) {
-                return res.status(404).json({
-                    error:
-                        "العضو غير موجود"
-                });
-            }
-
-            const embed =
-                new EmbedBuilder()
-                    .setTitle(title)
-                    .setDescription(text)
-                    .setColor(
-                        "#ff9cdc"
-                    )
-                    .setFooter({
-                        text:
-                            "MLD Community"
-                    })
-                    .setTimestamp();
-
-            await member.send({
-                embeds: [embed]
-            });
-
-            sendHits.set(
-                ip,
-                nowTime
-            );
-
-            db.privateMessageLogs.push({
-                id:
-                    ids.privateMessageLog++,
-                targetId,
-                title,
-                createdAt: now()
-            });
-
-            res.json({
-                ok: true
-            });
-        } catch (error) {
-            console.error(
-                "DM endpoint:",
-                error
-            );
-
-            res.status(500).json({
-                error:
-                    "تعذر الإرسال؛ قد يكون الخاص مقفلًا"
-            });
-        }
-    }
-);
-
-/* =========================================================
-   GROUPS
-========================================================= */
-
-app.get(
-    "/api/groups",
-    (req, res) => {
-        res.json({
-            groups:
-                db.groups
-                    .filter(
-                        group =>
-                            group.status ===
-                            "approved"
-                    )
-                    .map(groupView)
-        });
-    }
-);
-
-app.get(
-    "/api/groups/:id",
-    (req, res) => {
-        const group =
-            findGroup(
-                req.params.id
-            );
-
-        if (
-            !group ||
-            group.status !==
-                "approved"
-        ) {
-            return res.status(404).json({
-                error:
-                    "المجموعة غير موجودة"
-            });
-        }
-
-        res.json({
-            group:
-                groupView(group)
-        });
-    }
-);
-
-app.post(
-    "/api/groups",
-    requireAuth,
-    async (req, res) => {
-        const name =
-            clean(
-                req.body?.name,
-                80
-            );
-
-        const description =
-            clean(
-                req.body?.description,
-                1000
-            );
-
-        if (
-            !name ||
-            name.length < 2
-        ) {
-            return res.status(400).json({
-                error:
-                    "اسم المجموعة مطلوب"
-            });
-        }
-
-        const duplicate =
-            db.groups.some(
-                group =>
-                    group.name.toLowerCase() ===
-                        name.toLowerCase() &&
-                    group.status !==
-                        "rejected"
-            );
-
-        if (duplicate) {
-            return res.status(409).json({
-                error:
-                    "يوجد مجموعة بهذا الاسم"
-            });
-        }
-
-        const group = {
-            id: ids.group++,
-            name,
-            slug:
-                makeSlug(name),
-            description,
-            ownerId:
-                req.user.id,
-            status:
-                "pending",
-            discordRoleId: null,
-            discordCategoryId: null,
-            discordTextChannelId:
-                null,
-            discordVoiceChannelId:
-                null,
-            createdAt: now(),
-            reviewedAt: null,
-            reviewedBy: null
-        };
-
-        db.groups.push(group);
-
-        await notifyDiscordWebsite({
-            title:
-                "طلب إنشاء مجموعة جديدة",
-            description:
-                "تم إرسال طلب إنشاء مجموعة جديدة من الموقع.",
-            color:
-                "#f59e0b",
-            fields: [
-                {
-                    name:
-                        "المجموعة",
-                    value:
-                        group.name
-                },
-                {
-                    name:
-                        "المالك",
-                    value:
-                        req.user.username
-                },
-                {
-                    name:
-                        "الحالة",
-                    value:
-                        "بانتظار موافقة الإدارة"
-                }
-            ]
-        });
-
-        res.status(201).json({
-            ok: true,
-            group:
-                groupView(group)
-        });
-    }
-);
-
-app.get(
-    "/api/admin/groups/pending",
-    requireAdmin,
-    (req, res) => {
-        res.json({
-            groups:
-                db.groups
-                    .filter(
-                        group =>
-                            group.status ===
-                            "pending"
-                    )
-                    .map(groupView)
-        });
-    }
-);
-
-app.patch(
-    "/api/admin/groups/:id/review",
-    requireAdmin,
-    async (req, res) => {
-        const group =
-            findGroup(
-                req.params.id
-            );
-
-        if (!group) {
-            return res.status(404).json({
-                error:
-                    "المجموعة غير موجودة"
-            });
-        }
-
-        if (
-            group.status !==
-            "pending"
-        ) {
-            return res.status(400).json({
-                error:
-                    "تمت مراجعة المجموعة مسبقًا"
-            });
-        }
-
-        const decision =
-            String(
-                req.body?.decision || ""
-            ).toLowerCase();
-
-        if (
-            ![
-                "approve",
-                "reject"
-            ].includes(decision)
-        ) {
-            return res.status(400).json({
-                error:
-                    "قرار المراجعة غير صحيح"
-            });
-        }
-
-        group.reviewedAt =
-            now();
-
-        group.reviewedBy =
-            req.user.id;
-
-        if (
-            decision ===
-            "reject"
-        ) {
-            group.status =
-                "rejected";
-
-            await notifyDiscordWebsite({
-                title:
-                    "رفض إنشاء مجموعة",
-                description:
-                    `تم رفض طلب المجموعة "${group.name}".`,
-                color:
-                    "#ef4444",
-                fields: [
-                    {
-                        name:
-                            "المالك",
-                        value:
-                            findUser(
-                                group.ownerId
-                            )?.username ||
-                            "unknown"
-                    },
-                    {
-                        name:
-                            "المراجع",
-                        value:
-                            req.user.username
-                    }
-                ]
-            });
-
-            return res.json({
-                ok: true,
-                group:
-                    groupView(group)
-            });
-        }
-
-        try {
-            await setupDiscordGroup(
-                group
-            );
-
-            group.status =
-                "approved";
-
-            const owner =
-                findUser(
-                    group.ownerId
-                );
-
-            await syncGroupMemberToDiscord(
-                group,
-                owner
-            );
-
-            addLog(
-                "group_approved",
-                {
-                    admin:
-                        req.user.username,
-                    target:
-                        group.id
-                }
-            );
-
-            await notifyDiscordWebsite({
-                title:
-                    "تمت الموافقة على المجموعة",
-                description:
-                    `تم اعتماد مجموعة "${group.name}" وإنشاء مساحتها في Discord.`,
-                color:
-                    "#22c55e",
-                fields: [
-                    {
-                        name:
-                            "المالك",
-                        value:
-                            owner?.username ||
-                            "unknown"
-                    },
-                    {
-                        name:
-                            "المراجع",
-                        value:
-                            req.user.username
-                    }
-                ]
-            });
-
-            return res.json({
-                ok: true,
-                group:
-                    groupView(group)
-            });
-        } catch (error) {
-            console.error(
-                "Group approval:",
-                error
-            );
-
-            group.status =
-                "pending";
-
-            return res.status(500).json({
-                error:
-                    "تعذر إنشاء مساحة المجموعة في Discord"
-            });
-        }
-    }
-);
-
-/* =========================================================
-   GROUP JOIN REQUESTS
-========================================================= */
-
-app.post(
-    "/api/groups/:id/join",
-    requireAuth,
-    async (req, res) => {
-        const group =
-            findGroup(
-                req.params.id
-            );
-
-        if (
-            !group ||
-            group.status !==
-                "approved"
-        ) {
-            return res.status(404).json({
-                error:
-                    "المجموعة غير موجودة"
-            });
-        }
-
-        if (
-            isGroupOwner(
-                group,
-                req.user.id
-            )
-        ) {
-            return res.status(400).json({
-                error:
-                    "أنت مالك المجموعة بالفعل"
-            });
-        }
-
-        if (
-            isGroupMember(
-                group.id,
-                req.user.id
-            )
-        ) {
-            return res.status(400).json({
-                error:
-                    "أنت عضو بالفعل"
-            });
-        }
-
-        const pending =
-            db.groupJoinRequests.find(
-                request =>
-                    Number(
-                        request.groupId
-                    ) ===
-                        Number(
-                            group.id
-                        ) &&
-                    Number(
-                        request.userId
-                    ) ===
-                        Number(
-                            req.user.id
-                        ) &&
-                    request.status ===
-                        "pending"
-            );
-
-        if (pending) {
-            return res.status(409).json({
-                error:
-                    "لديك طلب انضمام قيد المراجعة"
-            });
-        }
-
-        const request = {
-            id:
-                ids.groupJoinRequest++,
-            groupId:
-                group.id,
-            userId:
-                req.user.id,
-            status:
-                "pending",
-            createdAt:
-                now(),
-            reviewedAt:
-                null,
-            reviewedBy:
-                null
-        };
-
-        db.groupJoinRequests.push(
-            request
-        );
-
-        const owner =
-            findUser(
-                group.ownerId
-            );
-
-        await notifyDiscordWebsite({
-            title:
-                "طلب انضمام إلى مجموعة",
-            description:
-                `يوجد طلب جديد للانضمام إلى مجموعة "${group.name}".`,
-            color:
-                "#3b82f6",
-            fields: [
-                {
-                    name:
-                        "المتقدم",
-                    value:
-                        req.user.username
-                },
-                {
-                    name:
-                        "مالك المجموعة",
-                    value:
-                        owner?.username ||
-                        "unknown"
-                }
-            ]
-        });
-
-        res.status(201).json({
-            ok: true,
-            request
-        });
-    }
-);
-
-app.get(
-    "/api/groups/:id/join-requests",
-    requireAuth,
-    (req, res) => {
-        const group =
-            findGroup(
-                req.params.id
-            );
-
-        if (!group) {
-            return res.status(404).json({
-                error:
-                    "المجموعة غير موجودة"
-            });
-        }
-
-        if (
-            !isGroupOwner(
-                group,
-                req.user.id
-            ) &&
-            !isAdmin(req.user)
-        ) {
-            return res.status(403).json({
-                error:
-                    "ليس لديك صلاحية"
-            });
-        }
-
-        const requests =
-            db.groupJoinRequests
-                .filter(
-                    request =>
-                        Number(
-                            request.groupId
-                        ) ===
-                        Number(
-                            group.id
-                        )
-                )
-                .map(request => ({
-                    ...request,
-                    user:
-                        publicUser(
-                            findUser(
-                                request.userId
-                            )
-                        )
-                }));
-
-        res.json({
-            requests
-        });
-    }
-);
-
-app.post(
-    "/api/groups/:id/join-requests/:requestId/review",
-    requireAuth,
-    async (req, res) => {
-        const group =
-            findGroup(
-                req.params.id
-            );
-
-        if (!group) {
-            return res.status(404).json({
-                error:
-                    "المجموعة غير موجودة"
-            });
-        }
-
-        if (
-            !isGroupOwner(
-                group,
-                req.user.id
-            ) &&
-            !isAdmin(req.user)
-        ) {
-            return res.status(403).json({
-                error:
-                    "ليس لديك صلاحية"
-            });
-        }
-
-        const request =
-            db.groupJoinRequests.find(
-                item =>
-                    Number(item.id) ===
-                        Number(
-                            req.params.requestId
-                        ) &&
-                    Number(
-                        item.groupId
-                    ) ===
-                        Number(
-                            group.id
-                        )
-            );
-
-        if (!request) {
-            return res.status(404).json({
-                error:
-                    "طلب الانضمام غير موجود"
-            });
-        }
-
-        if (
-            request.status !==
-            "pending"
-        ) {
-            return res.status(400).json({
-                error:
-                    "تمت مراجعة الطلب مسبقًا"
-            });
-        }
-
-        const decision =
-            String(
-                req.body?.decision || ""
-            ).toLowerCase();
-
-        if (
-            ![
-                "approve",
-                "reject"
-            ].includes(decision)
-        ) {
-            return res.status(400).json({
-                error:
-                    "قرار المراجعة غير صحيح"
-            });
-        }
-
-        const target =
-            findUser(
-                request.userId
-            );
-
-        if (!target) {
-            return res.status(404).json({
-                error:
-                    "المستخدم غير موجود"
-            });
-        }
-
-        request.status =
-            decision ===
-            "approve"
-                ? "approved"
-                : "rejected";
-
-        request.reviewedAt =
-            now();
-
-        request.reviewedBy =
-            req.user.id;
-
-        if (
-            decision ===
-            "approve"
-        ) {
-            const exists =
-                db.groupMembers.find(
-                    member =>
-                        Number(
-                            member.groupId
-                        ) ===
-                            Number(
-                                group.id
-                            ) &&
-                        Number(
-                            member.userId
-                        ) ===
-                            Number(
-                                target.id
-                            )
-                );
-
-            if (!exists) {
-                db.groupMembers.push({
-                    id:
-                        ids.groupMember++,
-                    groupId:
-                        group.id,
-                    userId:
-                        target.id,
-                    status:
-                        "approved",
-                    createdAt:
-                        now()
-                });
-            } else {
-                exists.status =
-                    "approved";
-            }
-
-            await syncGroupMemberToDiscord(
-                group,
-                target
-            );
-        }
-
-        await notifyDiscordWebsite({
-            title:
-                decision ===
-                "approve"
-                    ? "تم قبول عضو في المجموعة"
-                    : "تم رفض طلب الانضمام",
-            description:
-                `تمت مراجعة طلب "${target.username}" في مجموعة "${group.name}".`,
-            color:
-                decision ===
-                "approve"
-                    ? "#22c55e"
-                    : "#ef4444",
-            fields: [
-                {
-                    name:
-                        "المراجع",
-                    value:
-                        req.user.username
-                }
-            ]
-        });
-
-        if (target.discordId) {
-            try {
-                const guild =
-                    await getGuild();
-
-                const member =
-                    await guild.members
-                        .fetch(
-                            target.discordId
-                        )
-                        .catch(
-                            () => null
-                        );
-
-                if (member) {
-                    const embed =
-                        new EmbedBuilder()
-                            .setTitle(
-                                decision ===
-                                "approve"
-                                    ? "تم قبول طلبك"
-                                    : "تم رفض طلبك"
-                            )
-                            .setDescription(
-                                decision ===
-                                "approve"
-                                    ? `تم قبولك في مجموعة "${group.name}".`
-                                    : `تم رفض طلب انضمامك إلى مجموعة "${group.name}".`
-                            )
-                            .setColor(
-                                decision ===
-                                "approve"
-                                    ? "#22c55e"
-                                    : "#ef4444"
-                            )
-                            .setTimestamp();
-
-                    await member.send({
-                        embeds: [
-                            embed
-                        ]
-                    });
-                }
-            } catch (error) {
-                console.error(
-                    "Join request DM:",
-                    error.message
-                );
-            }
-        }
-
-        addLog(
-            "group_join_review",
-            {
-                admin:
-                    req.user.username,
-                target:
-                    request.id,
-                status:
-                    request.status
-            }
-        );
-
-        res.json({
-            ok: true,
-            request
-        });
-    }
-);
-
-/* =========================================================
-   TICKETS
-========================================================= */
-
-app.post(
-    "/api/tickets",
-    requireAuth,
-    async (req, res) => {
-        const subject =
-            clean(
-                req.body?.subject,
-                200
-            );
-
-        const type =
-            clean(
-                req.body?.type ||
-                    "عام",
-                80
-            );
-
-        const message =
-            clean(
-                req.body?.message,
-                4000
-            );
-
-        const priority =
-            clean(
-                req.body?.priority ||
-                    "normal",
-                30
-            );
-
-        if (
-            !subject ||
-            !message
-        ) {
-            return res.status(400).json({
-                error:
-                    "العنوان والرسالة مطلوبان"
-            });
-        }
-
-        const ticket = {
-            id:
-                crypto.randomUUID(),
-            userId:
-                req.user.id,
-            username:
-                req.user.username,
-            subject,
-            type,
-            priority,
-            status:
-                "open",
-            createdAt:
-                now(),
-            updatedAt:
-                now()
-        };
-
-        db.tickets.push(ticket);
-
-        const firstMessage = {
-            id:
-                crypto.randomUUID(),
-            ticketId:
-                ticket.id,
-            userId:
-                req.user.id,
-            username:
-                req.user.username,
-            message,
-            createdAt:
-                now()
-        };
-
-        db.ticketMessages.push(
-            firstMessage
-        );
-
-        await notifyDiscordWebsite({
-            title:
-                "تذكرة جديدة",
-            description:
-                `تم إنشاء تذكرة جديدة بواسطة ${req.user.username}.`,
-            color:
-                "#f59e0b",
-            fields: [
-                {
-                    name:
-                        "رقم التذكرة",
-                    value:
-                        ticket.id
-                },
-                {
-                    name:
-                        "النوع",
-                    value:
-                        ticket.type
-                },
-                {
-                    name:
-                        "الأولوية",
-                    value:
-                        ticket.priority
-                },
-                {
-                    name:
-                        "الموضوع",
-                    value:
-                        ticket.subject
-                },
-                {
-                    name:
-                        "الرسالة",
-                    value:
-                        firstMessage.message
-                }
-            ]
-        });
-
-        res.status(201).json({
-            ok: true,
-            ticket
-        });
-    }
-);
-
-app.get(
-    "/api/tickets",
-    requireAuth,
-    (req, res) => {
-        const tickets =
-            db.tickets
-                .filter(ticket =>
-                    isAdmin(req.user)
-                        ? true
-                        : Number(
-                              ticket.userId
-                          ) ===
-                          Number(
-                              req.user.id
-                          )
-                )
-                .sort(
-                    (a, b) =>
-                        new Date(
-                            b.updatedAt
-                        ) -
-                        new Date(
-                            a.updatedAt
-                        )
-                );
-
-        res.json({
-            tickets
-        });
-    }
-);
-
-app.get(
-    "/api/tickets/:id",
-    requireAuth,
-    (req, res) => {
-        const ticket =
-            db.tickets.find(
-                item =>
-                    item.id ===
-                    req.params.id
-            );
-
-        if (!ticket) {
-            return res.status(404).json({
-                error:
-                    "التذكرة غير موجودة"
-            });
-        }
-
-        if (
-            !isAdmin(req.user) &&
-            Number(ticket.userId) !==
-                Number(req.user.id)
-        ) {
-            return res.status(403).json({
-                error:
-                    "غير مصرح لك"
-            });
-        }
-
-        const messages =
-            db.ticketMessages
-                .filter(
-                    message =>
-                        message.ticketId ===
-                        ticket.id
-                )
-                .sort(
-                    (a, b) =>
-                        new Date(
-                            a.createdAt
-                        ) -
-                        new Date(
-                            b.createdAt
-                        )
-                );
-
-        res.json({
-            ticket,
-            messages
-        });
-    }
-);
-
-app.post(
-    "/api/tickets/:id/messages",
-    requireAuth,
-    async (req, res) => {
-        const message =
-            clean(
-                req.body?.message,
-                4000
-            );
-
-        if (!message) {
-            return res.status(400).json({
-                error:
-                    "الرسالة مطلوبة"
-            });
-        }
-
-        const ticket =
-            db.tickets.find(
-                item =>
-                    item.id ===
-                    req.params.id
-            );
-
-        if (!ticket) {
-            return res.status(404).json({
-                error:
-                    "التذكرة غير موجودة"
-            });
-        }
-
-        if (
-            !isAdmin(req.user) &&
-            Number(ticket.userId) !==
-                Number(req.user.id)
-        ) {
-            return res.status(403).json({
-                error:
-                    "غير مصرح لك"
-            });
-        }
-
-        if (
-            ticket.status ===
-            "closed"
-        ) {
-            return res.status(400).json({
-                error:
-                    "التذكرة مغلقة"
-            });
-        }
-
-        const item = {
-            id:
-                crypto.randomUUID(),
-            ticketId:
-                ticket.id,
-            userId:
-                req.user.id,
-            username:
-                req.user.username,
-            message,
-            createdAt:
-                now()
-        };
-
-        db.ticketMessages.push(
-            item
-        );
-
-        ticket.updatedAt =
-            now();
-
-        if (isAdmin(req.user)) {
-            await notifyDiscordWebsite({
-                title:
-                    "رد إداري على تذكرة",
-                description:
-                    `رد ${req.user.username} على تذكرة ${ticket.id}.`,
-                color:
-                    "#3b82f6",
-                fields: [
-                    {
-                        name:
-                            "المستخدم",
-                        value:
-                            ticket.username
-                    },
-                    {
-                        name:
-                            "الرد",
-                        value:
-                            item.message
-                    }
-                ]
-            });
-        }
-
-        res.json({
-            ok: true,
-            message: item
-        });
-    }
-);
-
-app.patch(
-    "/api/admin/tickets/:id",
-    requireAdmin,
-    async (req, res) => {
-        const ticket =
-            db.tickets.find(
-                item =>
-                    item.id ===
-                    req.params.id
-            );
-
-        if (!ticket) {
-            return res.status(404).json({
-                error:
-                    "التذكرة غير موجودة"
-            });
-        }
-
-        const allowedStatuses = [
-            "open",
-            "pending",
-            "closed",
-            "rejected"
-        ];
-
-        if (
-            req.body?.status &&
-            allowedStatuses.includes(
-                req.body.status
-            )
-        ) {
-            ticket.status =
-                req.body.status;
-        }
-
-        if (
-            req.body?.priority
-        ) {
-            ticket.priority =
-                clean(
-                    req.body.priority,
-                    30
-                );
-        }
-
-        ticket.updatedAt =
-            now();
-
-        addLog(
-            "ticket_update",
-            {
-                admin:
-                    req.user.username,
-                target:
-                    ticket.id,
-                status:
-                    ticket.status
-            }
-        );
-
-        res.json({
-            ok: true,
-            ticket
-        });
-    }
-);
-
-/* =========================================================
-   APPLICATIONS
-========================================================= */
-
-app.post(
-    "/api/applications",
-    requireAuth,
-    async (req, res) => {
-        const type =
-            clean(
-                req.body?.type,
-                100
-            );
-
-        const answers =
-            req.body?.answers &&
-            typeof req.body.answers ===
-                "object"
-                ? req.body.answers
-                : {};
-
-        const note =
-            clean(
-                req.body?.note,
-                2000
-            );
-
-        if (!type) {
-            return res.status(400).json({
-                error:
-                    "نوع الطلب مطلوب"
-            });
-        }
-
-        const application = {
-            id:
-                crypto.randomUUID(),
-            userId:
-                req.user.id,
-            username:
-                req.user.username,
-            type,
-            answers,
-            note,
-            status:
-                "pending",
-            reviewer:
-                null,
-            reviewNote:
-                null,
-            createdAt:
-                now(),
-            updatedAt:
-                now()
-        };
-
-        db.applications.push(
-            application
-        );
-
-        await notifyDiscordWebsite({
-            title:
-                "طلب تقديم جديد",
-            description:
-                `تم إرسال طلب جديد بواسطة ${req.user.username}.`,
-            color:
-                "#8b5cf6",
-            fields: [
-                {
-                    name:
-                        "رقم الطلب",
-                    value:
-                        application.id
-                },
-                {
-                    name:
-                        "النوع",
-                    value:
-                        application.type
-                },
-                {
-                    name:
-                        "الحالة",
-                    value:
-                        "بانتظار المراجعة"
-                },
-                {
-                    name:
-                        "الملاحظات",
-                    value:
-                        application.note ||
-                        "لا يوجد"
-                }
-            ]
-        });
-
-        res.status(201).json({
-            ok: true,
-            application
-        });
-    }
-);
-
-app.get(
-    "/api/applications",
-    requireAuth,
-    (req, res) => {
-        const applications =
-            db.applications
-                .filter(
-                    application =>
-                        isAdmin(req.user)
-                            ? true
-                            : Number(
-                                  application.userId
-                              ) ===
-                              Number(
-                                  req.user.id
-                              )
-                )
-                .sort(
-                    (a, b) =>
-                        new Date(
-                            b.createdAt
-                        ) -
-                        new Date(
-                            a.createdAt
-                        )
-                );
-
-        res.json({
-            applications
-        });
-    }
-);
-
-app.get(
-    "/api/applications/:id",
-    requireAuth,
-    (req, res) => {
-        const application =
-            db.applications.find(
-                item =>
-                    item.id ===
-                    req.params.id
-            );
-
-        if (!application) {
-            return res.status(404).json({
-                error:
-                    "الطلب غير موجود"
-            });
-        }
-
-        if (
-            !isAdmin(req.user) &&
-            Number(
-                application.userId
-            ) !==
-                Number(req.user.id)
-        ) {
-            return res.status(403).json({
-                error:
-                    "غير مصرح لك"
-            });
-        }
-
-        res.json({
-            application
-        });
-    }
-);
-
-app.patch(
-    "/api/admin/applications/:id/review",
-    requireAdmin,
-    async (req, res) => {
-        const application =
-            db.applications.find(
-                item =>
-                    item.id ===
-                    req.params.id
-            );
-
-        if (!application) {
-            return res.status(404).json({
-                error:
-                    "الطلب غير موجود"
-            });
-        }
-
-        const status =
-            String(
-                req.body?.status ||
-                    ""
-            );
-
-        if (
-            ![
-                "approved",
-                "rejected",
-                "pending"
-            ].includes(status)
-        ) {
-            return res.status(400).json({
-                error:
-                    "حالة غير صحيحة"
-            });
-        }
-
-        application.status =
-            status;
-
-        application.reviewer =
-            req.user.username;
-
-        application.reviewNote =
-            clean(
-                req.body?.reviewNote,
-                2000
-            );
-
-        application.updatedAt =
-            now();
-
-        addLog(
-            "application_review",
-            {
-                admin:
-                    req.user.username,
-                target:
-                    application.id,
-                status
-            }
-        );
-
-        await notifyDiscordWebsite({
-            title:
-                status === "approved"
-                    ? "تم قبول طلب"
-                    : status ===
-                      "rejected"
-                        ? "تم رفض طلب"
-                        : "تم تحديث طلب",
-            description:
-                `تم تحديث طلب ${application.username}.`,
-            color:
-                status === "approved"
-                    ? "#22c55e"
-                    : status ===
-                      "rejected"
-                        ? "#ef4444"
-                        : "#f59e0b",
-            fields: [
-                {
-                    name:
-                        "رقم الطلب",
-                    value:
-                        application.id
-                },
-                {
-                    name:
-                        "المستخدم",
-                    value:
-                        application.username
-                },
-                {
-                    name:
-                        "المراجع",
-                    value:
-                        req.user.username
-                },
-                {
-                    name:
-                        "الملاحظة",
-                    value:
-                        application.reviewNote ||
-                        "لا يوجد"
-                }
-            ]
-        });
-
-        res.json({
-            ok: true,
-            application
-        });
-    }
-);
-
-/* =========================================================
-   WATCH ROOMS
-========================================================= */
-
-function validMediaUrl(value) {
-    try {
-        const url =
-            new URL(String(value));
-
-        return (
-            url.protocol ===
-                "http:" ||
-            url.protocol ===
-                "https:"
-        );
-    } catch {
-        return false;
-    }
+function validateUsername(username) {
+  return /^[\p{L}\p{N}_.-]{3,32}$/u.test(username);
 }
 
-app.post(
-    "/api/watch-rooms",
-    requireAuth,
-    (req, res) => {
-        const title =
-            clean(
-                req.body?.title,
-                150
-            );
-
-        const mediaUrl =
-            clean(
-                req.body?.mediaUrl,
-                1000
-            );
-
-        const mediaType =
-            clean(
-                req.body?.mediaType ||
-                    "video",
-                50
-            );
-
-        const description =
-            clean(
-                req.body?.description,
-                1000
-            );
-
-        if (
-            !title ||
-            !mediaUrl
-        ) {
-            return res.status(400).json({
-                error:
-                    "العنوان والرابط مطلوبان"
-            });
-        }
-
-        if (
-            !validMediaUrl(
-                mediaUrl
-            )
-        ) {
-            return res.status(400).json({
-                error:
-                    "رابط الوسائط غير صحيح"
-            });
-        }
-
-        const room = {
-            id:
-                crypto.randomUUID(),
-            ownerId:
-                req.user.id,
-            ownerUsername:
-                req.user.username,
-            title,
-            mediaUrl,
-            mediaType,
-            description,
-            status:
-                "waiting",
-            currentTime: 0,
-            playing: false,
-            members: [
-                {
-                    userId:
-                        req.user.id,
-                    username:
-                        req.user.username,
-                    joinedAt:
-                        now()
-                }
-            ],
-            createdAt:
-                now()
-        };
-
-        db.watchRooms.push(
-            room
-        );
-
-        io.emit(
-            "watch:created",
-            { room }
-        );
-
-        res.status(201).json({
-            ok: true,
-            room
-        });
-    }
-);
-
-app.get(
-    "/api/watch-rooms",
-    (req, res) => {
-        res.json({
-            rooms:
-                db.watchRooms
-                    .filter(
-                        room =>
-                            room.status !==
-                            "closed"
-                    )
-                    .sort(
-                        (a, b) =>
-                            new Date(
-                                b.createdAt
-                            ) -
-                            new Date(
-                                a.createdAt
-                            )
-                    )
-        });
-    }
-);
-
-app.get(
-    "/api/watch-rooms/:id",
-    (req, res) => {
-        const room =
-            db.watchRooms.find(
-                item =>
-                    item.id ===
-                    req.params.id
-            );
-
-        if (!room) {
-            return res.status(404).json({
-                error:
-                    "الغرفة غير موجودة"
-            });
-        }
-
-        res.json({
-            room
-        });
-    }
-);
-
-app.post(
-    "/api/watch-rooms/:id/join",
-    requireAuth,
-    (req, res) => {
-        const room =
-            db.watchRooms.find(
-                item =>
-                    item.id ===
-                    req.params.id
-            );
-
-        if (!room) {
-            return res.status(404).json({
-                error:
-                    "الغرفة غير موجودة"
-            });
-        }
-
-        if (
-            room.status ===
-            "closed"
-        ) {
-            return res.status(400).json({
-                error:
-                    "الغرفة مغلقة"
-            });
-        }
-
-        const exists =
-            room.members.some(
-                member =>
-                    Number(
-                        member.userId
-                    ) ===
-                    Number(
-                        req.user.id
-                    )
-            );
-
-        if (!exists) {
-            room.members.push({
-                userId:
-                    req.user.id,
-                username:
-                    req.user.username,
-                joinedAt:
-                    now()
-            });
-        }
-
-        io.to(
-            `watch:${room.id}`
-        ).emit(
-            "watch:members",
-            room.members
-        );
-
-        res.json({
-            ok: true,
-            room
-        });
-    }
-);
-
-app.patch(
-    "/api/watch-rooms/:id/state",
-    requireAuth,
-    (req, res) => {
-        const room =
-            db.watchRooms.find(
-                item =>
-                    item.id ===
-                    req.params.id
-            );
-
-        if (!room) {
-            return res.status(404).json({
-                error:
-                    "الغرفة غير موجودة"
-            });
-        }
-
-        if (
-            Number(room.ownerId) !==
-            Number(req.user.id) &&
-            !isAdmin(req.user)
-        ) {
-            return res.status(403).json({
-                error:
-                    "مالك الغرفة أو الإدارة فقط يستطيع التحكم"
-            });
-        }
-
-        if (
-            typeof req.body?.currentTime ===
-            "number"
-        ) {
-            room.currentTime =
-                Math.max(
-                    0,
-                    req.body.currentTime
-                );
-        }
-
-        if (
-            typeof req.body?.playing ===
-            "boolean"
-        ) {
-            room.playing =
-                req.body.playing;
-        }
-
-        io.to(
-            `watch:${room.id}`
-        ).emit(
-            "watch:state",
-            {
-                currentTime:
-                    room.currentTime,
-                playing:
-                    room.playing
-            }
-        );
-
-        res.json({
-            ok: true,
-            room
-        });
-    }
-);
-
-app.post(
-    "/api/watch-rooms/:id/close",
-    requireAuth,
-    (req, res) => {
-        const room =
-            db.watchRooms.find(
-                item =>
-                    item.id ===
-                    req.params.id
-            );
-
-        if (!room) {
-            return res.status(404).json({
-                error:
-                    "الغرفة غير موجودة"
-            });
-        }
-
-        if (
-            Number(room.ownerId) !==
-                Number(req.user.id) &&
-            !isAdmin(req.user)
-        ) {
-            return res.status(403).json({
-                error:
-                    "غير مصرح لك"
-            });
-        }
-
-        room.status =
-            "closed";
-
-        io.to(
-            `watch:${room.id}`
-        ).emit(
-            "watch:closed"
-        );
-
-        res.json({
-            ok: true
-        });
-    }
-);
-
-/* =========================================================
-   REVIEWS
-========================================================= */
-
-app.get(
-    "/api/reviews",
-    (req, res) => {
-        const targetType =
-            req.query.type
-                ? String(
-                      req.query.type
-                  )
-                : null;
-
-        const targetId =
-            req.query.targetId
-                ? String(
-                      req.query.targetId
-                  )
-                : null;
-
-        const reviews =
-            db.reviews
-                .filter(review => {
-                    if (
-                        review.status !==
-                        "approved"
-                    ) {
-                        return false;
-                    }
-
-                    if (
-                        targetType &&
-                        review.targetType !==
-                            targetType
-                    ) {
-                        return false;
-                    }
-
-                    if (
-                        targetId &&
-                        review.targetId !==
-                            targetId
-                    ) {
-                        return false;
-                    }
-
-                    return true;
-                })
-                .sort(
-                    (a, b) =>
-                        new Date(
-                            b.createdAt
-                        ) -
-                        new Date(
-                            a.createdAt
-                        )
-                );
-
-        res.json({
-            reviews
-        });
-    }
-);
-
-app.post(
-    "/api/reviews",
-    requireAuth,
-    (req, res) => {
-        const targetType =
-            clean(
-                req.body?.targetType,
-                50
-            );
-
-        const targetId =
-            clean(
-                req.body?.targetId,
-                100
-            );
-
-        const targetName =
-            clean(
-                req.body?.targetName ||
-                    targetId,
-                150
-            );
-
-        const numericRating =
-            Number(
-                req.body?.rating
-            );
-
-        const comment =
-            clean(
-                req.body?.comment,
-                2000
-            );
-
-        if (
-            !targetType ||
-            !targetId
-        ) {
-            return res.status(400).json({
-                error:
-                    "العنصر المطلوب تقييمه غير محدد"
-            });
-        }
-
-        if (
-            !Number.isInteger(
-                numericRating
-            ) ||
-            numericRating < 1 ||
-            numericRating > 5
-        ) {
-            return res.status(400).json({
-                error:
-                    "التقييم يجب أن يكون من 1 إلى 5"
-            });
-        }
-
-        if (!comment) {
-            return res.status(400).json({
-                error:
-                    "التعليق مطلوب"
-            });
-        }
-
-        const existing =
-            db.reviews.find(
-                review =>
-                    Number(
-                        review.userId
-                    ) ===
-                        Number(
-                            req.user.id
-                        ) &&
-                    review.targetType ===
-                        targetType &&
-                    review.targetId ===
-                        targetId
-            );
-
-        if (existing) {
-            return res.status(409).json({
-                error:
-                    "لديك تقييم سابق لهذا العنصر"
-            });
-        }
-
-        const review = {
-            id:
-                crypto.randomUUID(),
-            userId:
-                req.user.id,
-            username:
-                req.user.username,
-            targetType,
-            targetId,
-            targetName,
-            rating:
-                numericRating,
-            comment,
-            status:
-                "pending",
-            createdAt:
-                now()
-        };
-
-        db.reviews.push(
-            review
-        );
-
-        res.status(201).json({
-            ok: true,
-            review
-        });
-    }
-);
-
-app.get(
-    "/api/admin/reviews",
-    requireAdmin,
-    (req, res) => {
-        res.json({
-            reviews:
-                db.reviews
-                    .slice()
-                    .sort(
-                        (a, b) =>
-                            new Date(
-                                b.createdAt
-                            ) -
-                            new Date(
-                                a.createdAt
-                            )
-                    )
-        });
-    }
-);
-
-app.patch(
-    "/api/admin/reviews/:id",
-    requireAdmin,
-    (req, res) => {
-        const review =
-            db.reviews.find(
-                item =>
-                    item.id ===
-                    req.params.id
-            );
-
-        if (!review) {
-            return res.status(404).json({
-                error:
-                    "التقييم غير موجود"
-            });
-        }
-
-        const status =
-            String(
-                req.body?.status ||
-                    ""
-            );
-
-        if (
-            ![
-                "approved",
-                "rejected",
-                "pending"
-            ].includes(status)
-        ) {
-            return res.status(400).json({
-                error:
-                    "حالة غير صحيحة"
-            });
-        }
-
-        review.status =
-            status;
-
-        addLog(
-            "review_moderation",
-            {
-                admin:
-                    req.user.username,
-                target:
-                    review.id,
-                status
-            }
-        );
-
-        res.json({
-            ok: true,
-            review
-        });
-    }
-);
-
-/* =========================================================
-   ADMIN DATA
-========================================================= */
-
-app.get(
-    "/api/admin/stats",
-    requireAdmin,
-    (req, res) => {
-        res.json({
-            users:
-                db.users.length,
-
-            groups:
-                db.groups.length,
-
-            pendingGroups:
-                db.groups.filter(
-                    group =>
-                        group.status ===
-                        "pending"
-                ).length,
-
-            joinRequests:
-                db.groupJoinRequests.filter(
-                    request =>
-                        request.status ===
-                        "pending"
-                ).length,
-
-            tickets:
-                db.tickets.length,
-
-            openTickets:
-                db.tickets.filter(
-                    ticket =>
-                        ticket.status ===
-                        "open"
-                ).length,
-
-            applications:
-                db.applications.length,
-
-            pendingApplications:
-                db.applications.filter(
-                    application =>
-                        application.status ===
-                        "pending"
-                ).length,
-
-            reviews:
-                db.reviews.length,
-
-            pendingReviews:
-                db.reviews.filter(
-                    review =>
-                        review.status ===
-                        "pending"
-                ).length,
-
-            watchRooms:
-                db.watchRooms.filter(
-                    room =>
-                        room.status !==
-                        "closed"
-                ).length,
-
-            logs:
-                db.logs.length
-        });
-    }
-);
-
-app.get(
-    "/api/admin/users",
-    requireAdmin,
-    (req, res) => {
-        res.json({
-            users:
-                db.users.map(user => ({
-                    id: user.id,
-                    username:
-                        user.username,
-                    displayName:
-                        user.displayName,
-                    discordId:
-                        user.discordId ||
-                        null,
-                    role:
-                        user.role,
-                    createdAt:
-                        user.createdAt,
-                    lastLoginAt:
-                        user.lastLoginAt ||
-                        null
-                }))
-        });
-    }
-);
-
-app.get(
-    "/api/admin/logs",
-    requireAdmin,
-    (req, res) => {
-        res.json({
-            logs:
-                db.logs
-                    .slice()
-                    .sort(
-                        (a, b) =>
-                            new Date(
-                                b.createdAt
-                            ) -
-                            new Date(
-                                a.createdAt
-                            )
-                    )
-                    .slice(0, 500)
-        });
-    }
-);
-
-/* =========================================================
-   DISCORD LINK
-========================================================= */
-
-app.post(
-    "/api/profile/discord",
-    requireAuth,
-    async (req, res) => {
-        const discordId =
-            clean(
-                req.body?.discordId,
-                30
-            );
-
-        if (!discordId) {
-            return res.status(400).json({
-                error:
-                    "Discord ID مطلوب"
-            });
-        }
-
-        try {
-            const guild =
-                await getGuild();
-
-            const member =
-                await guild.members
-                    .fetch(discordId)
-                    .catch(
-                        () => null
-                    );
-
-            if (!member) {
-                return res.status(404).json({
-                    error:
-                        "عضو Discord غير موجود"
-                });
-            }
-
-            const alreadyLinked =
-                db.users.find(
-                    user =>
-                        user.id !==
-                            req.user.id &&
-                        user.discordId ===
-                            member.id
-                );
-
-            if (alreadyLinked) {
-                return res.status(409).json({
-                    error:
-                        "حساب Discord مرتبط بحساب موقع آخر"
-                });
-            }
-
-            req.user.discordId =
-                member.id;
-
-            res.json({
-                ok: true,
-                user:
-                    publicUser(
-                        req.user
-                    ),
-                discord: {
-                    id:
-                        member.id,
-                    username:
-                        member.user
-                            .username,
-                    displayName:
-                        member.displayName
-                }
-            });
-        } catch (error) {
-            console.error(
-                "Discord link error:",
-                error
-            );
-
-            res.status(400).json({
-                error:
-                    "تعذر ربط حساب Discord"
-            });
-        }
-    }
-);
-
-/* =========================================================
-   SOCKET.IO
-========================================================= */
-
-io.on(
-    "connection",
-    socket => {
-        socket.on(
-            "watch:join",
-            data => {
-                if (
-                    !data?.roomId
-                ) {
-                    return;
-                }
-
-                const room =
-                    db.watchRooms.find(
-                        item =>
-                            item.id ===
-                            data.roomId
-                    );
-
-                if (!room) {
-                    return;
-                }
-
-                if (
-                    room.status ===
-                    "closed"
-                ) {
-                    return;
-                }
-
-                socket.join(
-                    `watch:${room.id}`
-                );
-
-                socket.emit(
-                    "watch:state",
-                    {
-                        currentTime:
-                            room.currentTime,
-                        playing:
-                            room.playing
-                    }
-                );
-
-                socket.emit(
-                    "watch:members",
-                    room.members
-                );
-            }
-        );
-
-        socket.on(
-            "watch:leave",
-            data => {
-                if (
-                    !data?.roomId
-                ) {
-                    return;
-                }
-
-                socket.leave(
-                    `watch:${data.roomId}`
-                );
-            }
-        );
-
-        socket.on(
-            "watch:chat",
-            data => {
-                if (
-                    !data?.roomId ||
-                    !data?.message
-                ) {
-                    return;
-                }
-
-                const room =
-                    db.watchRooms.find(
-                        item =>
-                            item.id ===
-                            data.roomId
-                    );
-
-                if (
-                    !room ||
-                    room.status ===
-                        "closed"
-                ) {
-                    return;
-                }
-
-                const message =
-                    clean(
-                        data.message,
-                        500
-                    );
-
-                if (!message) {
-                    return;
-                }
-
-                const chat = {
-                    id:
-                        crypto.randomUUID(),
-                    roomId:
-                        room.id,
-                    username:
-                        clean(
-                            data.username ||
-                                "زائر",
-                            60
-                        ),
-                    message,
-                    createdAt:
-                        now()
-                };
-
-                io.to(
-                    `watch:${room.id}`
-                ).emit(
-                    "watch:chat",
-                    chat
-                );
-            }
-        );
-    }
-);
-
-/* =========================================================
-   HEALTH
-========================================================= */
-
-app.get(
-    "/api/health",
-    (req, res) => {
-        res.json({
-            ok: true,
-            service:
-                "Fahad Community Platform",
-            time: now(),
-            discord:
-                Boolean(
-                    discord.user
-                )
-        });
-    }
-);
-
-/* =========================================================
-   ADMIN DISCORD
-========================================================= */
-
-app.get(
-    "/api/admin/discord",
-    requireAdmin,
-    async (req, res) => {
-        try {
-            const guild =
-                await getGuild();
-
-            if (!guild) {
-                return res.status(503).json({
-                    connected:
-                        false,
-                    error:
-                        "Discord غير متصل"
-                });
-            }
-
-            res.json({
-                connected: true,
-
-                guild: {
-                    id:
-                        guild.id,
-                    name:
-                        guild.name,
-                    memberCount:
-                        guild.memberCount,
-                    icon:
-                        guild.iconURL({
-                            extension:
-                                "png",
-                            size:
-                                256
-                        })
-                },
-
-                bot: {
-                    id:
-                        discord.user?.id ||
-                        null,
-                    username:
-                        discord.user
-                            ?.username ||
-                        null,
-                    tag:
-                        discord.user?.tag ||
-                        null
-                }
-            });
-        } catch (error) {
-            console.error(
-                "Discord admin error:",
-                error
-            );
-
-            res.status(500).json({
-                connected:
-                    false,
-                error:
-                    "تعذر قراءة بيانات Discord"
-            });
-        }
-    }
-);
-
-/* =========================================================
-   API 404
-========================================================= */
-
-app.use(
-    "/api",
-    (req, res) => {
-        res.status(404).json({
-            error:
-                "API endpoint غير موجود"
-        });
-    }
-);
-
-/* =========================================================
-   ERROR HANDLER
-========================================================= */
-
-app.use(
-    (error, req, res, next) => {
-        console.error(
-            "Internal error:",
-            error
-        );
-
-        if (
-            res.headersSent
-        ) {
-            return next(error);
-        }
-
-        res.status(500).json({
-            error:
-                "حدث خطأ داخلي في السيرفر"
-        });
-    }
-);
-
-/* =========================================================
-   FRONTEND
-========================================================= */
-
-app.get(
-    "*",
-    (req, res) => {
-        res.sendFile(
-            path.join(
-                __dirname,
-                "public",
-                "index.html"
-            )
-        );
-    }
-);
-
-/* =========================================================
-   DISCORD READY
-========================================================= */
-
-discord.once(
-    "ready",
-    async () => {
-        console.log(
-            `\n✅ Discord connected as ${discord.user.tag}`
-        );
-
-        const statusName =
-            process.env
-                .BOT_STATUS_NAME ||
-            "Fahad Community";
-
-        const statusType =
-            String(
-                process.env
-                    .BOT_STATUS_TYPE ||
-                    "WATCHING"
-            ).toUpperCase();
-
-        const typeMap = {
-            PLAYING: 0,
-            STREAMING: 1,
-            LISTENING: 2,
-            WATCHING: 3
-        };
-
-        const activityType =
-            typeMap[statusType] ??
-            3;
-
-        const botActivity = {
-            name:
-                statusName,
-            type:
-                activityType
-        };
-
-        if (
-            activityType ===
-            1
-        ) {
-            botActivity.url =
-                process.env
-                    .BOT_STREAM_URL ||
-                "https://twitch.tv/Njm";
-        }
-
-        try {
-            discord.user.setPresence({
-                status:
-                    "online",
-                activities: [
-                    botActivity
-                ]
-            });
-
-            console.log(
-                `✅ Bot status: ${statusType} ${statusName}`
-            );
-        } catch (error) {
-            console.error(
-                "Failed to set bot status:",
-                error
-            );
-        }
-
-        try {
-            const guild =
-                await discord.guilds.fetch(
-                    DISCORD_GUILD_ID
-                );
-
-            guildCache =
-                guild;
-
-            guildCacheAt =
-                Date.now();
-
-            console.log(
-                `🏠 Connected to guild: ${guild.name}`
-            );
-
-            const members =
-                await guild.members.fetch();
-
-            memberSnapshot =
-                [
-                    ...members.values()
-                ];
-
-            memberSnapshotAt =
-                Date.now();
-
-            console.log(
-                `👥 Cached members: ${memberSnapshot.length}`
-            );
-        } catch (error) {
-            console.error(
-                "Discord guild initialization error:",
-                error
-            );
-        }
-
-        const inviteLink =
-            `https://discord.com/oauth2/authorize` +
-            `?client_id=${discord.user.id}` +
-            `&permissions=412384488512` +
-            `&scope=bot%20applications.commands`;
-
-        console.log(
-            `\n🔗 Bot Invite:\n${inviteLink}\n`
-        );
-
-        console.log(
-            "🚀 Fahad Community Discord system is ready."
-        );
-    }
-);
-
-/* =========================================================
-   DISCORD EVENTS
-========================================================= */
-
-discord.on(
-    "guildMemberAdd",
-    member => {
-        console.log(
-            `➕ Member joined: ${member.user.tag}`
-        );
-
-        invalidateMemberSnapshot();
-
-        io.emit(
-            "discord:memberAdd",
-            {
-                id:
-                    member.id
-            }
-        );
-    }
-);
-
-discord.on(
-    "guildMemberRemove",
-    member => {
-        console.log(
-            `➖ Member left: ${member.user.tag}`
-        );
-
-        invalidateMemberSnapshot();
-
-        io.emit(
-            "discord:memberRemove",
-            {
-                id:
-                    member.id
-            }
-        );
-    }
-);
-
-discord.on(
-    "guildMemberUpdate",
-    (oldMember, newMember) => {
-        invalidateMemberSnapshot();
-
-        io.emit(
-            "discord:memberUpdate",
-            {
-                id:
-                    newMember.id
-            }
-        );
-    }
-);
-
-discord.on(
-    "messageCreate",
-    message => {
-        if (!message.guild) {
-            return;
-        }
-
-        if (message.author.bot) {
-            return;
-        }
-
-        const stats =
-            getStats(
-                message.author.id
-            );
-
-        stats.messages += 1;
-        stats.chatRounds += 1;
-
-        if (
-            message.mentions &&
-            message.mentions.users
-        ) {
-            const mentions =
-                message.mentions.users;
-
-            if (
-                mentions.size > 0
-            ) {
-                stats.mentionsSent +=
-                    mentions.size;
-
-                for (
-                    const mentionedUser
-                    of mentions.values()
-                ) {
-                    const mentionedStats =
-                        getStats(
-                            mentionedUser.id
-                        );
-
-                    mentionedStats
-                        .mentionsReceived +=
-                        1;
-                }
-            }
-        }
-
-        invalidateMemberSnapshot();
-
-        io.emit(
-            "discord:activity",
-            {
-                type:
-                    "message",
-                userId:
-                    message.author.id
-            }
-        );
-    }
-);
-
-discord.on(
-    "voiceStateUpdate",
-    (oldState, newState) => {
-        const member =
-            newState.member ||
-            oldState.member;
-
-        if (!member) {
-            return;
-        }
-
-        const memberId =
-            member.id;
-
-        const oldChannel =
-            oldState.channelId;
-
-        const newChannel =
-            newState.channelId;
-
-        if (
-            !oldChannel &&
-            newChannel
-        ) {
-            const stats =
-                getStats(
-                    memberId
-                );
-
-            stats.voiceJoins +=
-                1;
-
-            voiceSessions.set(
-                memberId,
-                Date.now()
-            );
-
-            io.emit(
-                "discord:voice",
-                {
-                    userId:
-                        memberId,
-                    channelId:
-                        newChannel,
-                    type:
-                        "join"
-                }
-            );
-        } else if (
-            oldChannel &&
-            !newChannel
-        ) {
-            const startedAt =
-                voiceSessions.get(
-                    memberId
-                );
-
-            if (startedAt) {
-                const minutes =
-                    Math.max(
-                        0,
-                        Math.round(
-                            (
-                                Date.now() -
-                                startedAt
-                            ) /
-                                60000
-                        )
-                    );
-
-                const stats =
-                    getStats(
-                        memberId
-                    );
-
-                stats.voiceMinutes +=
-                    minutes;
-
-                voiceSessions.delete(
-                    memberId
-                );
-            }
-
-            io.emit(
-                "discord:voice",
-                {
-                    userId:
-                        memberId,
-                    channelId:
-                        null,
-                    type:
-                        "leave"
-                }
-            );
-        } else if (
-            oldChannel &&
-            newChannel &&
-            oldChannel !==
-                newChannel
-        ) {
-            io.emit(
-                "discord:voice",
-                {
-                    userId:
-                        memberId,
-                    channelId:
-                        newChannel,
-                    oldChannelId:
-                        oldChannel,
-                    type:
-                        "move"
-                }
-            );
-        }
-
-        invalidateMemberSnapshot();
-    }
-);
-
-/* =========================================================
-   START SERVER
-========================================================= */
-
-server.listen(
-    PORT,
-    () => {
-        console.log(
-            `🌐 Website running on port ${PORT}`
-        );
-    }
-);
-
-/* =========================================================
-   DISCORD LOGIN
-========================================================= */
-
-discord
-    .login(
-        DISCORD_BOT_TOKEN
-    )
-    .catch(error => {
-        console.error(
-            "❌ Discord login failed:",
-            error.message
-        );
-
-        process.exit(1);
+function publicGame(game) {
+  return {
+    id: game.id,
+    type: game.type,
+    name: game.name,
+    status: game.status,
+    host: userJson(users.get(game.hostId)),
+    players: game.players.map((p) => ({ ...p, user: userJson(users.get(p.userId)) })),
+    maxPlayers: game.maxPlayers,
+    createdAt: game.createdAt,
+    updatedAt: game.updatedAt
+  };
+}
+
+function gameStatsFor(userId) {
+  if (!gameStats.has(userId)) gameStats.set(userId, { played: 0, wins: 0, losses: 0, draws: 0 });
+  return gameStats.get(userId);
+}
+
+function createGame(type, hostId, maxPlayers) {
+  const names = {
+    uno: "UNO",
+    ludo: "لودو",
+    baloot: "بلوت",
+    daqsh: "دقش",
+    qawsar: "قوسر"
+  };
+  const game = {
+    id: String(nextGameId++),
+    type,
+    name: names[type] || type,
+    status: "waiting",
+    hostId,
+    maxPlayers,
+    players: [{ userId: hostId, seat: 1, ready: true }],
+    state: {},
+    createdAt: now(),
+    updatedAt: now()
+  };
+  games.set(game.id, game);
+  return game;
+}
+
+// Bootstrap website owner account from environment.
+const ownerUsername = process.env.OWNER_USERNAME || "owner";
+const ownerPassword = process.env.OWNER_PASSWORD || "change-me";
+let owner = findUserByUsername(ownerUsername);
+if (!owner) owner = createUser(ownerUsername, ownerPassword, process.env.OWNER_ID || "");
+admins.add(owner.id);
+
+// -------------------- Health / auth --------------------
+
+app.get("/health", (req, res) => {
+  res.json({
+    ok: true,
+    botReady: client.isReady(),
+    membersCached: Boolean(memberSnapshot),
+    membersCachedCount: memberSnapshot?.length || 0,
+    users: users.size,
+    groups: groups.size,
+    tickets: tickets.size,
+    applications: applications.size,
+    games: games.size
+  });
+});
+
+app.get("/api/auth/me", (req, res) => {
+  const user = currentUser(req);
+  res.json({ authenticated: Boolean(user), user: userJson(user) });
+});
+
+app.post("/api/auth/register", async (req, res) => {
+  const username = cleanText(req.body?.username, 32);
+  const password = String(req.body?.password || "");
+  const discordId = cleanText(req.body?.discordId, 30);
+
+  if (!validateUsername(username)) return res.status(400).json({ error: "اسم المستخدم من 3 إلى 32 حرفًا ويقبل الحروف والأرقام و _ . - فقط" });
+  if (password.length < 8 || password.length > 128) return res.status(400).json({ error: "كلمة المرور يجب أن تكون بين 8 و128 حرفًا" });
+  if (findUserByUsername(username)) return res.status(409).json({ error: "اسم المستخدم مستخدم بالفعل" });
+
+  const user = createUser(username, password, discordId);
+  req.session.userId = user.id;
+  pushLog("user_registered", { userId: user.id, username: user.username });
+  res.status(201).json({ user: userJson(user) });
+});
+
+app.post("/api/auth/login", async (req, res) => {
+  const username = cleanText(req.body?.username, 32);
+  const password = String(req.body?.password || "");
+  const user = findUserByUsername(username);
+
+  if (!user || !bcrypt.compareSync(password, user.passwordHash)) return res.status(401).json({ error: "اسم المستخدم أو كلمة المرور غير صحيحة" });
+  if (user.suspended) return res.status(403).json({ error: "الحساب موقوف" });
+
+  req.session.userId = user.id;
+  pushLog("user_login", { userId: user.id });
+  res.json({ user: userJson(user) });
+});
+
+app.post("/api/auth/logout", (req, res) => {
+  req.session.destroy(() => res.json({ ok: true }));
+});
+
+app.patch("/api/auth/profile", requireAuth, (req, res) => {
+  const discordId = cleanText(req.body?.discordId, 30);
+  req.user.discordId = discordId;
+  res.json({ user: userJson(req.user) });
+});
+// -------------------- Public Discord API --------------------
+
+app.get("/api/public/server", async (req, res) => {
+  try {
+    const guild = await getGuild();
+    res.json({
+      id: guild.id,
+      name: guild.name,
+      icon: guild.iconURL({ extension: "png", size: 256 }),
+      memberCount: guild.memberCount,
+      ownerName: process.env.SERVER_FOUNDER_NAME || "فهد المطيري",
+      invite: process.env.DISCORD_INVITE_URL || ""
     });
+  } catch (error) {
+    console.error("Server endpoint:", error);
+    res.status(503).json({ error: "Discord server unavailable" });
+  }
+});
 
-/* =========================================================
-   GRACEFUL SHUTDOWN
-========================================================= */
+app.get("/api/public/members", async (req, res) => {
+  try {
+    const guild = await getGuild();
+    const allMembers = await getAllMembers(guild);
+    const query = String(req.query.q || "").trim().toLocaleLowerCase("ar");
+    const cleanQuery = query.replace(/^@/, "");
+    const filtered = cleanQuery ? allMembers.filter((member) => {
+      const searchable = [member.displayName, member.user.username, member.user.globalName, member.user.tag, member.id].filter(Boolean).join(" ").toLocaleLowerCase("ar");
+      return searchable.includes(cleanQuery);
+    }) : allMembers;
 
-let shuttingDown = false;
+    res.json({ members: sortedMemberJson(filtered), total: filtered.length, totalServerMembers: allMembers.length, updatedAt: memberSnapshotAt, cached: Boolean(memberSnapshot) });
+  } catch (error) {
+    console.error("Members endpoint:", error);
+    res.status(503).json({ error: "Members are temporarily unavailable" });
+  }
+});
 
-async function shutdown(signal) {
-    if (shuttingDown) {
-        return;
+app.get("/api/public/roles", async (req, res) => {
+  try {
+    const guild = await getGuild();
+    const allMembers = await getAllMembers(guild);
+    const roles = leadershipRoleIds.map((roleId) => guild.roles.cache.get(roleId)).filter(Boolean).map((role) => {
+      const count = allMembers.reduce((total, member) => total + (member.roles.cache.has(role.id) ? 1 : 0), 0);
+      return roleJson(role, count);
+    });
+    res.json({ roles, updatedAt: memberSnapshotAt });
+  } catch (error) {
+    console.error("Roles endpoint:", error);
+    res.status(503).json({ error: "Roles are temporarily unavailable" });
+  }
+});
+
+app.get("/api/public/roles/:id/members", async (req, res) => {
+  try {
+    const guild = await getGuild();
+    const role = guild.roles.cache.get(req.params.id);
+    if (!role || !leadershipRoleSet.has(role.id)) return res.status(404).json({ error: "Role not found" });
+    const roleMembers = (await getAllMembers(guild)).filter((member) => member.roles.cache.has(role.id));
+    res.json({ role: roleJson(role, roleMembers.length), members: sortedMemberJson(roleMembers), updatedAt: memberSnapshotAt });
+  } catch (error) {
+    console.error("Role members endpoint:", error);
+    res.status(503).json({ error: "Role members are temporarily unavailable" });
+  }
+});
+
+app.get("/api/public/top", async (req, res) => {
+  try {
+    const members = (await getAllMembers(await getGuild())).map(memberJson);
+    const top = (key) => [...members].sort((a, b) => (b.stats[key] || 0) - (a.stats[key] || 0)).slice(0, 10);
+    res.json({ messages: top("messages"), mentions: top("mentionsReceived"), voice: top("voiceMinutes"), joins: top("voiceJoins"), updatedAt: memberSnapshotAt });
+  } catch (error) {
+    console.error("Top endpoint:", error);
+    res.status(503).json({ error: "Top is temporarily unavailable" });
+  }
+});
+
+app.get("/api/public/member/:id", async (req, res) => {
+  try {
+    const guild = await getGuild();
+    const member = await guild.members.fetch(req.params.id).catch(() => null);
+    if (!member) return res.status(404).json({ error: "Member not found" });
+    const highest = member.roles.cache.filter((role) => role.id !== guild.id && !role.managed).sort((a, b) => b.position - a.position).first();
+    res.json({
+      ...memberJson(member),
+      highestRole: highest ? roleJson(highest) : null,
+      permissions: highest ? highest.permissions.toArray().filter((p) => importantPermissionNames.has(p)) : []
+    });
+  } catch (error) {
+    console.error("Member endpoint:", error);
+    res.status(404).json({ error: "Member not found" });
+  }
+});
+
+app.post("/api/public/message", async (req, res) => {
+  const nowMs = Date.now();
+  const ip = req.ip || "unknown";
+  const last = sendHits.get(ip) || 0;
+  if (nowMs - last < 10_000) return res.status(429).json({ error: "انتظر 10 ثواني قبل الإرسال مرة أخرى" });
+
+  const title = cleanText(req.body?.title || "رسالة من إدارة MLD", 120);
+  const text = cleanText(req.body?.message, 2000);
+  const targetId = cleanText(req.body?.memberId, 30);
+  if (!targetId || !text) return res.status(400).json({ error: "بيانات الرسالة غير صحيحة" });
+
+  try {
+    const member = await (await getGuild()).members.fetch(targetId).catch(() => null);
+    if (!member) return res.status(404).json({ error: "العضو غير موجود" });
+    const embed = new EmbedBuilder().setTitle(title).setDescription(text).setColor("#ff9cdc").setFooter({ text: "MLD Community" }).setTimestamp();
+    await member.send({ embeds: [embed] });
+    sendHits.set(ip, nowMs);
+    res.json({ ok: true });
+  } catch (error) {
+    console.error("DM endpoint:", error);
+    res.status(500).json({ error: "تعذر الإرسال؛ قد يكون الخاص مقفلًا" });
+  }
+});
+
+// -------------------- Groups --------------------
+
+app.get("/api/groups", (req, res) => {
+  res.json({ groups: [...groups.values()].filter((g) => g.status === "approved").map((g) => groupView(g)) });
+});
+
+app.get("/api/groups/:id", (req, res) => {
+  const group = groups.get(req.params.id);
+  if (!group || group.status !== "approved") return res.status(404).json({ error: "المجموعة غير موجودة" });
+  res.json({ group: groupView(group, Boolean(currentUser(req) && (currentUser(req).id === group.ownerId || isAdminUser(currentUser(req))))) });
+});
+
+app.post("/api/groups", requireAuth, async (req, res) => {
+  const name = cleanText(req.body?.name, 80);
+  const description = cleanText(req.body?.description, 500);
+  const category = cleanText(req.body?.category || "عام", 50);
+  const icon = cleanText(req.body?.icon || "👥", 10);
+  if (name.length < 2) return res.status(400).json({ error: "اسم المجموعة مطلوب" });
+
+  const group = {
+    id: String(nextGroupId++),
+    name,
+    slug: slugify(name),
+    description,
+    category,
+    icon,
+    ownerId: req.user.id,
+    status: "pending",
+    createdAt: now(),
+    discordRoleId: null,
+    discordCategoryId: null,
+    discordTextChannelId: null,
+    discordVoiceChannelId: null
+  };
+  groups.set(group.id, group);
+  groupMembers.set(group.id, new Map());
+  pushLog("group_created", { groupId: group.id, userId: req.user.id });
+
+  await notifyDiscordWebsite({
+    title: "طلب إنشاء مجموعة جديد",
+    description: `المستخدم ${req.user.username} أنشأ طلب مجموعة.`,
+    fields: [
+      { name: "المجموعة", value: group.name },
+      { name: "المالك", value: req.user.username },
+      { name: "المعرف", value: group.id }
+    ]
+  });
+
+  res.status(201).json({ group: groupView(group) });
+});
+
+app.post("/api/groups/:id/join", requireAuth, async (req, res) => {
+  const group = groups.get(req.params.id);
+  if (!group || group.status !== "approved") return res.status(404).json({ error: "المجموعة غير موجودة" });
+  if (group.ownerId === req.user.id || isGroupMember(group.id, req.user.id)) return res.status(400).json({ error: "أنت عضو بالفعل" });
+
+  const requests = groupJoinRequests.get(group.id) || new Map();
+  if ([...requests.values()].some((r) => r.userId === req.user.id && r.status === "pending")) return res.status(409).json({ error: "لديك طلب معلق بالفعل" });
+
+  const request = { id: String(nextJoinId++), groupId: group.id, userId: req.user.id, message: cleanText(req.body?.message, 300), status: "pending", createdAt: now() };
+  requests.set(request.id, request);
+  groupJoinRequests.set(group.id, requests);
+
+  await notifyDiscordWebsite({
+    title: "طلب انضمام لمجموعة",
+    description: `المستخدم ${req.user.username} يريد الانضمام إلى ${group.name}.`,
+    fields: [{ name: "المجموعة", value: group.name }, { name: "العضو", value: req.user.username }, { name: "الطلب", value: request.id }]
+  });
+  res.status(201).json({ request });
+});
+
+// -------------------- Tickets --------------------
+
+app.get("/api/tickets", requireAuth, (req, res) => {
+  const own = [...tickets.values()].filter((t) => t.userId === req.user.id);
+  const data = isAdminUser(req.user) ? [...tickets.values()] : own;
+  res.json({ tickets: data.map((t) => ({ ...t, messages: undefined })) });
+});
+
+app.post("/api/tickets", requireAuth, async (req, res) => {
+  const type = cleanText(req.body?.type || "عام", 80);
+  const subject = cleanText(req.body?.subject, 160);
+  const message = cleanText(req.body?.message, 3000);
+  if (!subject || !message) return res.status(400).json({ error: "العنوان والرسالة مطلوبان" });
+
+  const ticket = { id: String(nextTicketId++), userId: req.user.id, type, subject, status: "open", createdAt: now(), updatedAt: now() };
+  tickets.set(ticket.id, ticket);
+  ticketMessages.set(ticket.id, [{ id: String(nextTicketMessageId++), ticketId: ticket.id, userId: req.user.id, message, createdAt: now() }]);
+
+  await notifyDiscordWebsite({
+    title: "تذكرة جديدة",
+    description: `تذكرة ${ticket.id} من ${req.user.username}.`,
+    fields: [{ name: "النوع", value: type }, { name: "العنوان", value: subject }]
+  });
+  res.status(201).json({ ticket, messages: ticketMessages.get(ticket.id) });
+});
+
+app.get("/api/tickets/:id", requireAuth, (req, res) => {
+  const ticket = tickets.get(req.params.id);
+  if (!ticket) return res.status(404).json({ error: "التذكرة غير موجودة" });
+  if (!isAdminUser(req.user) && ticket.userId !== req.user.id) return res.status(403).json({ error: "غير مصرح" });
+  res.json({ ticket, messages: ticketMessages.get(ticket.id) || [] });
+});
+
+app.post("/api/tickets/:id/messages", requireAuth, (req, res) => {
+  const ticket = tickets.get(req.params.id);
+  if (!ticket) return res.status(404).json({ error: "التذكرة غير موجودة" });
+  if (!isAdminUser(req.user) && ticket.userId !== req.user.id) return res.status(403).json({ error: "غير مصرح" });
+  if (ticket.status === "closed") return res.status(400).json({ error: "التذكرة مغلقة" });
+  const message = cleanText(req.body?.message, 3000);
+  if (!message) return res.status(400).json({ error: "الرسالة مطلوبة" });
+  const item = { id: String(nextTicketMessageId++), ticketId: ticket.id, userId: req.user.id, message, createdAt: now() };
+  const list = ticketMessages.get(ticket.id) || [];
+  list.push(item);
+  ticketMessages.set(ticket.id, list);
+  ticket.updatedAt = now();
+  res.status(201).json({ message: item });
+});
+
+app.patch("/api/tickets/:id", requireAdmin, (req, res) => {
+  const ticket = tickets.get(req.params.id);
+  if (!ticket) return res.status(404).json({ error: "التذكرة غير موجودة" });
+  const status = cleanText(req.body?.status, 30);
+  if (status && ["open", "pending", "closed"].includes(status)) ticket.status = status;
+  ticket.updatedAt = now();
+  res.json({ ticket });
+});
+
+// -------------------- Applications --------------------
+
+app.post("/api/applications", requireAuth, async (req, res) => {
+  const type = cleanText(req.body?.type || "عام", 80);
+  const answers = req.body?.answers && typeof req.body.answers === "object" ? req.body.answers : {};
+  const application = { id: String(nextApplicationId++), userId: req.user.id, type, answers, status: "pending", createdAt: now(), reviewedAt: null, reviewedBy: null };
+  applications.set(application.id, application);
+
+  await notifyDiscordWebsite({
+    title: "طلب تقديم جديد",
+    description: `طلب ${application.id} من ${req.user.username}.`,
+    fields: [{ name: "النوع", value: type }, { name: "المتقدم", value: req.user.username }]
+  });
+  res.status(201).json({ application });
+});
+
+app.get("/api/applications", requireAuth, (req, res) => {
+  const list = [...applications.values()].filter((a) => isAdminUser(req.user) || a.userId === req.user.id);
+  res.json({ applications: list });
+});
+
+// -------------------- Reviews --------------------
+
+app.get("/api/reviews/:targetType/:targetId", (req, res) => {
+  const key = `${req.params.targetType}:${req.params.targetId}`;
+  const list = reviews.get(key) || [];
+  const average = list.length ? list.reduce((sum, r) => sum + r.rating, 0) / list.length : 0;
+  res.json({ reviews: list, average: Number(average.toFixed(2)), count: list.length });
+});
+
+app.post("/api/reviews", requireAuth, (req, res) => {
+  const targetType = cleanText(req.body?.targetType, 40);
+  const targetId = cleanText(req.body?.targetId, 100);
+  const rating = Number(req.body?.rating);
+  const comment = cleanText(req.body?.comment, 1000);
+  if (!targetType || !targetId || !Number.isInteger(rating) || rating < 1 || rating > 5) return res.status(400).json({ error: "التقييم يجب أن يكون من 1 إلى 5" });
+
+  const key = `${targetType}:${targetId}`;
+  const list = reviews.get(key) || [];
+  const old = list.find((r) => r.userId === req.user.id);
+  const item = { id: old?.id || String(nextReviewId++), targetType, targetId, userId: req.user.id, username: req.user.username, rating, comment, createdAt: old?.createdAt || now(), updatedAt: now() };
+  if (old) Object.assign(old, item); else list.unshift(item);
+  reviews.set(key, list);
+  res.status(old ? 200 : 201).json({ review: item });
+});
+
+app.delete("/api/reviews/:id", requireAuth, (req, res) => {
+  for (const [key, list] of reviews.entries()) {
+    const index = list.findIndex((r) => r.id === req.params.id);
+    if (index !== -1) {
+      if (list[index].userId !== req.user.id && !isAdminUser(req.user)) return res.status(403).json({ error: "غير مصرح" });
+      list.splice(index, 1);
+      reviews.set(key, list);
+      return res.json({ ok: true });
     }
+  }
+  res.status(404).json({ error: "التقييم غير موجود" });
+});
 
-    shuttingDown = true;
+// -------------------- Watch rooms --------------------
 
-    console.log(
-        `${signal} received. Shutting down...`
-    );
+app.get("/api/watch", (req, res) => {
+  res.json({ rooms: [...watchRooms.values()].filter((r) => r.status === "open").map((r) => ({ ...r, chat: undefined })) });
+});
 
-    try {
-        discord.destroy();
-    } catch (error) {
-        console.error(
-            "Discord shutdown error:",
-            error
-        );
+app.post("/api/watch", requireAuth, (req, res) => {
+  const title = cleanText(req.body?.title, 160);
+  const mediaUrl = cleanText(req.body?.mediaUrl, 1000);
+  if (!title || !/^https?:\/\//i.test(mediaUrl)) return res.status(400).json({ error: "العنوان ورابط وسائط صالحان مطلوبان" });
+
+  const room = { id: String(nextWatchRoomId++), title, mediaUrl, hostId: req.user.id, status: "open", position: 0, playing: false, createdAt: now(), chat: [] };
+  watchRooms.set(room.id, room);
+  res.status(201).json({ room: { ...room, chat: undefined } });
+});
+
+app.post("/api/watch/:id/state", requireAuth, (req, res) => {
+  const room = watchRooms.get(req.params.id);
+  if (!room) return res.status(404).json({ error: "الغرفة غير موجودة" });
+  if (room.hostId !== req.user.id && !isAdminUser(req.user)) return res.status(403).json({ error: "مالك الغرفة فقط يستطيع التحكم" });
+  if (req.body?.position !== undefined) room.position = Math.max(0, Number(req.body.position) || 0);
+  if (req.body?.playing !== undefined) room.playing = Boolean(req.body.playing);
+  res.json({ room: { ...room, chat: undefined } });
+});
+
+app.post("/api/watch/:id/chat", requireAuth, (req, res) => {
+  const room = watchRooms.get(req.params.id);
+  if (!room) return res.status(404).json({ error: "الغرفة غير موجودة" });
+  const message = cleanText(req.body?.message, 500);
+  if (!message) return res.status(400).json({ error: "الرسالة مطلوبة" });
+  const item = { id: randomToken(), userId: req.user.id, username: req.user.username, message, createdAt: now() };
+  room.chat.push(item);
+  if (room.chat.length > 200) room.chat.shift();
+  res.status(201).json({ message: item });
+});
+
+// -------------------- Games --------------------
+
+app.get("/api/games", (req, res) => {
+  res.json({ games: [...games.values()].filter((g) => g.status !== "finished").map(publicGame) });
+});
+app.post("/api/games", requireAuth, (req, res) => {
+  const type = cleanText(req.body?.type, 30).toLocaleLowerCase("ar");
+  const allowed = new Set(["uno", "ludo", "baloot", "daqsh", "qawsar"]);
+  if (!allowed.has(type)) return res.status(400).json({ error: "نوع اللعبة غير مدعوم" });
+  const maxPlayers = Math.min(8, Math.max(2, Number(req.body?.maxPlayers) || 4));
+  const game = createGame(type, req.user.id, maxPlayers);
+  res.status(201).json({ game: publicGame(game) });
+});
+
+app.post("/api/games/:id/join", requireAuth, async (req, res) => {
+  const game = games.get(req.params.id);
+  if (!game) return res.status(404).json({ error: "اللعبة غير موجودة" });
+  if (game.status !== "waiting") return res.status(400).json({ error: "اللعبة بدأت بالفعل" });
+  if (game.players.some((p) => p.userId === req.user.id)) return res.status(400).json({ error: "أنت داخل اللعبة" });
+  if (game.players.length >= game.maxPlayers) return res.status(400).json({ error: "اللعبة مكتملة" });
+
+  game.players.push({ userId: req.user.id, seat: game.players.length + 1, ready: false });
+  game.updatedAt = now();
+  if (game.players.length >= game.maxPlayers) game.status = "active";
+  res.json({ game: publicGame(game) });
+});
+
+app.post("/api/games/:id/invite", requireAuth, async (req, res) => {
+  const game = games.get(req.params.id);
+  const targetId = cleanText(req.body?.userId, 50);
+  if (!game) return res.status(404).json({ error: "اللعبة غير موجودة" });
+  if (!game.players.some((p) => p.userId === req.user.id)) return res.status(403).json({ error: "يجب أن تكون داخل اللعبة" });
+  const target = users.get(targetId);
+  if (!target) return res.status(404).json({ error: "المستخدم غير موجود" });
+  const invite = { id: String(nextInviteId++), gameId: game.id, fromUserId: req.user.id, toUserId: target.id, status: "pending", createdAt: now() };
+  gameInvites.set(invite.id, invite);
+  const list = notifications.get(target.id) || [];
+  list.unshift({ id: String(nextNotificationId++), type: "game_invite", inviteId: invite.id, text: `${req.user.username} دعاك إلى لعبة ${game.name}`, createdAt: now() });
+  notifications.set(target.id, list);
+  res.status(201).json({ invite });
+});
+
+app.get("/api/games/invites", requireAuth, (req, res) => {
+  res.json({ invites: [...gameInvites.values()].filter((i) => i.toUserId === req.user.id && i.status === "pending") });
+});
+
+app.post("/api/games/invites/:id/respond", requireAuth, (req, res) => {
+  const invite = gameInvites.get(req.params.id);
+  if (!invite || invite.toUserId !== req.user.id) return res.status(404).json({ error: "الدعوة غير موجودة" });
+  const accept = Boolean(req.body?.accept);
+  invite.status = accept ? "accepted" : "rejected";
+  if (accept) {
+    const game = games.get(invite.gameId);
+    if (game && game.status === "waiting" && !game.players.some((p) => p.userId === req.user.id) && game.players.length < game.maxPlayers) {
+      game.players.push({ userId: req.user.id, seat: game.players.length + 1, ready: false });
+      if (game.players.length >= game.maxPlayers) game.status = "active";
+      game.updatedAt = now();
     }
+  }
+  res.json({ invite });
+});
 
-    server.close(
-        () => {
-            console.log(
-                "HTTP server closed."
-            );
+app.post("/api/games/:id/action", requireAuth, (req, res) => {
+  const game = games.get(req.params.id);
+  if (!game) return res.status(404).json({ error: "اللعبة غير موجودة" });
+  if (!game.players.some((p) => p.userId === req.user.id)) return res.status(403).json({ error: "أنت لست لاعبًا" });
+  if (game.status === "waiting") return res.status(400).json({ error: "اللعبة لم تبدأ بعد" });
 
-            process.exit(0);
-        }
-    );
+  // Generic action transport. Game-specific rule engines can be added here later.
+  game.state.lastAction = { userId: req.user.id, action: req.body?.action || null, data: req.body?.data || null, at: now() };
+  game.updatedAt = now();
+  res.json({ game: publicGame(game), state: game.state });
+});
 
-    setTimeout(
-        () => {
-            process.exit(0);
-        },
-        5000
-    );
-}
+app.post("/api/games/:id/finish", requireAuth, (req, res) => {
+  const game = games.get(req.params.id);
+  if (!game) return res.status(404).json({ error: "اللعبة غير موجودة" });
+  if (game.hostId !== req.user.id && !isAdminUser(req.user)) return res.status(403).json({ error: "المضيف فقط يستطيع إنهاء اللعبة" });
 
-process.on(
-    "SIGTERM",
-    () =>
-        shutdown(
-            "SIGTERM"
-        )
-);
+  const winnerId = cleanText(req.body?.winnerId, 50);
+  game.status = "finished";
+  game.updatedAt = now();
+  for (const player of game.players) {
+    const stats = gameStatsFor(player.userId);
+    stats.played += 1;
+    if (winnerId && player.userId === winnerId) stats.wins += 1;
+    else if (winnerId) stats.losses += 1;
+  }
+  res.json({ game: publicGame(game), stats: game.players.map((p) => ({ userId: p.userId, stats: gameStatsFor(p.userId) })) });
+});
 
-process.on(
-    "SIGINT",
-    () =>
-        shutdown(
-            "SIGINT"
-        )
-);
+app.get("/api/games/stats/me", requireAuth, (req, res) => res.json({ stats: gameStatsFor(req.user.id) }));
+
+// -------------------- Notifications --------------------
+
+app.get("/api/notifications", requireAuth, (req, res) => {
+  res.json({ notifications: notifications.get(req.user.id) || [] });
+});
+
+app.post("/api/notifications/:id/read", requireAuth, (req, res) => {
+  const list = notifications.get(req.user.id) || [];
+  const item = list.find((n) => n.id === req.params.id);
+  if (!item) return res.status(404).json({ error: "الإشعار غير موجود" });
+  item.read = true;
+  res.json({ notification: item });
+});
+
+// -------------------- Admin --------------------
+
+app.get("/api/admin/overview", requireAdmin, (req, res) => {
+  res.json({
+    users: users.size,
+    admins: admins.size,
+    groups: groups.size,
+    pendingGroups: [...groups.values()].filter((g) => g.status === "pending").length,
+    joinRequests: [...groupJoinRequests.values()].reduce((n, map) => n + [...map.values()].filter((r) => r.status === "pending").length, 0),
+    tickets: tickets.size,
+    openTickets: [...tickets.values()].filter((t) => t.status !== "closed").length,
+    applications: applications.size,
+    pendingApplications: [...applications.values()].filter((a) => a.status === "pending").length,
+    games: games.size,
+    watchRooms: watchRooms.size
+  });
+});
+
+app.get("/api/admin/users", requireAdmin, (req, res) => res.json({ users: [...users.values()].map(userJson) }));
+
+app.patch("/api/admin/users/:id", requireAdmin, (req, res) => {
+  const user = users.get(req.params.id);
+  if (!user) return res.status(404).json({ error: "المستخدم غير موجود" });
+  if (req.body?.suspended !== undefined) user.suspended = Boolean(req.body.suspended);
+  if (req.body?.admin !== undefined) {
+    if (req.body.admin) admins.add(user.id); else if (user.id !== owner.id) admins.delete(user.id);
+  }
+  res.json({ user: userJson(user) });
+});
+
+app.get("/api/admin/groups/pending", requireAdmin, (req, res) => res.json({ groups: [...groups.values()].filter((g) => g.status === "pending").map((g) => groupView(g, true)) }));
+
+app.patch("/api/admin/groups/:id", requireAdmin, async (req, res) => {
+  const group = groups.get(req.params.id);
+  if (!group) return res.status(404).json({ error: "المجموعة غير موجودة" });
+  const decision = cleanText(req.body?.status, 30);
+  if (!["approved", "rejected", "pending"].includes(decision)) return res.status(400).json({ error: "الحالة غير صحيحة" });
+
+  group.status = decision;
+  group.reviewedAt = now();
+  group.reviewedBy = req.user.id;
+  if (decision === "approved" && !group.discordRoleId) {
+    try { await setupDiscordGroup(group); } catch (error) { console.error("Group Discord setup:", error.message); }
+  }
+  if (decision === "approved") await syncGroupMemberToDiscord(group, users.get(group.ownerId));
+  pushLog("group_reviewed", { groupId: group.id, status: decision, adminId: req.user.id });
+  res.json({ group: groupView(group, true) });
+});
+
+app.get("/api/admin/groups/:id/requests", requireAdmin, (req, res) => {
+  const group = groups.get(req.params.id);
+  if (!group) return res.status(404).json({ error: "المجموعة غير موجودة" });
+  const list = [...(groupJoinRequests.get(group.id) || new Map()).values()].map((r) => ({ ...r, user: userJson(users.get(r.userId)) }));
+  res.json({ requests: list });
+});
+
+app.patch("/api/admin/groups/:groupId/requests/:requestId", requireAdmin, async (req, res) => {
+  const group = groups.get(req.params.groupId);
+  const request = (groupJoinRequests.get(req.params.groupId) || new Map()).get(req.params.requestId);
+  if (!group || !request) return res.status(404).json({ error: "الطلب غير موجود" });
+  const decision = cleanText(req.body?.status, 30);
+  if (!["approved", "rejected", "pending"].includes(decision)) return res.status(400).json({ error: "الحالة غير صحيحة" });
+  request.status = decision;
+  request.reviewedAt = now();
+  request.reviewedBy = req.user.id;
+
+  if (decision === "approved") {
+    const members = groupMembers.get(group.id) || new Map();
+    members.set(request.userId, { userId: request.userId, status: "approved", joinedAt: now() });
+    groupMembers.set(group.id, members);
+    await syncGroupMemberToDiscord(group, users.get(request.userId));
+  }
+  res.json({ request: { ...request, user: userJson(users.get(request.userId)) } });
+});
+
+app.get("/api/admin/applications", requireAdmin, (req, res) => res.json({ applications: [...applications.values()] }));
+
+app.patch("/api/admin/applications/:id", requireAdmin, async (req, res) => {
+  const application = applications.get(req.params.id);
+  if (!application) return res.status(404).json({ error: "الطلب غير موجود" });
+  const status = cleanText(req.body?.status, 30);
+  if (!["pending", "approved", "rejected"].includes(status)) return res.status(400).json({ error: "الحالة غير صحيحة" });
+  application.status = status;
+  application.reviewedAt = now();
+  application.reviewedBy = req.user.id;
+  await notifyDiscordWebsite({ title: "تحديث طلب تقديم", description: `تم تحديث الطلب ${application.id} إلى ${status}.` });
+  res.json({ application });
+});
+
+app.get("/api/admin/logs", requireAdmin, (req, res) => res.json({ logs }));
+
+app.get("/api/admin/discord", requireAdmin, async (req, res) => {
+  try {
+    const guild = await getGuild();
+    res.json({
+      bot: client.user ? { id: client.user.id, tag: client.user.tag } : null,
+      guild: { id: guild.id, name: guild.name, memberCount: guild.memberCount },
+      ready: client.isReady()
+    });
+  } catch (error) {
+    res.status(503).json({ error: "Discord unavailable" });
+  }
+});
+
+// -------------------- Discord events --------------------
+
+client.on("guildMemberAdd", invalidateMemberSnapshot);
+client.on("guildMemberRemove", invalidateMemberSnapshot);
+client.on("guildMemberUpdate", invalidateMemberSnapshot);
+
+client.on("messageCreate", (message) => {
+  if (message.author.bot) return;
+  const sender = getActivity(message.author.id);
+  sender.messages += 1;
+  sender.chatRounds += 1;
+  for (const id of message.mentions.users.keys()) {
+    getActivity(id).mentionsReceived += 1;
+    sender.mentionsSent += 1;
+  }
+});
+
+client.on("voiceStateUpdate", (oldState, newState) => {
+  const userId = newState.id;
+  if (!oldState.channelId && newState.channelId) {
+    voiceSessions.set(userId, Date.now());
+    getActivity(userId).voiceJoins += 1;
+  }
+  if (oldState.channelId && !newState.channelId && voiceSessions.has(userId)) {
+    getActivity(userId).voiceMinutes += Math.max(0, Math.round((Date.now() - voiceSessions.get(userId)) / 60000));
+    voiceSessions.delete(userId);
+  }
+});
+
+client.once("ready", () => {
+  console.log(`Logged in as ${client.user.tag}`);
+  const statusName = process.env.BOT_STATUS_NAME || "Fahad Community";
+  const statusType = String(process.env.BOT_STATUS_TYPE || "WATCHING").toUpperCase();
+  const typeMap = { PLAYING: 0, STREAMING: 1, LISTENING: 2, WATCHING: 3 };
+  const activityType = typeMap[statusType] ?? 3;
+  const botActivity = { name: statusName, type: activityType };
+  if (activityType === 1) botActivity.url = process.env.BOT_STREAM_URL || "https://twitch.tv/Njm";
+  client.user.setPresence({ status: "online", activities: [botActivity] });
+});
+
+app.use((error, req, res, next) => {
+  console.error("Unhandled server error:", error);
+  if (res.headersSent) return next(error);
+  res.status(500).json({ error: "حدث خطأ داخلي في الخادم" });
+});
+
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
+app.listen(port, () => console.log(`Fahad Community listening on port ${port}`));
+
+client.login(token).catch((error) => {
+  console.error("Discord login failed:", error.message);
+  process.exit(1);
+});
+
+process.on("SIGTERM", () => {
+  client.destroy();
+  process.exit(0);
+});
+
+process.on("SIGINT", () => {
+  client.destroy();
+  process.exit(0);
+});
