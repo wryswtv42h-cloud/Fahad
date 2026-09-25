@@ -868,20 +868,54 @@ app.get("/api/reviews/:targetType/:targetId", (req, res) => {
   res.json({ reviews: list, average: Number(average.toFixed(2)), count: list.length });
 });
 
-app.post("/api/reviews", requireAuth, (req, res) => {
-  const targetType = cleanText(req.body?.targetType, 40);
-  const targetId = cleanText(req.body?.targetId, 100);
+const publicReviewHits = new Map();
+
+app.get("/api/reviews", (req, res) => {
+  const all = [...reviews.values()].flat().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  res.json({ reviews: all.slice(0, 100) });
+});
+
+app.post("/api/reviews", (req, res) => {
+  const targetType = cleanText(req.body?.targetType || "site", 40);
+  const targetId = cleanText(req.body?.targetId || "fahad", 100);
+  const targetName = cleanText(req.body?.targetName || "Fahad Community", 120);
   const rating = Number(req.body?.rating);
   const comment = cleanText(req.body?.comment, 1000);
-  if (!targetType || !targetId || !Number.isInteger(rating) || rating < 1 || rating > 5) return res.status(400).json({ error: "التقييم يجب أن يكون من 1 إلى 5" });
+  const visitorName = cleanText(req.body?.visitorName || "زائر", 40);
+  const ip = String(req.ip || req.headers["x-forwarded-for"] || "unknown");
+  const last = publicReviewHits.get(ip) || 0;
 
+  if (Date.now() - last < 60 * 1000) {
+    return res.status(429).json({ error: "انتظر دقيقة قبل إرسال تقييم آخر" });
+  }
+  if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+    return res.status(400).json({ error: "التقييم يجب أن يكون من 1 إلى 5" });
+  }
+  if (comment.length < 3) {
+    return res.status(400).json({ error: "اكتب تعليقًا قصيرًا على الأقل" });
+  }
+
+  const user = currentUser(req);
   const key = `${targetType}:${targetId}`;
   const list = reviews.get(key) || [];
-  const old = list.find((r) => r.userId === req.user.id);
-  const item = { id: old?.id || String(nextReviewId++), targetType, targetId, userId: req.user.id, username: req.user.username, rating, comment, createdAt: old?.createdAt || now(), updatedAt: now() };
-  if (old) Object.assign(old, item); else list.unshift(item);
+  const item = {
+    id: String(nextReviewId++),
+    targetType,
+    targetId,
+    targetName,
+    userId: user?.id || null,
+    username: user?.username || visitorName,
+    rating,
+    comment,
+    createdAt: now(),
+    updatedAt: now(),
+    status: "published"
+  };
+
+  list.unshift(item);
   reviews.set(key, list);
-  res.status(old ? 200 : 201).json({ review: item });
+  publicReviewHits.set(ip, Date.now());
+  res.status(201).json({ review: item });
 });
 
 app.delete("/api/reviews/:id", requireAuth, (req, res) => {
