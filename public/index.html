@@ -1,379 +1,1110 @@
 <!doctype html>
 <html lang="ar" dir="rtl">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
 
-    <meta name="theme-color" content="#0b0712">
-    <meta name="description" content="MLD Community Intelligence">
+  <meta name="theme-color" content="#0b0712">
+  <meta name="description" content="Fahad Community Platform">
 
-    <title>MLD · Community</title>
+  <title>Fahad · Community</title>
 
-    <link rel="icon" href="/logo.svg.JPG">
-    <link rel="stylesheet" href="/style.css">
+  <link
+    rel="icon"
+    href="https://cdn.discordapp.com/attachments/1398447508463550578/1550544040401829888/IMG_0577.jpg?ex=6ab54faa&is=6ab3fe2a&hm=a259fd1df3cbee263e02c29b2d4e9cee75036f43cef9fe85ad23d79573c0c23f"
+  >
+
+  <link rel="stylesheet" href="/style.css">
 </head>
 
 <body>
 
-    <div class="glow g1"></div>
-    <div class="glow g2"></div>
+  <div class="glow g1"></div>
+  <div class="glow g2"></div>
 
-    <!-- HEADER -->
-    <header class="topbar">
+  <!-- =========================
+       TOPBAR
+  ========================== -->
 
-        <nav class="wrap nav">
+  <header class="topbar">
 
-            <a class="brand" href="#top">
+    <nav class="wrap nav">
 
-                <img
-                    src="/logo.svg.JPG"
-                    onerror="this.src='/logo.svg'"
-                    alt="MLD"
-                >
+      <a class="brand" href="#top">
 
-                <span>
-                    <b>MLD</b>
-                    <small>COMMUNITY INTELLIGENCE</small>
-                </span>
-
-            </a>
-
-            <div class="desktop-nav">
-
-                <button data-view="members">
-                    الأعضاء
-                </button>
-
-                <button data-view="top">
-                    TOP
-                </button>
-
-                <button data-view="roles">
-                    الرتب
-                </button>
-
-                <button data-view="message">
-                    رسالة خاصة
-                </button>
-
-                <a
-                    id="invite"
-                    class="invite"
-                    target="_blank"
-                    rel="noopener"
-                >
-                    انضم للسيرفر
-                </a>
-
-            </div>
-
-            <button
-                id="menu"
-                class="menu"
-                aria-label="فتح القائمة"
-                type="button"
-            >
-                ☰
-            </button>
-
-        </nav>
-
-        <div id="mobile-menu" class="mobile-menu">
-
-            <button data-view="members">
-                الأعضاء
-            </button>
-
-            <button data-view="top">
-                TOP
-            </button>
-
-            <button data-view="roles">
-                الرتب القيادية
-            </button>
-
-            <button data-view="message">
-                إرسال رسالة خاصة
-            </button>
-
-            <a
-                id="invite-mobile"
-                class="invite"
-                target="_blank"
-                rel="noopener"
-            >
-                انضم للسيرفر
-            </a>
-
-        </div>
-
-    </header>
-
-
-    <!-- MAIN -->
-    <main id="top" class="wrap">
-
-        <!-- HERO -->
-        <section class="hero">
-
-            <div class="hero-copy">
-
-                <span class="pill">
-                    <i></i>
-                    LIVE COMMUNITY SYSTEM
-                </span>
-
-                <h1>
-                    مجتمع
-                    <span>MLD</span>
-                    <br>
-                    بشكل مختلف.
-                </h1>
-
-                <p>
-                    منصة مجتمع متكاملة تعرض أعضاء السيرفر،
-                    الرتب، الإحصائيات، النشاط والتواصل
-                    بشكل مباشر وسريع.
-                </p>
-
-                <div class="hero-actions">
-
-                    <a
-                        class="primary"
-                        href="#directory"
-                    >
-                        ابدأ الاستكشاف ←
-                    </a>
-
-                    <span class="creator">
-                        صُنع بواسطة
-                        <b>فهد المطيري</b>
-                    </span>
-
-                </div>
-
-            </div>
-
-
-            <div class="hero-art">
-
-                <i></i>
-                <i></i>
-
-                <img
-                    src="/logo.svg.JPG"
-                    onerror="this.src='/logo.svg'"
-                    alt="MLD Logo"
-                >
-
-            </div>
-
-        </section>
-
-
-        <!-- SERVER INFO -->
-        <section class="server-strip">
-
-            <div>
-                <small>السيرفر</small>
-                <strong id="server-name">
-                    MLD
-                </strong>
-            </div>
-
-            <div>
-                <small>المنشئ</small>
-                <strong>
-                    فهد المطيري
-                </strong>
-            </div>
-
-            <div>
-                <small>الأعضاء</small>
-                <strong id="server-count">
-                    —
-                </strong>
-            </div>
-
-            <div>
-                <small>الحالة</small>
-                <strong class="online">
-                    ● متصل
-                </strong>
-            </div>
-
-        </section>
-
-
-        <!-- FEATURES -->
-        <section class="features">
-
-            <div class="feature">
-
-                <span class="feature-icon">
-                    ◈
-                </span>
-
-                <div>
-                    <h3>إدارة المجتمع</h3>
-                    <p>
-                        متابعة الأعضاء والرتب
-                        والبيانات بشكل مباشر.
-                    </p>
-                </div>
-
-            </div>
-
-
-            <div class="feature">
-
-                <span class="feature-icon">
-                    ↗
-                </span>
-
-                <div>
-                    <h3>إحصائيات مباشرة</h3>
-                    <p>
-                        الرسائل والمنشنات والنشاط
-                        الصوتي في مكان واحد.
-                    </p>
-                </div>
-
-            </div>
-
-
-            <div class="feature">
-
-                <span class="feature-icon">
-                    ✦
-                </span>
-
-                <div>
-                    <h3>تواصل مباشر</h3>
-                    <p>
-                        إرسال رسائل خاصة لأعضاء
-                        السيرفر من المنصة.
-                    </p>
-                </div>
-
-            </div>
-
-        </section>
-
-
-        <!-- DIRECTORY -->
-        <section
-            id="directory"
-            class="panel"
+        <img
+          src="https://cdn.discordapp.com/attachments/1398447508463550578/1550544040401829888/IMG_0577.jpg?ex=6ab54faa&is=6ab3fe2a&hm=a259fd1df3cbee263e02c29b2d4e9cee75036f43cef9fe85ad23d79573c0c23f"
+          onerror="this.src='/logo.svg'"
+          alt="Fahad"
         >
 
-            <div class="section-head">
+        <span>
+          <b>FAHAD</b>
+          <small>COMMUNITY PLATFORM</small>
+        </span>
 
-                <div>
+      </a>
 
-                    <p class="eyebrow">
-                        MLD DIRECTORY
-                    </p>
+      <div class="desktop-nav">
 
-                    <h2 id="view-title">
-                        أعضاء المجتمع
-                    </h2>
+        <button data-view="home">الرئيسية</button>
+        <button data-view="members">الأعضاء</button>
+        <button data-view="groups">المجموعات</button>
+        <button data-view="games">الألعاب</button>
+        <button data-view="watch">المشاهدة</button>
+        <button data-view="reviews">التقييمات</button>
 
-                    <p
-                        id="subtitle"
-                        class="muted"
-                    >
-                        كل الأعضاء والبيانات تتحدث تلقائيًا.
-                    </p>
-
-                </div>
-
-
-                <div
-                    id="search-wrap"
-                    class="search-wrap"
-                >
-
-                    <span>⌕</span>
-
-                    <input
-                        id="search"
-                        type="search"
-                        placeholder="ابحث بالاسم أو اليوزر..."
-                        autocomplete="off"
-                        spellcheck="false"
-                    >
-
-                </div>
-
-            </div>
-
-
-            <div
-                id="status"
-                class="status"
-            >
-                جاري التحميل...
-            </div>
-
-
-            <div
-                id="content"
-                class="grid"
-            ></div>
-
-        </section>
-
-    </main>
-
-
-    <!-- MODAL -->
-    <div
-        id="modal"
-        class="modal hidden"
-        aria-hidden="true"
-    >
-
-        <div
-            class="modal-card"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="modal-content"
+        <button
+          id="login-nav"
+          class="primary-nav"
+          data-view="login"
         >
+          تسجيل الدخول
+        </button>
 
-            <button
-                id="close"
-                class="close"
-                type="button"
-                aria-label="إغلاق"
-            >
-                ×
-            </button>
+        <button
+          id="account-nav"
+          class="account-nav hidden"
+          data-view="account"
+        >
+          حسابي
+        </button>
 
-            <div id="modal-content"></div>
+      </div>
 
-        </div>
+      <button
+        id="menu"
+        class="menu"
+        aria-label="القائمة"
+      >
+        ☰
+      </button>
+
+    </nav>
+
+    <div id="mobile-menu" class="mobile-menu">
+
+      <button data-view="home">الرئيسية</button>
+      <button data-view="members">الأعضاء</button>
+      <button data-view="groups">المجموعات</button>
+      <button data-view="games">الألعاب</button>
+      <button data-view="watch">المشاهدة</button>
+      <button data-view="reviews">التقييمات</button>
+
+      <button
+        id="mobile-login"
+        data-view="login"
+      >
+        تسجيل الدخول
+      </button>
+
+      <button
+        id="mobile-account"
+        class="hidden"
+        data-view="account"
+      >
+        حسابي
+      </button>
 
     </div>
 
-
-    <!-- FOOTER -->
-    <footer class="wrap footer">
-
-        <span>MLD</span>
-
-        <span>·</span>
-
-        <span id="year"></span>
-
-        <span>·</span>
-
-        <span>Community Intelligence</span>
-
-    </footer>
+  </header>
 
 
-    <script src="/site.js"></script>
+  <!-- =========================
+       MAIN
+  ========================== -->
+
+  <main id="top" class="wrap">
+
+    <!-- HOME -->
+
+    <section
+      id="home-view"
+      class="page-view"
+    >
+
+      <section class="hero">
+
+        <div class="hero-copy">
+
+          <span class="pill">
+            ● LIVE COMMUNITY SYSTEM
+          </span>
+
+          <h1>
+            مجتمع
+            <span>فهد</span>
+            <br>
+            بشكل مختلف.
+          </h1>
+
+          <p>
+            منصة مجتمع متكاملة تجمع الأعضاء،
+            المجموعات، الألعاب، التذاكر،
+            التقديمات، التقييمات وربط Discord
+            في مكان واحد.
+          </p>
+
+          <div class="hero-actions">
+
+            <button
+              class="primary"
+              data-view="groups"
+            >
+              استكشف المجتمع ←
+            </button>
+
+            <button
+              class="secondary"
+              data-view="register"
+            >
+              إنشاء حساب
+            </button>
+
+          </div>
+
+          <div class="creator">
+            صُنع بواسطة
+            <b>فهد المطيري</b>
+          </div>
+
+        </div>
+
+
+        <div class="hero-art">
+
+          <i></i>
+          <i></i>
+
+          <img
+            src="https://cdn.discordapp.com/attachments/1398447508463550578/1550544040401829888/IMG_0577.jpg?ex=6ab54faa&is=6ab3fe2a&hm=a259fd1df3cbee263e02c29b2d4e9cee75036f43cef9fe85ad23d79573c0c23f"
+            onerror="this.src='/logo.svg'"
+            alt="Community"
+          >
+
+        </div>
+
+      </section>
+
+
+      <!-- SERVER STATS -->
+
+      <section class="server-strip">
+
+        <div>
+          <small>السيرفر</small>
+          <strong id="server-name">Fahad</strong>
+        </div>
+
+        <div>
+          <small>المنشئ</small>
+          <strong>فهد المطيري</strong>
+        </div>
+
+        <div>
+          <small>الأعضاء</small>
+          <strong id="server-count">—</strong>
+        </div>
+
+        <div>
+          <small>الحالة</small>
+          <strong class="online">
+            ● متصل
+          </strong>
+        </div>
+
+      </section>
+
+
+      <!-- FEATURES -->
+
+      <section class="panel">
+
+        <div class="section-head">
+
+          <div>
+            <p class="eyebrow">
+              COMMUNITY SYSTEM
+            </p>
+
+            <h2>
+              كل شيء في مكان واحد
+            </h2>
+
+            <p class="muted">
+              منصة واحدة لإدارة مجتمعك والتفاعل معه.
+            </p>
+          </div>
+
+        </div>
+
+
+        <div class="feature-grid">
+
+          <button
+            class="feature-card"
+            data-view="groups"
+          >
+            <span class="feature-icon">👥</span>
+
+            <strong>المجموعات</strong>
+
+            <small>
+              إنشاء مجموعات وطلبات انضمام
+              مع ربط Discord.
+            </small>
+          </button>
+
+
+          <button
+            class="feature-card"
+            data-view="games"
+          >
+            <span class="feature-icon">🎮</span>
+
+            <strong>الألعاب</strong>
+
+            <small>
+              ألعاب جماعية وتحديات وإحصائيات.
+            </small>
+          </button>
+
+
+          <button
+            class="feature-card"
+            data-view="watch"
+          >
+            <span class="feature-icon">🎬</span>
+
+            <strong>المشاهدة</strong>
+
+            <small>
+              غرف مشاهدة متزامنة للمحتوى
+              المصرح به.
+            </small>
+          </button>
+
+
+          <button
+            class="feature-card"
+            data-view="reviews"
+          >
+            <span class="feature-icon">⭐</span>
+
+            <strong>التقييمات</strong>
+
+            <small>
+              تقييمات وتعليقات المجتمع
+              مع المراجعة.
+            </small>
+          </button>
+
+
+          <button
+            class="feature-card"
+            data-view="tickets"
+          >
+            <span class="feature-icon">🎫</span>
+
+            <strong>التذاكر</strong>
+
+            <small>
+              دعم ومتابعة الطلبات والتذاكر.
+            </small>
+          </button>
+
+
+          <button
+            class="feature-card"
+            data-view="applications"
+          >
+            <span class="feature-icon">📋</span>
+
+            <strong>التقديمات</strong>
+
+            <small>
+              تقديمات منظمة ومراجعة إدارية.
+            </small>
+          </button>
+
+        </div>
+
+      </section>
+
+    </section>
+
+
+    <!-- =========================
+         MEMBERS
+    ========================== -->
+
+    <section
+      id="members-view"
+      class="page-view hidden"
+    >
+
+      <section class="panel">
+
+        <div class="section-head">
+
+          <div>
+            <p class="eyebrow">
+              DISCORD DIRECTORY
+            </p>
+
+            <h2>
+              أعضاء المجتمع
+            </h2>
+
+            <p class="muted">
+              أعضاء Discord والبيانات العامة.
+            </p>
+          </div>
+
+          <div class="search-wrap">
+
+            <span>⌕</span>
+
+            <input
+              id="member-search"
+              placeholder="ابحث بالاسم أو اليوزر..."
+              autocomplete="off"
+            >
+
+          </div>
+
+        </div>
+
+        <div
+          id="members-status"
+          class="status"
+        >
+          جاري التحميل...
+        </div>
+
+        <div
+          id="members-content"
+          class="grid"
+        ></div>
+
+      </section>
+
+    </section>
+
+
+    <!-- =========================
+         GROUPS
+    ========================== -->
+
+    <section
+      id="groups-view"
+      class="page-view hidden"
+    >
+
+      <section class="panel">
+
+        <div class="section-head">
+
+          <div>
+            <p class="eyebrow">
+              COMMUNITY GROUPS
+            </p>
+
+            <h2>
+              المجموعات
+            </h2>
+
+            <p class="muted">
+              اكتشف المجموعات الموجودة أو أنشئ مجموعتك.
+            </p>
+
+          </div>
+
+          <button
+            class="primary"
+            data-action="create-group"
+          >
+            + إنشاء مجموعة
+          </button>
+
+        </div>
+
+        <div
+          id="groups-status"
+          class="status"
+        >
+          جاري التحميل...
+        </div>
+
+        <div
+          id="groups-content"
+          class="grid"
+        ></div>
+
+      </section>
+
+    </section>
+
+
+    <!-- =========================
+         GAMES
+    ========================== -->
+
+    <section
+      id="games-view"
+      class="page-view hidden"
+    >
+
+      <section class="panel">
+
+        <div class="section-head">
+
+          <div>
+            <p class="eyebrow">
+              GAME CENTER
+            </p>
+
+            <h2>
+              مركز الألعاب
+            </h2>
+
+            <p class="muted">
+              العب مع أعضاء المجتمع ونافسهم.
+            </p>
+
+          </div>
+
+        </div>
+
+
+        <div class="game-grid">
+
+          <button
+            class="game-card"
+            data-game="uno"
+          >
+            <span>🃏</span>
+            <strong>UNO</strong>
+            <small>لعبة بطاقات جماعية</small>
+          </button>
+
+          <button
+            class="game-card"
+            data-game="ludo"
+          >
+            <span>🎲</span>
+            <strong>LUDO</strong>
+            <small>لودو</small>
+          </button>
+
+          <button
+            class="game-card"
+            data-game="baloot"
+          >
+            <span>♠️</span>
+            <strong>Baloot</strong>
+            <small>بلوت</small>
+          </button>
+
+          <button
+            class="game-card"
+            data-game="daqsh"
+          >
+            <span>🎯</span>
+            <strong>Daqsh</strong>
+            <small>دقش</small>
+          </button>
+
+          <button
+            class="game-card"
+            data-game="qawsar"
+          >
+            <span>♟️</span>
+            <strong>Qawsar</strong>
+            <small>قوسر</small>
+          </button>
+
+        </div>
+
+        <div
+          id="game-message"
+          class="status"
+        >
+          اختر لعبة للبدء.
+        </div>
+
+      </section>
+
+    </section>
+
+
+    <!-- =========================
+         WATCH
+    ========================== -->
+
+    <section
+      id="watch-view"
+      class="page-view hidden"
+    >
+
+      <section class="panel">
+
+        <div class="section-head">
+
+          <div>
+            <p class="eyebrow">
+              WATCH PARTY
+            </p>
+
+            <h2>
+              غرف المشاهدة
+            </h2>
+
+            <p class="muted">
+              مشاهدة متزامنة للمحتوى الذي تملك
+              حق عرضه أو مشاركته.
+            </p>
+          </div>
+
+          <button
+            class="primary"
+            data-action="create-watch"
+          >
+            + إنشاء غرفة
+          </button>
+
+        </div>
+
+        <div
+          id="watch-status"
+          class="status"
+        >
+          جاري التحميل...
+        </div>
+
+        <div
+          id="watch-content"
+          class="grid"
+        ></div>
+
+      </section>
+
+    </section>
+
+
+    <!-- =========================
+         REVIEWS
+    ========================== -->
+
+    <section
+      id="reviews-view"
+      class="page-view hidden"
+    >
+
+      <section class="panel">
+
+        <div class="section-head">
+
+          <div>
+            <p class="eyebrow">
+              COMMUNITY REVIEWS
+            </p>
+
+            <h2>
+              التقييمات
+            </h2>
+
+            <p class="muted">
+              آراء وتجارب أعضاء المجتمع.
+            </p>
+
+          </div>
+
+          <button
+            class="primary"
+            data-action="create-review"
+          >
+            + أضف تقييم
+          </button>
+
+        </div>
+
+        <div
+          id="reviews-status"
+          class="status"
+        >
+          جاري التحميل...
+        </div>
+
+        <div
+          id="reviews-content"
+          class="grid"
+        ></div>
+
+      </section>
+
+    </section>
+
+
+    <!-- =========================
+         TICKETS
+    ========================== -->
+
+    <section
+      id="tickets-view"
+      class="page-view hidden"
+    >
+
+      <section class="panel">
+
+        <div class="section-head">
+
+          <div>
+            <p class="eyebrow">
+              SUPPORT CENTER
+            </p>
+
+            <h2>
+              التذاكر
+            </h2>
+
+            <p class="muted">
+              افتح تذكرة للتواصل مع فريق الإدارة.
+            </p>
+
+          </div>
+
+          <button
+            class="primary"
+            data-action="create-ticket"
+          >
+            + تذكرة جديدة
+          </button>
+
+        </div>
+
+        <div
+          id="tickets-status"
+          class="status"
+        >
+          سجل الدخول لعرض التذاكر.
+        </div>
+
+        <div
+          id="tickets-content"
+          class="grid"
+        ></div>
+
+      </section>
+
+    </section>
+
+
+    <!-- =========================
+         APPLICATIONS
+    ========================== -->
+
+    <section
+      id="applications-view"
+      class="page-view hidden"
+    >
+
+      <section class="panel">
+
+        <div class="section-head">
+
+          <div>
+            <p class="eyebrow">
+              APPLICATIONS
+            </p>
+
+            <h2>
+              التقديمات
+            </h2>
+
+            <p class="muted">
+              أرسل طلبك وتابع حالة المراجعة.
+            </p>
+
+          </div>
+
+          <button
+            class="primary"
+            data-action="create-application"
+          >
+            + تقديم جديد
+          </button>
+
+        </div>
+
+        <div
+          id="applications-status"
+          class="status"
+        >
+          سجل الدخول لعرض التقديمات.
+        </div>
+
+        <div
+          id="applications-content"
+          class="grid"
+        ></div>
+
+      </section>
+
+    </section>
+
+
+    <!-- =========================
+         LOGIN
+    ========================== -->
+
+    <section
+      id="login-view"
+      class="page-view hidden"
+    >
+
+      <section class="auth-panel">
+
+        <div class="auth-head">
+
+          <p class="eyebrow">
+            ACCOUNT LOGIN
+          </p>
+
+          <h2>
+            تسجيل الدخول
+          </h2>
+
+          <p class="muted">
+            استخدم حساب المنصة الخاص بك.
+          </p>
+
+        </div>
+
+        <form id="login-form">
+
+          <label>
+            اسم المستخدم
+            <input
+              name="username"
+              required
+              autocomplete="username"
+            >
+          </label>
+
+          <label>
+            كلمة المرور
+            <input
+              type="password"
+              name="password"
+              required
+              autocomplete="current-password"
+            >
+          </label>
+
+          <button
+            class="primary full"
+            type="submit"
+          >
+            دخول
+          </button>
+
+        </form>
+
+        <div
+          id="login-message"
+          class="form-message"
+        ></div>
+
+        <button
+          class="link-button"
+          data-view="register"
+        >
+          ليس لديك حساب؟ إنشاء حساب
+        </button>
+
+      </section>
+
+    </section>
+
+
+    <!-- =========================
+         REGISTER
+    ========================== -->
+
+    <section
+      id="register-view"
+      class="page-view hidden"
+    >
+
+      <section class="auth-panel">
+
+        <div class="auth-head">
+
+          <p class="eyebrow">
+            CREATE ACCOUNT
+          </p>
+
+          <h2>
+            إنشاء حساب
+          </h2>
+
+          <p class="muted">
+            أنشئ حسابك المستقل عن Discord.
+          </p>
+
+        </div>
+
+        <form id="register-form">
+
+          <label>
+            اسم المستخدم
+            <input
+              name="username"
+              required
+              minlength="3"
+              maxlength="24"
+              autocomplete="username"
+            >
+          </label>
+
+          <label>
+            كلمة المرور
+            <input
+              type="password"
+              name="password"
+              required
+              minlength="6"
+              autocomplete="new-password"
+            >
+          </label>
+
+          <label>
+            تأكيد كلمة المرور
+            <input
+              type="password"
+              name="confirmPassword"
+              required
+              minlength="6"
+              autocomplete="new-password"
+            >
+          </label>
+
+          <button
+            class="primary full"
+            type="submit"
+          >
+            إنشاء الحساب
+          </button>
+
+        </form>
+
+        <div
+          id="register-message"
+          class="form-message"
+        ></div>
+
+        <button
+          class="link-button"
+          data-view="login"
+        >
+          لديك حساب؟ تسجيل الدخول
+        </button>
+
+      </section>
+
+    </section>
+
+
+    <!-- =========================
+         ACCOUNT
+    ========================== -->
+
+    <section
+      id="account-view"
+      class="page-view hidden"
+    >
+
+      <section class="panel">
+
+        <div class="section-head">
+
+          <div>
+            <p class="eyebrow">
+              MY ACCOUNT
+            </p>
+
+            <h2>
+              حسابي
+            </h2>
+
+            <p class="muted">
+              إدارة بيانات حسابك وربطه مع Discord.
+            </p>
+
+          </div>
+
+          <button
+            id="logout-button"
+            class="danger-button"
+          >
+            تسجيل الخروج
+          </button>
+
+        </div>
+
+
+        <div
+          id="account-content"
+          class="account-grid"
+        ></div>
+
+      </section>
+
+    </section>
+
+
+    <!-- =========================
+         ADMIN
+    ========================== -->
+
+    <section
+      id="admin-view"
+      class="page-view hidden"
+    >
+
+      <section class="panel">
+
+        <div class="section-head">
+
+          <div>
+            <p class="eyebrow">
+              ADMIN CONTROL CENTER
+            </p>
+
+            <h2>
+              لوحة الإدارة
+            </h2>
+
+            <p class="muted">
+              إدارة المجتمع وطلبات المستخدمين.
+            </p>
+
+          </div>
+
+        </div>
+
+
+        <div
+          id="admin-stats"
+          class="admin-stats"
+        ></div>
+
+
+        <div class="admin-tabs">
+
+          <button
+            data-admin-tab="groups"
+            class="active"
+          >
+            المجموعات
+          </button>
+
+          <button data-admin-tab="applications">
+            التقديمات
+          </button>
+
+          <button data-admin-tab="tickets">
+            التذاكر
+          </button>
+
+          <button data-admin-tab="reviews">
+            التقييمات
+          </button>
+
+          <button data-admin-tab="users">
+            المستخدمون
+          </button>
+
+          <button data-admin-tab="logs">
+            السجل
+          </button>
+
+        </div>
+
+
+        <div
+          id="admin-content"
+          class="admin-content"
+        ></div>
+
+      </section>
+
+    </section>
+
+  </main>
+
+
+  <!-- =========================
+       MODAL
+  ========================== -->
+
+  <div
+    id="modal"
+    class="modal hidden"
+  >
+
+    <div class="modal-card">
+
+      <button
+        id="close"
+        class="close"
+        aria-label="إغلاق"
+      >
+        ×
+      </button>
+
+      <div
+        id="modal-content"
+      ></div>
+
+    </div>
+
+  </div>
+
+
+  <!-- =========================
+       TOAST
+  ========================== -->
+
+  <div
+    id="toast"
+    class="toast hidden"
+  ></div>
+
+
+  <!-- =========================
+       FOOTER
+  ========================== -->
+
+  <footer class="wrap footer">
+
+    <div>
+      FAHAD ·
+      <span id="year"></span>
+      · Community Platform
+    </div>
+
+    <div class="footer-status">
+      ● النظام متصل
+    </div>
+
+  </footer>
+
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/site.js"></script>
 
 </body>
 </html>
