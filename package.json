@@ -1,8 +1,8 @@
 {
-  "name": "malaz-community-platform",
-  "version": "2.0.0",
+  "name": "fahad-community-platform",
+  "version": "3.0.0",
   "private": true,
-  "description": "Malaz Community Platform",
+  "description": "Fahad Community Platform with Discord integration",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
