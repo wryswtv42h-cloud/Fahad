@@ -3344,6 +3344,29 @@ socket.on(
 
 
 // =========================
+// HOMEPAGE LIVE DATA
+// =========================
+async function loadHomePulse(){
+  try{
+    await api("/api/public/visit",{method:"POST"});
+    const stats=await api("/api/public/stats");
+    if($("#visit-count")) $("#visit-count").textContent=Number(stats.visits||0).toLocaleString("ar-SA");
+    if($("#website-user-count")) $("#website-user-count").textContent=Number(stats.websiteUsers||0).toLocaleString("ar-SA");
+    if($("#online-count")) $("#online-count").textContent=Number(stats.online||0).toLocaleString("ar-SA");
+    if($("#average-rating")) $("#average-rating").textContent=stats.averageRating ? (stats.averageRating+" / 5") : "—";
+  }catch(e){console.warn("Home stats:",e)}
+}
+async function loadHomeReviews(){
+  const box=$("#home-reviews-content");
+  if(!box)return;
+  try{
+    const data=await api("/api/public/reviews");
+    const list=data.reviews||[];
+    if(!list.length){box.innerHTML='<div class="empty-reviews">لا توجد تقييمات منشورة حتى الآن. كن أول من يترك رأيه ⭐</div>';return;}
+    box.innerHTML=list.slice(0,3).map(r=>'<article class="review-card home-review-card"><div class="review-user"><strong>'+escapeHTML(r.username||"عضو")+'</strong><span class="review-stars">'+stars(r.rating)+'</span></div><p class="review-comment">'+escapeHTML(r.comment||"بدون تعليق")+'</p><small class="review-date">'+formatDate(r.createdAt)+'</small></article>').join("");
+  }catch(e){box.innerHTML='<div class="empty-reviews">تعذر تحميل التقييمات حاليًا.</div>';}
+}
+// =========================
 // INIT
 // =========================
 
@@ -3355,6 +3378,7 @@ async function init() {
   await checkAuth();
 
   await loadHome();
+  await Promise.allSettled([loadHomePulse(), loadHomeReviews()]);
 
   navigate("home");
 }
