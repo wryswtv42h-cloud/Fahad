@@ -6,3 +6,23 @@
 .pm-users{padding:16px}.pm-users h3{margin:0 0 12px}.pm-user{display:flex;width:100%;flex-direction:column;gap:4px;text-align:right;padding:13px;margin-bottom:8px;border:1px solid rgba(255,255,255,.07);border-radius:14px;background:rgba(255,255,255,.025);color:inherit;cursor:pointer}.pm-user:hover{background:rgba(255,255,255,.06)}.pm-user small{opacity:.55}
 .pm-window{display:flex;flex-direction:column}.pm-head{padding:18px;border-bottom:1px solid rgba(255,255,255,.08)}.pm-chat{flex:1;min-height:390px;max-height:520px;overflow:auto;padding:18px}.pm-message{max-width:75%;margin:0 0 12px;padding:11px 14px;border-radius:16px;background:rgba(255,255,255,.06)}.pm-message.mine{margin-right:auto;background:rgba(185,111,255,.14)}.pm-message p{margin:5px 0}.pm-message small{opacity:.45}.pm-form{display:flex;gap:10px;padding:14px;border-top:1px solid rgba(255,255,255,.08)}.pm-form input{flex:1}
 @media(max-width:800px){.pm-layout{grid-template-columns:1fr}.pm-users{max-height:260px}.pm-chat{min-height:300px}}
+
+/* Room chat and game/group UI */
+.game-room,.group-room{display:grid;gap:16px}
+.game-room-head,.group-room-head{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:16px;border:1px solid #ffffff12;border-radius:18px;background:#ffffff05}
+.game-room-head b{display:block;font-size:18px}.game-room-head small{display:block;color:var(--muted);margin-top:4px}
+.game-players{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:9px}
+.game-player{padding:13px;border:1px solid #ffffff12;border-radius:14px;background:#ffffff05}.game-player b,.game-player small{display:block}.game-player small{color:var(--muted);margin-top:5px}
+.game-board{padding:22px;border-radius:20px;border:1px solid #ff9cde2b;background:radial-gradient(circle at center,#351845,#100916);text-align:center;min-height:150px;display:grid;place-content:center;gap:9px}
+.game-board-title{font-size:24px;font-weight:800}.game-turn,.game-last{color:var(--muted);font-size:13px}
+.game-actions,.row-actions{display:flex;gap:8px;flex-wrap:wrap}
+.chat-panel{border:1px solid #ffffff12;border-radius:18px;background:#0a0710;overflow:hidden}
+.chat-title{padding:13px 15px;border-bottom:1px solid #ffffff10;font-weight:700}
+.room-chat{height:260px;overflow:auto;padding:12px;display:grid;align-content:start;gap:8px}
+.room-message{max-width:85%;justify-self:start;padding:10px 12px;border-radius:14px 14px 14px 4px;background:#1b1025;border:1px solid #ffffff0e}
+.room-message.mine{justify-self:end;border-radius:14px 14px 4px 14px;background:#2a1537;border-color:#ff9cde22}
+.room-message b{font-size:11px;color:var(--pink)}.room-message p{margin:4px 0;font-size:13px;white-space:pre-wrap;word-break:break-word}.room-message small{color:#8f8095;font-size:9px}
+.chat-form{display:flex;gap:8px;padding:10px;border-top:1px solid #ffffff10}.chat-form input{flex:1;min-width:0;border:1px solid #ffffff18;border-radius:12px;padding:12px;background:#110b17;color:#fff;font:inherit;outline:0}
+.group-room-head{display:block}.group-room-head h3{margin:8px 0 5px}.group-room-head p{color:var(--muted);margin:0 0 8px}.group-room-head small{color:#8f8095}
+.site-announcements{border-color:#ff9cde44}.announcement{padding:14px 0;border-top:1px solid #ffffff10}.announcement:first-of-type{border-top:0}.announcement b{font-size:16px}.announcement p{color:#ddd0e0;margin:7px 0}.announcement small{color:#8f8095}
+@media(max-width:760px){.game-room-head{align-items:flex-start;flex-direction:column}.chat-form{flex-direction:column}.chat-form button{width:100%}.room-chat{height:220px}}
