@@ -35,7 +35,7 @@ app.disable("x-powered-by");
 app.use(cors());
 app.use(express.json({ limit: "20kb" }));
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-app.use(session({ secret: process.env.SESSION_SECRET || "mld-session-secret", resave: false, saveUninitialized: false, store: new pgSession({ pool, tableName: "user_sessions", createTableIfMissing: true }), cookie: { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", maxAge: 2592000000 } }));
+app.use(session({ secret: process.env.SESSION_SECRET || "mld-session-secret", resave: true, saveUninitialized: false, store: new pgSession({ pool, tableName: "user_sessions", createTableIfMissing: true }), cookie: { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", maxAge: 2592000000 } }));
 app.use(express.static(path.join(__dirname, "public")));
 
 const leadershipRoleIds = [
@@ -204,6 +204,16 @@ async function initAppDatabase() {
   if (!process.env.DATABASE_URL) return;
   await pool.query(`
     CREATE TABLE IF NOT EXISTS app_users (id SERIAL PRIMARY KEY, username VARCHAR(32) UNIQUE NOT NULL, password_hash TEXT NOT NULL, discord_username VARCHAR(100) NOT NULL, role VARCHAR(20) NOT NULL DEFAULT 'user', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), last_login_at TIMESTAMPTZ);
+    ALTER TABLE app_users ADD COLUMN IF NOT EXISTS username VARCHAR(32);
+    ALTER TABLE app_users ADD COLUMN IF NOT EXISTS password_hash TEXT;
+    ALTER TABLE app_users ADD COLUMN IF NOT EXISTS discord_username VARCHAR(100);
+    ALTER TABLE app_users ADD COLUMN IF NOT EXISTS role VARCHAR(20) DEFAULT 'user';
+    ALTER TABLE app_users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+    ALTER TABLE app_users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ;
+    UPDATE app_users SET username=COALESCE(NULLIF(username,''),'user_'||id::text) WHERE username IS NULL;
+    UPDATE app_users SET discord_username=COALESCE(NULLIF(discord_username,''),'MLD') WHERE discord_username IS NULL;
+    UPDATE app_users SET role=COALESCE(NULLIF(role,''),'user') WHERE role IS NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS app_users_username_unique ON app_users(username);
     CREATE TABLE IF NOT EXISTS tickets (id SERIAL PRIMARY KEY, username VARCHAR(32) NOT NULL, discord_username VARCHAR(100) NOT NULL, subject VARCHAR(120) NOT NULL, message TEXT NOT NULL, status VARCHAR(20) NOT NULL DEFAULT 'open', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()); CREATE TABLE IF NOT EXISTS ticket_messages (id SERIAL PRIMARY KEY, ticket_id INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE, username VARCHAR(32) NOT NULL, discord_username VARCHAR(100) NOT NULL, message TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
     CREATE TABLE IF NOT EXISTS applications (id SERIAL PRIMARY KEY, username VARCHAR(32) NOT NULL, discord_username VARCHAR(100) NOT NULL, type VARCHAR(60) NOT NULL, answers JSONB NOT NULL DEFAULT '{}'::jsonb, status VARCHAR(20) NOT NULL DEFAULT 'pending', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
     CREATE TABLE IF NOT EXISTS community_groups (id SERIAL PRIMARY KEY, username VARCHAR(32) NOT NULL, discord_username VARCHAR(100) NOT NULL, name VARCHAR(60) NOT NULL, description VARCHAR(240) NOT NULL DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
@@ -222,6 +232,7 @@ async function initAppDatabase() {
     CREATE TABLE IF NOT EXISTS group_join_requests (id SERIAL PRIMARY KEY, group_id INTEGER NOT NULL REFERENCES community_groups(id) ON DELETE CASCADE, username VARCHAR(32) NOT NULL, discord_username VARCHAR(100) NOT NULL, status VARCHAR(20) NOT NULL DEFAULT 'pending', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE(group_id, username));
     CREATE TABLE IF NOT EXISTS game_scores (id SERIAL PRIMARY KEY, username VARCHAR(32) UNIQUE NOT NULL, discord_username VARCHAR(100) NOT NULL, wins INTEGER NOT NULL DEFAULT 0, points INTEGER NOT NULL DEFAULT 0, guest BOOLEAN NOT NULL DEFAULT false, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
     CREATE TABLE IF NOT EXISTS game_lobbies (id SERIAL PRIMARY KEY, game VARCHAR(30) NOT NULL, host_username VARCHAR(32) NOT NULL, host_discord_username VARCHAR(100) NOT NULL, max_players INTEGER NOT NULL DEFAULT 4, players JSONB NOT NULL DEFAULT '[]'::jsonb, status VARCHAR(20) NOT NULL DEFAULT 'waiting', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+    ALTER TABLE game_lobbies ADD COLUMN IF NOT EXISTS state JSONB NOT NULL DEFAULT '{}'::jsonb;
     CREATE TABLE IF NOT EXISTS reviews (id SERIAL PRIMARY KEY, username VARCHAR(32) NOT NULL, discord_username VARCHAR(100) NOT NULL, rating INTEGER NOT NULL DEFAULT 5, message VARCHAR(1000) NOT NULL, status VARCHAR(20) NOT NULL DEFAULT 'visible', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
     CREATE TABLE IF NOT EXISTS announcements (id SERIAL PRIMARY KEY, text VARCHAR(300) NOT NULL, link TEXT DEFAULT '', active BOOLEAN NOT NULL DEFAULT true, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
     CREATE TABLE IF NOT EXISTS site_stats (id INTEGER PRIMARY KEY DEFAULT 1, visits BIGINT NOT NULL DEFAULT 0, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
@@ -262,7 +273,7 @@ app.post("/api/auth/register",async(req,res)=>{
     if(!process.env.DATABASE_URL) return res.status(503).json({error:"قاعدة البيانات غير متاحة"});
     if((await pool.query("SELECT id FROM app_users WHERE username=$1",[username])).rowCount) return res.status(409).json({error:"اسم المستخدم مستخدم مسبقًا"});
     const hash=await bcrypt.hash(password,12); await pool.query("INSERT INTO app_users(username,password_hash,discord_username) VALUES($1,$2,$3)",[username,hash,discordUsername]);
-    req.session.user={username,discordUsername,role:"user"}; await audit(req.session.user,"register","إنشاء حساب"); res.json({ok:true,user:req.session.user});
+    req.session.user={username,discordUsername,role:"user"}; await new Promise((resolve,reject)=>req.session.save(err=>err?reject(err):resolve())); await audit(req.session.user,"register","إنشاء حساب").catch(()=>{}); res.json({ok:true,user:req.session.user});
   }catch(e){console.error("Register:",e);res.status(500).json({error:"تعذر إنشاء الحساب"});}
 });
 app.post("/api/auth/login",async(req,res)=>{
@@ -270,7 +281,7 @@ app.post("/api/auth/login",async(req,res)=>{
     const username=String(req.body?.username||"").trim().toLowerCase(),password=String(req.body?.password||"");
     const q=await pool.query("SELECT username,password_hash,discord_username,role FROM app_users WHERE username=$1",[username]);
     if(!q.rowCount||!(await bcrypt.compare(password,q.rows[0].password_hash))) return res.status(401).json({error:"بيانات الدخول غير صحيحة"});
-    const r=q.rows[0]; req.session.user={username:r.username,discordUsername:r.discord_username,role:r.role}; await pool.query("UPDATE app_users SET last_login_at=NOW() WHERE username=$1",[username]); await audit(req.session.user,"login","تسجيل دخول"); res.json({ok:true,user:req.session.user});
+    const r=q.rows[0]; req.session.user={username:r.username,discordUsername:r.discord_username,role:r.role}; await pool.query("UPDATE app_users SET last_login_at=NOW() WHERE username=$1",[username]); await new Promise((resolve,reject)=>req.session.save(err=>err?reject(err):resolve())); await audit(req.session.user,"login","تسجيل دخول").catch(()=>{}); res.json({ok:true,user:req.session.user});
   }catch(e){console.error("Login:",e);res.status(500).json({error:"تعذر تسجيل الدخول"});}
 });
 app.post("/api/auth/logout",async(req,res)=>{const u=currentUser(req);if(u) await audit(u,"logout","تسجيل خروج").catch(()=>{});req.session.destroy(()=>res.json({ok:true}));});
