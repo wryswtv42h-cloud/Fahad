@@ -29,22 +29,47 @@ const allChange=change;change=async function(v){if(v==="account"){view=v;mobile.
 
 let mldUser=null;
 async function mldMe(){try{const r=await fetch("/api/auth/me");const d=await r.json();mldUser=d.user||null;updateAuthBar();return mldUser}catch(e){return null}}
-function updateAuthBar(){const el=$("#auth-bar");if(!el)return;const admin=!!mldUser&&["owner","admin"].includes(mldUser.role);document.querySelectorAll("#logs-nav,#logs-nav-mobile").forEach(b=>b.style.display=admin?"":"none");document.querySelectorAll("[data-admin-nav]").forEach(b=>b.remove());document.querySelectorAll('[data-view="login"]').forEach(b=>b.style.display=mldUser?"none":"");if(admin){const d=document.querySelector(".desktop-nav"),m=document.querySelector("#mobile-menu");if(d){const z=document.createElement("button");z.dataset.view="admin";z.dataset.adminNav="1";z.textContent="الإدارة";z.onclick=()=>change("admin");d.insertBefore(z,d.querySelector(".invite"));}if(m){const z=document.createElement("button");z.dataset.view="admin";z.dataset.adminNav="1";z.textContent="الإدارة";z.onclick=()=>change("admin");m.insertBefore(z,m.querySelector(".invite")||m.lastElementChild);}}el.innerHTML=mldUser?'<div class="auth-chip">مرحبًا <b>'+esc(mldUser.username)+'</b> · Discord: <b>'+esc(mldUser.discordUsername)+'</b> · '+(mldUser.role==="owner"?"👑 أونر":mldUser.role==="admin"?"🛡️ إدارة":"عضو")+' <button id="logout-btn">خروج</button></div>':'<div class="auth-chip">غير مسجل · <button id="auth-open">تسجيل الدخول / إنشاء حساب</button></div>';$("#logout-btn")?.addEventListener("click",async()=>{await fetch("/api/auth/logout",{method:"POST"});location.reload()});$("#auth-open")?.addEventListener("click",()=>change("login"))}function authView(){if(mldUser){return change("home")}searchWrap.style.display="none";title.textContent="تسجيل الدخول";subtitle.textContent="تسجيل الدخول يخفي كل أزرار الدخول والإنشاء حتى تسجل خروج.";content.className="feature-grid";
-  searchWrap.style.display="none"; title.textContent="تسجيل الدخول"; subtitle.textContent="حساب الموقع منفصل عن تسجيل Discord.";
-  content.className="feature-grid";
-  content.innerHTML='<article class="feature-card auth-card"><div class="feature-icon">🔐</div><h3 id="auth-heading">تسجيل الدخول</h3><input id="auth-user" class="full" maxlength="32" placeholder="اسم المستخدم"><input id="auth-pass" class="full" type="password" maxlength="100" placeholder="كلمة المرور"><div id="discord-wrap"><input id="auth-discord" class="full" maxlength="100" placeholder="يوزرك في Discord"></div><button class="primary wide" id="auth-submit">دخول</button><button class="wide" id="auth-toggle">إنشاء حساب جديد</button><p id="auth-status" class="muted"></p></article><article class="feature-card"><div class="feature-icon">🛡️</div><h3>ملاحظة</h3><p class="muted">لا نطلب كلمة مرور Discord ولا نسجل دخولك بحساب Discord. نحتاج فقط اسم مستخدم Discord لربط نشاطك داخل الموقع.</p></article></div>';
-  let register=false;
-  const sync=()=>{ $("#auth-heading").textContent=register?"إنشاء حساب":"تسجيل الدخول"; $("#auth-submit").textContent=register?"إنشاء الحساب":"دخول"; $("#auth-toggle").textContent=register?"لدي حساب بالفعل":"إنشاء حساب جديد"; $("#discord-wrap").classList.toggle("hidden",!register); };
-  $("#auth-toggle").onclick=()=>{register=!register;sync()};
+function updateAuthBar(){const el=$("#auth-bar");if(!el)return;const admin=!!mldUser&&["owner","admin"].includes(mldUser.role);document.querySelectorAll("#logs-nav,#logs-nav-mobile").forEach(b=>b.style.display=admin?"":"none");document.querySelectorAll("[data-admin-nav]").forEach(b=>b.remove());document.querySelectorAll('[data-view="login"]').forEach(b=>b.style.display=mldUser?"none":"");if(admin){const d=document.querySelector(".desktop-nav"),m=document.querySelector("#mobile-menu");if(d){const z=document.createElement("button");z.dataset.view="admin";z.dataset.adminNav="1";z.textContent="الإدارة";z.onclick=()=>change("admin");d.insertBefore(z,d.querySelector(".invite"));}if(m){const z=document.createElement("button");z.dataset.view="admin";z.dataset.adminNav="1";z.textContent="الإدارة";z.onclick=()=>change("admin");m.insertBefore(z,m.querySelector(".invite")||m.lastElementChild);}}el.innerHTML=mldUser?'<div class="auth-chip">مرحبًا <b>'+esc(mldUser.username)+'</b> · Discord: <b>'+esc(mldUser.discordUsername)+'</b> · '+(mldUser.role==="owner"?"👑 أونر":mldUser.role==="admin"?"🛡️ إدارة":"عضو")+' <button id="logout-btn">خروج</button></div>':'<div class="auth-chip">غير مسجل · <button id="auth-open">تسجيل الدخول / إنشاء حساب</button></div>';$("#logout-btn")?.addEventListener("click",async()=>{await fetch("/api/auth/logout",{method:"POST"});location.reload()});$("#auth-open")?.addEventListener("click",()=>change("login"))}function authView(){
+  if(mldUser){return change("home")}
+  searchWrap.style.display="none"; title.textContent="تسجيل الدخول"; subtitle.textContent="الحساب يعمل فقط لأعضاء سيرفر MLD في Discord."; content.className="feature-grid";
+  content.innerHTML='<article class="feature-card auth-card"><div class="feature-icon">🔐</div><h3 id="auth-heading">تسجيل الدخول</h3><input id="auth-user" class="full" maxlength="32" placeholder="اسم المستخدم"><input id="auth-pass" class="full" type="password" maxlength="100" placeholder="كلمة المرور"><div id="discord-wrap"><input id="auth-discord" class="full" maxlength="100" placeholder="يوزرك في Discord"></div><button class="primary wide" id="auth-submit">دخول</button><button class="wide" id="auth-toggle">إنشاء حساب جديد</button><button class="wide" id="forgot-toggle">نسيت كلمة المرور؟</button><p id="auth-status" class="muted"></p></article><article class="feature-card"><div class="feature-icon">🛡️</div><h3>حماية الحساب</h3><p class="muted">الموقع منفصل عن تسجيل Discord. نتحقق فقط من أنك عضو حالي في سيرفر MLD، ولا نطلب كلمة مرور Discord.</p></article></div>';
+  let register=false,forgot=false;
+  const sync=()=>{
+    $("#auth-heading").textContent=forgot?"استعادة كلمة المرور":register?"إنشاء حساب":"تسجيل الدخول";
+    $("#auth-submit").textContent=forgot?"إرسال للخاص":register?"إنشاء الحساب":"دخول";
+    $("#auth-toggle").textContent=forgot?"العودة لتسجيل الدخول":register?"لدي حساب بالفعل":"إنشاء حساب جديد";
+    $("#discord-wrap").classList.toggle("hidden",!register&&!forgot);
+    $("#auth-pass").classList.toggle("hidden",forgot);
+    $("#forgot-toggle").classList.toggle("hidden",forgot);
+  };
+  $("#auth-toggle").onclick=()=>{if(forgot){forgot=false;register=false}else register=!register;sync()};
+  $("#forgot-toggle").onclick=()=>{forgot=true;register=false;sync()};
   $("#auth-submit").onclick=async()=>{
-    const st=$("#auth-status"),btn=$("#auth-submit");
-    const body={username:$("#auth-user").value.trim(),password:$("#auth-pass").value};
-    if(register) body.discordUsername=$("#auth-discord").value.trim();
-    if(!body.username||!body.password||(register&&!body.discordUsername)) return st.textContent="عبّ كل البيانات المطلوبة";
+    const st=$("#auth-status"),btn=$("#auth-submit"),username=$("#auth-user").value.trim(),discordUsername=$("#auth-discord").value.trim();
+    if(!username||((register||forgot)&&!discordUsername)) return st.textContent="عبّ كل البيانات المطلوبة";
     btn.disabled=true; st.textContent="جاري المعالجة...";
-    try{const r=await fetch(register?"/api/auth/register":"/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}),d=await r.json();if(!r.ok)throw Error(d.error||"تعذر تسجيل الدخول");mldUser=d.user||null;updateAuthBar();st.textContent="تم بنجاح ✓";setTimeout(()=>change("home"),250)}catch(e){st.textContent=e.message||"تعذر تنفيذ العملية"}finally{btn.disabled=false}
+    try{
+      if(forgot){
+        const r=await fetch("/api/auth/forgot-password",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username,discordUsername})}),d=await r.json();
+        if(!r.ok)throw Error(d.error||"تعذر إرسال كلمة المرور المؤقتة");
+        st.textContent="تم إرسال كلمة مرور مؤقتة إلى الخاص في Discord ✓";
+        forgot=false; register=false; sync();
+      }else{
+        const body={username,password:$("#auth-pass").value}; if(register) body.discordUsername=discordUsername;
+        const r=await fetch(register?"/api/auth/register":"/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}),d=await r.json();
+        if(!r.ok)throw Error(d.error||"تعذر تسجيل الدخول");
+        mldUser=d.user||null; updateAuthBar();
+        if(mldUser?.mustChangePassword){ st.textContent="تم قبول كلمة المرور المؤقتة — غيّر كلمة المرور الآن"; return renderPasswordChange(); }
+        st.textContent="تم بنجاح ✓"; setTimeout(()=>change("home"),250);
+      }
+    }catch(e){st.textContent=e.message||"تعذر تنفيذ العملية"}finally{btn.disabled=false}
   };
   sync(); setStatus("نظام الحسابات جاهز");
+}
+function renderPasswordChange(){
+  searchWrap.style.display="none"; title.textContent="تغيير كلمة المرور"; subtitle.textContent="هذه الخطوة مطلوبة بعد استخدام كلمة المرور المؤقتة."; content.className="feature-grid";
+  content.innerHTML='<article class="feature-card auth-card"><div class="feature-icon">🔑</div><h3>ضع كلمة مرور جديدة</h3><input id="new-pass" class="full" type="password" maxlength="100" placeholder="كلمة المرور الجديدة"><input id="new-pass2" class="full" type="password" maxlength="100" placeholder="تأكيد كلمة المرور"><button class="primary wide" id="save-pass">حفظ كلمة المرور</button><p id="pass-status" class="muted"></p></article>';
+  $("#save-pass").onclick=async()=>{const p=$("#new-pass").value,p2=$("#new-pass2").value,st=$("#pass-status"),btn=$("#save-pass");if(p.length<6)return st.textContent="كلمة المرور يجب أن تكون 6 أحرف على الأقل";if(p!==p2)return st.textContent="كلمتا المرور غير متطابقتين";btn.disabled=true;try{const r=await fetch("/api/auth/change-password",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({newPassword:p})}),d=await r.json();if(!r.ok)throw Error(d.error);mldUser.mustChangePassword=false;updateAuthBar();st.textContent="تم تغيير كلمة المرور بنجاح ✓";setTimeout(()=>change("home"),400)}catch(e){st.textContent=e.message||"تعذر تغيير كلمة المرور"}finally{btn.disabled=false}};
 }
 function needAuth(){if(!mldUser){mldMe().then(u=>{if(u){change(view)}else change("login")});setStatus("جاري التحقق من جلسة الدخول…");return false}return true}
 async function siteStats(){try{if(!sessionStorage.getItem("mld_visit_counted")){await fetch("/api/site/visit",{method:"POST"});sessionStorage.setItem("mld_visit_counted","1")}const r=await fetch("/api/site/stats");if(!r.ok)throw Error("stats");return await r.json()}catch(e){return {visits:0,online:0}}}
