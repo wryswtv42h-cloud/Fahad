@@ -66,3 +66,5 @@ $("#member-search")?.addEventListener("input",e=>{const q=e.target.value.toLower
 auth().then(()=>navigate("home"));
 
 async function renderCommunity(d){if(!d)return;$("#community-name").textContent=d.communityName||d.guild?.name||"مجتمع ملاذ";$("#community-sub").textContent=(d.guild?.memberCount||0)+" عضو · "+(d.online||0)+" متصل الآن";$("#bot-state").textContent=d.bot?.online?"BOT ONLINE":"BOT OFFLINE";$("#bot-state").className="badge "+(d.bot?.online?"online":"");const c=$("#community-live-grid");const roles=(d.roles||[]).slice(0,6).map(r=>`<div class="live-stat"><b>${esc(r.name)}</b><span>${r.count} عضو</span></div>`).join("");const people=(d.activeMembers||[]).slice(0,6).map(m=>`<div class="live-person"><img src="${esc(m.avatar)}"><div><b>${esc(m.name||m.username)}</b><small>نشاط Discord مباشر</small></div></div>`).join("");c.innerHTML='<div class="live-column"><h3>الرتب النشطة</h3>'+roles+'</div><div class="live-column"><h3>أبرز المتفاعلين</h3>'+people+'</div>'}
+
+window.FAHAD_SITE_READY = true;
