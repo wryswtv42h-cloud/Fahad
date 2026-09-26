@@ -54,7 +54,7 @@ app.use(session({
     maxAge: 1000 * 60 * 60 * 24 * 7
   }
 }));
-app.use(express.static(path.join(__dirname, "public")));
+app.use(express.static(path.join(__dirname, "public"), { maxAge: 0, etag: false, lastModified: false }));
 
 const leadershipRoleIds = [
   "1530712642384040027",
