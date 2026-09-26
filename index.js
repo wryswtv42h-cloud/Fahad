@@ -26,16 +26,16 @@ if (!token || !guildId) {
   process.exit(1);
 }
 
-const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildVoiceStates,
-    GatewayIntentBits.GuildPresences
-  ]
-});
+const baseIntents = [
+  GatewayIntentBits.Guilds,
+  GatewayIntentBits.GuildMessages,
+  GatewayIntentBits.GuildVoiceStates
+];
+const optionalIntents = [];
+if (String(process.env.DISCORD_ENABLE_MEMBERS || "").toLowerCase() === "true") optionalIntents.push(GatewayIntentBits.GuildMembers);
+if (String(process.env.DISCORD_ENABLE_PRESENCES || "").toLowerCase() === "true") optionalIntents.push(GatewayIntentBits.GuildPresences);
+if (String(process.env.DISCORD_ENABLE_MESSAGE_CONTENT || "").toLowerCase() === "true") optionalIntents.push(GatewayIntentBits.MessageContent);
+const client = new Client({ intents: [...baseIntents, ...optionalIntents] });
 
 const app = express();
 app.disable("x-powered-by");
@@ -505,18 +505,18 @@ admins.add(owner.id);
 
 // -------------------- Health / auth --------------------
 
-app.get("/health", (req, res) => {
-  res.json({
-    ok: true,
-    botReady: client.isReady(),
-    membersCached: Boolean(memberSnapshot),
-    membersCachedCount: memberSnapshot?.length || 0,
-    users: users.size,
-    groups: groups.size,
-    tickets: tickets.size,
-    applications: applications.size,
-    games: games.size
-  });
+app.get("/health", async (req, res) => {
+  let guild = null;
+  let memberCount = 0;
+  let memberFetch = "not-run";
+  try {
+    guild = await getGuild();
+    memberCount = guild.memberCount || guild.members.cache.size || 0;
+    memberFetch = "ok";
+  } catch (error) {
+    memberFetch = error.message;
+  }
+  res.json({ ok:true, discord:{ready:client.isReady(),tag:client.user?.tag||null,guildId:guildId||null,guildName:guild?.name||null,memberCount,memberFetch} });
 });
 
 app.get("/api/auth/me", (req, res) => {
@@ -1307,6 +1307,9 @@ client.on("voiceStateUpdate", (oldState, newState) => {
     voiceSessions.delete(userId);
   }
 });
+
+client.on("error", (error) => console.error("Discord client error:", error));
+client.on("warn", (message) => console.warn("Discord warning:", message));
 
 client.once("ready", () => {
   console.log(`Logged in as ${client.user.tag}`);
