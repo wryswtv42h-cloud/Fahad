@@ -400,6 +400,14 @@ app.delete("/api/owner/announcements/:id",requireAdmin,async(req,res)=>{await po
 
 
 
+const CODE_WORDS=["قمر","مفتاح","نهر","صحراء","روبوت","مدرسة","سيف","مطر","نجم","حديقة","مسرح","ذهب","بحر","كتاب","طائرة","قلعة","تفاحة","قهوة","نظارة","صاروخ","بوصلة","جزيرة","ثلج","طريق","مغناطيس","برق","نار","ملك","بنك","كرة","طبيب","موسيقى","سفينة","سر","جسر","شمس","ظل","وردة","ساعة","باب","مدينة","غابة","عين","قلب","صوت","فيلم","لؤلؤ","قلم","حصان","موجة","صقر","نقطة","سلم","حجر","خبز","كوكب","دخان","نسر","مرآة","نفق","شيفرة","رعد","قناع","خاتم","برج","نجمة","مخيم","صندوق","قطار","ملعب","رمل","عسل","ورق","جبل","ساحر","دائرة","تاج","سهم","شبكة","مسبار","كنز","ساحل","ليل","نهار","مجرة","كأس","نخلة","بركان","ريشة","موج","حبر","قفل"];
+function shuffle(a){return [...a].sort(()=>Math.random()-0.5)}
+function makeGameState(game){
+  if(game!=="CODENAMES")return {version:1,game,round:1,score:0,turn:"player",prompt:"ابدأ الجولة.",winner:null};
+  const words=shuffle(CODE_WORDS).slice(0,25);
+  const roles=shuffle(["red","red","red","red","red","red","red","red","red","blue","blue","blue","blue","blue","blue","blue","blue","neutral","neutral","neutral","neutral","neutral","neutral","neutral","assassin"]);
+  return {version:1,game,words:words.map((word,i)=>({word,role:roles[i],revealed:false})),turn:"red",clue:null,guessesLeft:0,scores:{red:0,blue:0},winner:null,turnNumber:1};
+}
 async function activeGameFor(req){const u=currentUser(req),guestId=String(req.body?.guestId||req.query?.guestId||"").trim(),q=await pool.query("SELECT id,players,status FROM game_lobbies WHERE status IN ('waiting','ready','playing') ORDER BY id DESC LIMIT 100");for(const g of q.rows){const ps=Array.isArray(g.players)?g.players:[];if(u&&ps.some(p=>!p.bot&&p.username===u.username))return g;if(!u&&guestId&&ps.some(p=>!p.bot&&p.guestId===guestId))return g}return null}
 app.get("/api/games",async(req,res)=>{
   const q=await pool.query("SELECT id,game,host_username,host_discord_username,max_players,players,status,created_at FROM game_lobbies WHERE status IN ('waiting','ready','playing') ORDER BY id DESC LIMIT 50");
@@ -437,13 +445,53 @@ app.post("/api/games/:id/start",async(req,res)=>{
   const u=currentUser(req),guestId=String(req.body?.guestId||"").trim().slice(0,80),q=await pool.query("SELECT * FROM game_lobbies WHERE id=$1",[req.params.id]);if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة"});
   const g=q.rows[0],hostMatches=u?g.host_username===u.username:String(g.players?.[0]?.guestId||"")===guestId;if(!hostMatches)return res.status(403).json({error:"فقط صاحب الجلسة يقدر يبدأ"});if(g.status==="playing")return res.json({ok:true,game:g});
   let players=Array.isArray(g.players)?g.players:[],botNo=1;while(players.length<g.max_players){players.push({username:"بوت "+botNo,discordUsername:"BOT",guest:true,bot:true,host:false});botNo++}
-  const updated=await pool.query("UPDATE game_lobbies SET players=$1,status='playing' WHERE id=$2 RETURNING *",[JSON.stringify(players),g.id]);if(u)await audit(u,"game_start","session "+g.id+" "+g.game+" players="+players.length);res.json({ok:true,game:updated.rows[0]});
+  const state=g.state&&Object.keys(g.state).length?g.state:makeGameState(g.game); const updated=await pool.query("UPDATE game_lobbies SET players=$1,status='playing',state=$2 WHERE id=$3 RETURNING *",[JSON.stringify(players),JSON.stringify(state),g.id]);if(u)await audit(u,"game_start","session "+g.id+" "+g.game+" players="+players.length);res.json({ok:true,game:updated.rows[0]});
 });
 app.post("/api/games/:id/leave",async(req,res)=>{
   const u=currentUser(req),guestId=String(req.body?.guestId||"").trim().slice(0,80),q=await pool.query("SELECT * FROM game_lobbies WHERE id=$1",[req.params.id]);if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة"});
   const g=q.rows[0],players=Array.isArray(g.players)?g.players:[],i=u?players.findIndex(x=>x.username===u.username&&!x.bot):players.findIndex(x=>x.guestId===guestId&&!x.bot);if(i<0)return res.status(403).json({error:"أنت لست داخل هذه الجلسة"});
   if(players[i].host){await pool.query("UPDATE game_lobbies SET status='closed' WHERE id=$1",[g.id]);if(u)await audit(u,"game_leave","host closed session "+g.id);return res.json({ok:true,closed:true})}
   players.splice(i,1);const humans=players.filter(x=>!x.bot),status=humans.length>=g.max_players?"ready":"waiting";const updated=await pool.query("UPDATE game_lobbies SET players=$1,status=$2 WHERE id=$3 RETURNING *",[JSON.stringify(humans),status,g.id]);if(u)await audit(u,"game_leave","session "+g.id);res.json({ok:true,game:updated.rows[0]});
+});
+app.get("/api/games/:id/state",async(req,res)=>{
+  const q=await pool.query("SELECT id,game,players,status,state FROM game_lobbies WHERE id=$1",[req.params.id]);
+  if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة"});
+  res.json({game:q.rows[0],state:q.rows[0].state||{}});
+});
+app.post("/api/games/:id/action",async(req,res)=>{
+  const u=currentUser(req),guestId=String(req.body?.guestId||"").trim(),action=String(req.body?.action||"").trim();
+  const q=await pool.query("SELECT * FROM game_lobbies WHERE id=$1",[req.params.id]);
+  if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة"});
+  const g=q.rows[0],players=Array.isArray(g.players)?g.players:[],state=g.state||{};
+  if(g.status!=="playing")return res.status(409).json({error:"الجلسة لم تبدأ"});
+  const actor=u?players.find(p=>!p.bot&&p.username===u.username):players.find(p=>!p.bot&&p.guestId===guestId);
+  if(!actor)return res.status(403).json({error:"لست داخل الجلسة"});
+  if(g.game==="CODENAMES"){
+    if(action==="clue"){
+      if(actor.username!==g.host_username)return res.status(403).json({error:"صاحب الجلسة فقط يعطي التلميح"});
+      const word=String(req.body?.word||"").trim().split(/\s+/)[0].slice(0,30),number=Math.max(1,Math.min(9,Number(req.body?.number)||1));
+      if(!word)return res.status(400).json({error:"اكتب التلميح"});
+      state.clue={word,number};state.guessesLeft=number;
+    }else if(action==="guess"){
+      const index=Number(req.body?.index),card=state.words?.[index];
+      if(!Number.isInteger(index)||!card)return res.status(400).json({error:"الكلمة غير صحيحة"});
+      if(card.revealed)return res.status(409).json({error:"الكلمة مكشوفة"});
+      card.revealed=true;
+      if(card.role==="assassin"){state.winner=state.turn==="red"?"blue":"red";state.clue=null;state.guessesLeft=0;}
+      else if(card.role===state.turn){
+        state.scores[state.turn]=(state.scores[state.turn]||0)+1;
+        state.guessesLeft=Math.max(0,(state.guessesLeft||1)-1);
+        const remaining=state.words.filter(x=>x.role===state.turn&&!x.revealed).length;
+        if(remaining===0){state.winner=state.turn;state.clue=null;state.guessesLeft=0;}
+        else if(state.guessesLeft===0){state.turn=state.turn==="red"?"blue":"red";state.turnNumber++;state.clue=null;}
+      }else{state.guessesLeft=0;state.turn=state.turn==="red"?"blue":"red";state.turnNumber++;state.clue=null;}
+    }else if(action==="endTurn"){state.guessesLeft=0;state.turn=state.turn==="red"?"blue":"red";state.turnNumber++;state.clue=null;}
+    else return res.status(400).json({error:"حركة غير معروفة"});
+  }else if(action==="round"){
+    state.round=(state.round||1)+1;state.score=(state.score||0)+1;state.prompt="🎯 جولة ناجحة! النقاط: "+state.score;
+  }else return res.status(400).json({error:"الحركة غير مدعومة"});
+  const up=await pool.query("UPDATE game_lobbies SET state=$1 WHERE id=$2 RETURNING state,status,players",[JSON.stringify(state),g.id]);
+  res.json({ok:true,state:up.rows[0].state,status:up.rows[0].status,players:up.rows[0].players});
 });
 app.get("/api/games/top",async(req,res)=>{try{const q=await pool.query("SELECT username,discord_username,wins,points FROM game_scores WHERE guest=false ORDER BY wins DESC,points DESC LIMIT 50");res.json({top:q.rows});}catch(e){res.json({top:[]});}});
 app.post("/api/games/:id/score",requireAuth,async(req,res)=>{const points=Math.max(1,Math.min(100,Number(req.body?.points)||10)),u=req.session.user;await pool.query("INSERT INTO game_scores(username,discord_username,wins,points,guest) VALUES($1,$2,1,$3,false) ON CONFLICT(username) DO UPDATE SET wins=game_scores.wins+1,points=game_scores.points+$3,discord_username=EXCLUDED.discord_username",[u.username,u.discordUsername,points]);await audit(u,"game_win",`#${req.params.id} +${points}`);res.json({ok:true});});
