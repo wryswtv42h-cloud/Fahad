@@ -707,7 +707,7 @@ client.on("guildMemberUpdate", invalidateMemberSnapshot);
 
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
-  if (!message.guildId) { try { await handleGroupDMApproval(message); } catch(e) { console.error("group DM handler:",e.message); } return;
+  if (!message.guildId) { try { await handleGroupDMApproval(message); } catch(e) { console.error("group DM handler:",e.message); } return; }
 
   const sender = getActivity(message.author.id);
   sender.messages += 1;
