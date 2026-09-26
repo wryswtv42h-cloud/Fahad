@@ -1094,6 +1094,21 @@ app.get("/api/admin/overview", requireAdmin, (req, res) => {
   });
 });
 
+app.get("/api/admin/stats", requireAdmin, (req, res) => {
+  const reviewsCount = [...reviews.values()].reduce((n, list) => n + list.length, 0);
+  res.json({
+    users: users.size,
+    groups: groups.size,
+    pendingGroups: [...groups.values()].filter((g) => g.status === "pending").length,
+    joinRequests: [...groupJoinRequests.values()].reduce((n, map) => n + [...map.values()].filter((r) => r.status === "pending").length, 0),
+    tickets: tickets.size,
+    applications: applications.size,
+    reviews: reviewsCount,
+    watchRooms: watchRooms.size,
+    games: games.size
+  });
+});
+
 app.get("/api/admin/users", requireAdmin, (req, res) => res.json({ users: [...users.values()].map(userJson) }));
 
 app.patch("/api/admin/users/:id", requireAdmin, (req, res) => {
