@@ -85,6 +85,11 @@ async function openGame(id){
     '</div>';
     modal("🎮 "+esc(g.name),body);
     await refreshGameChat(id);
+    if(g.type==="uno" && stateData.uno?.hands?.[state.user.id]){
+      const hand=document.createElement("div"); hand.className="game-hand"; hand.innerHTML=stateData.uno.hands[state.user.id].map((card,i)=>`<button class="uno-card c-${esc(card.color)}" data-uno-index="${i}">${esc(card.value)}</button>`).join("");
+      const board=document.querySelector(".game-board"); if(board) board.after(hand);
+      hand.querySelectorAll("[data-uno-index]").forEach(btn=>btn.addEventListener("click",async()=>{try{await api("/api/games/"+encodeURIComponent(id)+"/action",{method:"POST",body:{action:"play",data:{index:Number(btn.dataset.unoIndex)}}});await openGame(id)}catch(x){toast(x.message,"error")}}));
+    }
     $("#game-chat-form")?.addEventListener("submit",async e=>{e.preventDefault();try{await sendGameChat(id,$("#game-chat-input"));await refreshGameChat(id)}catch(x){toast(x.message,"error")}});
   }catch(e){toast(e.message,"error")}
 }
