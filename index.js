@@ -205,7 +205,7 @@ function memberJson(member) {
     username: member.user.username,
     globalName: member.user.globalName,
     bot: member.user.bot,
-    status: member.presence?.status || "offline",
+    status: discordStatus(member),
     avatar: member.user.displayAvatarURL({ extension: "png", size: 256 }),
     joinedAt: member.joinedAt,
     roles,
@@ -240,6 +240,7 @@ async function getGuild() {
   return guildFetchPromise;
 }
 
+function discordStatus(member) { return member?.presence?.status || "offline"; }
 function invalidateMemberSnapshot() {
   memberSnapshotAt = 0;
 }
@@ -1443,7 +1444,12 @@ app.get("/api/admin/discord", requireAdmin, async (req, res) => {
 
 client.on("guildMemberAdd", invalidateMemberSnapshot);
 client.on("guildMemberRemove", invalidateMemberSnapshot);
-client.on("guildMemberUpdate", invalidateMemberSnapshot);
+client.on("guildMemberUpdate", invalidateMemberSnapshot);\nclient.on("presenceUpdate", (oldPresence, newPresence) => {
+  invalidateMemberSnapshot();
+  const member = newPresence?.member || oldPresence?.member;
+  if (member) memberSnapshotAt = Date.now();
+});
+
 
 client.on("messageCreate", (message) => {
   if (message.author.bot) return;
@@ -1473,6 +1479,7 @@ client.on("warn", (message) => console.warn("Discord warning:", message));
 
 client.once("ready", () => {
   console.log(`Logged in as ${client.user.tag}`);
+  getGuild().then((guild) => refreshMemberSnapshot(guild)).catch((error) => console.error("Initial member snapshot:", error.message));
   const statusName = process.env.BOT_STATUS_NAME || process.env.COMMUNITY_NAME || "مجتمع ملاذ";
   const statusType = String(process.env.BOT_STATUS_TYPE || "WATCHING").toUpperCase();
   const typeMap = { PLAYING: 0, STREAMING: 1, LISTENING: 2, WATCHING: 3 };
