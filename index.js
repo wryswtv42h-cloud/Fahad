@@ -242,29 +242,38 @@ function invalidateMemberSnapshot() {
   memberSnapshotAt = 0;
 }
 
-async function getAllMembers(guild) {
-  if (memberSnapshot && Date.now() - memberSnapshotAt < MEMBER_CACHE_TTL) return memberSnapshot;
+function refreshMemberSnapshot(guild) {
   if (memberFetchPromise) return memberFetchPromise;
-
-  memberFetchPromise = Promise.race([guild.members.fetch(), new Promise((_, reject) => setTimeout(() => reject(new Error("Discord member fetch timeout")), 8000))])
+  memberFetchPromise = Promise.race([
+    guild.members.fetch(),
+    new Promise((_, reject) => setTimeout(() => reject(new Error("Discord member fetch timeout")), 8000))
+  ])
     .then((collection) => {
       memberSnapshot = [...collection.values()];
       memberSnapshotAt = Date.now();
       return memberSnapshot;
     })
     .catch((error) => {
-      console.error("Discord member fetch failed:", error.message);
+      console.error("Discord member refresh failed:", error.message);
       const cached = [...guild.members.cache.values()];
       if (cached.length) {
         memberSnapshot = cached;
         memberSnapshotAt = Date.now();
         return memberSnapshot;
       }
-      throw error;
+      return [];
     })
     .finally(() => { memberFetchPromise = null; });
-
   return memberFetchPromise;
+}
+
+async function getAllMembers(guild, options = {}) {
+  const cached = memberSnapshot || [...guild.members.cache.values()];
+  if (cached.length) {
+    if (options.refresh) refreshMemberSnapshot(guild);
+    return cached;
+  }
+  return refreshMemberSnapshot(guild);
 }
 
 function userJson(user) {
@@ -498,10 +507,11 @@ function createGame(type, hostId, maxPlayers) {
 }
 
 // Bootstrap website owner account from environment.
-const ownerUsername = process.env.OWNER_USERNAME || "owner";
-const ownerPassword = process.env.OWNER_PASSWORD || "change-me";
+const ownerUsername = cleanText(process.env.OWNER_USERNAME || "owner", 32);
+const ownerPassword = String(process.env.OWNER_PASSWORD || "change-me");
 let owner = findUserByUsername(ownerUsername);
 if (!owner) owner = createUser(ownerUsername, ownerPassword, process.env.OWNER_ID || "");
+else owner.passwordHash = bcrypt.hashSync(ownerPassword, 12);
 admins.add(owner.id);
 
 // -------------------- Health / auth --------------------
@@ -580,7 +590,7 @@ app.post("/api/public/visit", (req, res) => {
 app.get("/api/public/stats", async (req, res) => {
   try {
     const guild = await getGuild();
-    const allMembers = await getAllMembers(guild).catch(() => [...guild.members.cache.values()]);
+    const allMembers = await getAllMembers(guild, { refresh: true });
     const allReviews = [...reviews.values()].flat();
     const avg = allReviews.length ? allReviews.reduce((sum, r) => sum + Number(r.rating || 0), 0) / allReviews.length : 0;
     res.json({
@@ -608,7 +618,7 @@ app.get("/api/public/reviews", (req, res) => {
 app.get("/api/public/community", async (req, res) => {
   try {
     const guild = await getGuild();
-    const members = await getAllMembers(guild).catch(() => [...guild.members.cache.values()]);
+    const members = await getAllMembers(guild, { refresh: true });
     const online = members.filter(m => m.presence?.status && m.presence.status !== "offline").length;
     const roleCounts = {};
     for (const m of members) {
@@ -1050,6 +1060,12 @@ app.post("/api/watch/:id/chat", requireAuth, (req, res) => {
 app.get("/api/games", (req, res) => {
   res.json({ games: [...games.values()].filter((g) => g.status !== "finished").map(publicGame) });
 });
+
+app.get("/api/games/:id", (req, res) => {
+  const game = games.get(req.params.id);
+  if (!game) return res.status(404).json({ error: "اللعبة غير موجودة" });
+  res.json({ game: publicGame(game), state: game.state || {} });
+});
 app.post("/api/games", requireAuth, (req, res) => {
   const type = cleanText(req.body?.type, 30).toLocaleLowerCase("ar");
   const allowed = new Set(["uno", "ludo", "baloot", "daqsh", "qawsar"]);
@@ -1110,11 +1126,29 @@ app.post("/api/games/invites/:id/respond", requireAuth, (req, res) => {
 app.post("/api/games/:id/action", requireAuth, (req, res) => {
   const game = games.get(req.params.id);
   if (!game) return res.status(404).json({ error: "اللعبة غير موجودة" });
-  if (!game.players.some((p) => p.userId === req.user.id)) return res.status(403).json({ error: "أنت لست لاعبًا" });
-  if (game.status === "waiting" && req.body?.action !== "ready") return res.status(400).json({ error: "اللعبة لم تبدأ بعد" });
+  const player = game.players.find((p) => p.userId === req.user.id);
+  if (!player) return res.status(403).json({ error: "أنت لست لاعبًا" });
 
-  // Generic action transport. Game-specific rule engines can be added here later.
-  game.state.lastAction = { userId: req.user.id, action: req.body?.action || null, data: req.body?.data || null, at: now() };
+  const action = cleanText(req.body?.action, 40).toLowerCase();
+  if (action === "ready") {
+    player.ready = !player.ready;
+    const everyoneReady = game.players.length >= 2 && game.players.every((p) => p.ready);
+    if (everyoneReady || (game.players.length >= game.maxPlayers)) game.status = "active";
+  } else if (action === "start") {
+    if (game.hostId !== req.user.id && !isAdminUser(req.user)) return res.status(403).json({ error: "المضيف فقط يستطيع بدء اللعبة" });
+    if (game.players.length < 2) return res.status(400).json({ error: "أضف لاعبًا واحدًا على الأقل" });
+    game.status = "active";
+    game.players.forEach((p) => { p.ready = true; });
+  } else if (action === "move" || action === "play" || action === "roll" || action === "draw" || action === "pass") {
+    if (game.status !== "active") return res.status(400).json({ error: "ابدأ اللعبة أولًا" });
+    game.state.turnUserId = game.state.turnUserId || game.players[0].userId;
+    if (game.state.turnUserId !== req.user.id) return res.status(400).json({ error: "ليس دورك الآن" });
+    game.state.lastAction = { userId: req.user.id, action, data: req.body?.data || null, at: now() };
+    const current = game.players.findIndex((p) => p.userId === req.user.id);
+    game.state.turnUserId = game.players[(current + 1) % game.players.length].userId;
+  } else {
+    return res.status(400).json({ error: "حركة اللعبة غير معروفة" });
+  }
   game.updatedAt = now();
   res.json({ game: publicGame(game), state: game.state });
 });
