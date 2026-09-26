@@ -452,7 +452,10 @@ app.post("/api/games/:id/join",async(req,res)=>{
 app.post("/api/games/:id/start",async(req,res)=>{
   const u=currentUser(req),guestId=String(req.body?.guestId||"").trim().slice(0,80),q=await pool.query("SELECT * FROM game_lobbies WHERE id=$1",[req.params.id]);if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة"});
   const g=q.rows[0],hostMatches=u?g.host_username===u.username:String(g.players?.[0]?.guestId||"")===guestId;if(!hostMatches)return res.status(403).json({error:"فقط صاحب الجلسة يقدر يبدأ"});if(g.status==="playing")return res.json({ok:true,game:g});
-  let players=Array.isArray(g.players)?g.players:[],botNo=1;while(players.length<g.max_players){players.push({username:"بوت "+botNo,discordUsername:"BOT",guest:true,bot:true,host:false});botNo++}
+  const humanPlayers=Array.isArray(g.players)?g.players.filter(p=>!p.bot):[];
+  let players=[...humanPlayers];
+  let botNo=1;
+  while(players.length<g.max_players){players.push({username:"بوت "+botNo,discordUsername:"BOT",guest:true,bot:true,host:false});botNo++}
   const state=g.state&&Object.keys(g.state).length?g.state:makeGameState(g.game); const updated=await pool.query("UPDATE game_lobbies SET players=$1,status='playing',state=$2 WHERE id=$3 RETURNING *",[JSON.stringify(players),JSON.stringify(state),g.id]);if(u)await audit(u,"game_start","session "+g.id+" "+g.game+" players="+players.length);res.json({ok:true,game:updated.rows[0]});
 });
 app.post("/api/games/:id/leave",async(req,res)=>{
