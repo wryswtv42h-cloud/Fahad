@@ -1483,29 +1483,21 @@ client.on("interactionCreate", async interaction=>{
     if(name==="ping") return interaction.reply({content:"🏓 Pong · "+client.ws.ping+"ms",ephemeral:true});
     if(name==="site") return interaction.reply({content:process.env.SITE_URL||"منصة المجتمع متاحة من رابط Railway الخاص بالمشروع.",ephemeral:true});
     const guild=await getGuild();
-    if(name==="server") return interaction.reply({content:"**"+guild.name+"**
-👥 "+guild.memberCount+" عضو
-🤖 "+client.user.tag,ephemeral:true});
+    if(name==="server") return interaction.reply({content:"**"+guild.name+"**\\n👥 "+guild.memberCount+" عضو\\n🤖 "+client.user.tag,ephemeral:true});
     if(name==="members"){
       const members=await getAllMembers(guild,{background:true});
       const online=members.filter(m=>["online","idle","dnd"].includes(discordStatus(m))).length;
-      return interaction.reply({content:"👥 الأعضاء: "+(guild.memberCount||members.length)+"
-🟢 المتصلون/النشطون: "+online,ephemeral:true});
+      return interaction.reply({content:"👥 الأعضاء: "+(guild.memberCount||members.length)+"\\n🟢 المتصلون/النشطون: "+online,ephemeral:true});
     }
     if(name==="top"){
       const top=[...activity.values()].sort((a,b)=>b.messages-a.messages).slice(0,5);
-      return interaction.reply({content:top.length?top.map((x,i)=>(i+1)+". <@"+x.userId+"> — "+x.messages+" رسالة").join("
-"):"لا توجد إحصائيات بعد.",ephemeral:true});
+      return interaction.reply({content:top.length?top.map((x,i)=>(i+1)+". <@"+x.userId+"> — "+x.messages+" رسالة").join("\\n"):"لا توجد إحصائيات بعد.",ephemeral:true});
     }
     if(name==="profile"){
       const user=interaction.options.getUser("user")||interaction.user;
       const member=await guild.members.fetch(user.id);
       const m=memberJson(member);
-      return interaction.reply({content:"**"+m.name+"** (@"+m.username+")
-الحالة: "+m.status+"
-الرتبة: "+m.rank+"
-الرسائل: "+m.stats.messages+"
-المنشنات: "+m.stats.mentionsReceived,ephemeral:true});
+      return interaction.reply({content:"**"+m.name+"** (@"+m.username+")\\nالحالة: "+m.status+"\\nالرتبة: "+m.rank+"\\nالرسائل: "+m.stats.messages+"\\nالمنشنات: "+m.stats.mentionsReceived,ephemeral:true});
     }
     if(name==="ticket"){
       const subject=interaction.options.getString("subject");
@@ -1516,14 +1508,12 @@ client.on("interactionCreate", async interaction=>{
       return interaction.reply({content:"تم فتح التذكرة #"+ticket.id+" بنجاح.",ephemeral:true});
     }
     if(name==="group"){
-      const groups=[...groups.values()].filter(g=>g.status==="approved"||g.status==="active").slice(0,10);
-      return interaction.reply({content:groups.length?groups.map(g=>"👥 **"+g.name+"** — "+(g.memberCount||0)+" عضو").join("
-"):"لا توجد مجموعات منشورة.",ephemeral:true});
+      const groupList=[...groups.values()].filter(g=>g.status==="approved"||g.status==="active").slice(0,10);
+      return interaction.reply({content:groupList.length?groupList.map(g=>"👥 **"+g.name+"** — "+(g.memberCount||0)+" عضو").join("\\n"):"لا توجد مجموعات منشورة.",ephemeral:true});
     }
     if(name==="games"){
       const active=[...games.values()].filter(g=>g.status!=="finished").slice(0,10);
-      return interaction.reply({content:active.length?active.map(g=>"🎮 **"+g.name+"** — "+g.players.length+"/"+g.maxPlayers).join("
-"):"لا توجد جلسات ألعاب حالية.",ephemeral:true});
+      return interaction.reply({content:active.length?active.map(g=>"🎮 **"+g.name+"** — "+g.players.length+"/"+g.maxPlayers).join("\\n"):"لا توجد جلسات ألعاب حالية.",ephemeral:true});
     }
   }catch(error){
     console.error("Discord interaction error:",error);
