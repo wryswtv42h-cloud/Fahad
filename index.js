@@ -410,10 +410,10 @@ app.post("/api/games",async(req,res)=>{
 });
 app.post("/api/games/:id/join",async(req,res)=>{
   const u=currentUser(req),guestId=String(req.body?.guestId||"").trim().slice(0,80),guestName=String(req.body?.guestName||"زائر").trim().slice(0,40),name=u?.username||guestName||"زائر",discordName=u?.discordUsername||guestName;
-  if(await activeGameFor(req))return res.status(409).json({error:"أنت داخل جلسة أخرى بالفعل. اخرج منها أولًا."});
   const q=await pool.query("SELECT * FROM game_lobbies WHERE id=$1",[req.params.id]);if(!q.rowCount)return res.status(404).json({error:"اللعبة غير موجودة"});const g=q.rows[0],players=Array.isArray(g.players)?g.players:[];
   if(g.status==="playing")return res.status(409).json({error:"الجلسة بدأت بالفعل"});if(players.length>=g.max_players)return res.status(409).json({error:"اللعبة مكتملة"});if(!u&&!guestId)return res.status(400).json({error:"معرّف الزائر مفقود"});
   if(players.some(x=>u?x.username===name:x.guestId===guestId))return res.json({ok:true,game:g});
+  if(await activeGameFor(req))return res.status(409).json({error:"أنت داخل جلسة أخرى بالفعل. اخرج منها أولًا."});
   players.push({username:name,discordUsername:discordName,guest:!u,guestId:u?undefined:guestId,bot:false,host:false});const st=players.length>=g.max_players?"ready":"waiting";
   const updated=await pool.query("UPDATE game_lobbies SET players=$1,status=$2 WHERE id=$3 RETURNING *",[JSON.stringify(players),st,g.id]);if(u)await audit(u,"game_join","session "+g.id+" "+g.game);res.json({ok:true,game:updated.rows[0]});
 });
