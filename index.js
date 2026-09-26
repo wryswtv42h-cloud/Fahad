@@ -211,6 +211,8 @@ async function initAppDatabase() {
     ALTER TABLE app_users ADD COLUMN IF NOT EXISTS role VARCHAR(20) DEFAULT 'user';
     ALTER TABLE app_users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
     ALTER TABLE app_users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ;
+    CREATE TABLE IF NOT EXISTS password_resets (id BIGSERIAL PRIMARY KEY, username VARCHAR(32) NOT NULL REFERENCES app_users(username) ON DELETE CASCADE, discord_username VARCHAR(100) NOT NULL, temp_password_hash TEXT NOT NULL, expires_at TIMESTAMPTZ NOT NULL, used_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+    CREATE INDEX IF NOT EXISTS password_resets_lookup_idx ON password_resets(username, created_at DESC);
     UPDATE app_users SET username=COALESCE(NULLIF(username,''),'user_'||id::text) WHERE username IS NULL;
     UPDATE app_users SET discord_username=COALESCE(NULLIF(discord_username,''),'MLD') WHERE discord_username IS NULL;
     UPDATE app_users SET role=COALESCE(NULLIF(role,''),'user') WHERE role IS NULL;
@@ -254,7 +256,19 @@ async function initAppDatabase() {
   `);
 }
 function currentUser(req){ return req.session?.user || null; }
-function requireAuth(req,res,next){ if(!currentUser(req)) return res.status(401).json({error:"يجب تسجيل الدخول أولًا"}); next(); }
+async function findGuildMemberByUsername(discordUsername){
+  const wanted=String(discordUsername||"").trim().toLowerCase();
+  if(!wanted) return null;
+  try{ const members=await getAllMembers(await getGuild()); return members.find(m=>String(m.user?.username||"").trim().toLowerCase()===wanted)||null; }
+  catch(e){ console.error("Discord membership check:",e.message); return null; }
+}
+async function requireGuildMember(req,res,next){
+  const u=currentUser(req); if(!u) return res.status(401).json({error:"يجب تسجيل الدخول أولًا"});
+  const member=await findGuildMemberByUsername(u.discordUsername);
+  if(!member){ try{ await audit(u,"guild_membership_logout","انتهت عضوية Discord وتم إنهاء الجلسة"); }catch{} req.session.destroy(()=>{}); return res.status(403).json({error:"يجب أن تكون داخل سيرفر MLD لاستخدام الحساب"}); }
+  next();
+}
+function requireAuth(req,res,next){ requireGuildMember(req,res,next); }
 function requireAdmin(req,res,next){ const u=currentUser(req); if(!u || !["owner","admin"].includes(u.role)) return res.status(403).json({error:"هذه الصفحة للأونر والإدارة فقط"}); next(); }
 function requireOwner(req,res,next){ const u=currentUser(req); if(!u || u.role!=="owner") return res.status(403).json({error:"هذه الصفحة للأونر فقط"}); next(); }
 async function audit(u,action,details=""){ if(!process.env.DATABASE_URL) return; await pool.query("INSERT INTO audit_logs(username,discord_username,action,details) VALUES($1,$2,$3,$4)",[u?.username||null,u?.discordUsername||null,action,details]); }
@@ -281,8 +295,10 @@ app.post("/api/auth/register",async(req,res)=>{
     if(password.length<6||password.length>100) return res.status(400).json({error:"كلمة المرور يجب أن تكون 6 أحرف على الأقل"});
     if(discordUsername.length<2||discordUsername.length>100) return res.status(400).json({error:"أدخل يوزرك في Discord"});
     if(!process.env.DATABASE_URL) return res.status(503).json({error:"قاعدة البيانات غير متاحة"});
+    const member=await findGuildMemberByUsername(discordUsername); if(!member) return res.status(403).json({error:"لازم تكون داخل سيرفر MLD في Discord قبل إنشاء الحساب"});
     if((await pool.query("SELECT id FROM app_users WHERE username=$1",[username])).rowCount) return res.status(409).json({error:"اسم المستخدم مستخدم مسبقًا"});
-    const hash=await bcrypt.hash(password,12); await pool.query("INSERT INTO app_users(username,password_hash,discord_username) VALUES($1,$2,$3)",[username,hash,discordUsername]);
+    if((await pool.query("SELECT id FROM app_users WHERE lower(trim(discord_username))=lower(trim($1))",[discordUsername])).rowCount) return res.status(409).json({error:"حساب موقع موجود مسبقًا لهذا Discord username"});
+    const hash=await bcrypt.hash(password,12); await pool.query("INSERT INTO app_users(username,password_hash,discord_username) VALUES($1,$2,$3)",[username,hash,member.user.username]);
     req.session.user={username,discordUsername,role:"user"}; await new Promise((resolve,reject)=>req.session.save(err=>err?reject(err):resolve())); await audit(req.session.user,"register","إنشاء حساب").catch(()=>{}); res.json({ok:true,user:req.session.user});
   }catch(e){console.error("Register:",e);res.status(500).json({error:"تعذر إنشاء الحساب"});}
 });
@@ -290,9 +306,31 @@ app.post("/api/auth/login",async(req,res)=>{
   try{
     const username=String(req.body?.username||"").trim().toLowerCase(),password=String(req.body?.password||"");
     const q=await pool.query("SELECT username,password_hash,discord_username,role FROM app_users WHERE username=$1",[username]);
-    if(!q.rowCount||!(await bcrypt.compare(password,q.rows[0].password_hash))) return res.status(401).json({error:"بيانات الدخول غير صحيحة"});
-    const r=q.rows[0]; req.session.user={username:r.username,discordUsername:r.discord_username,role:r.role}; await pool.query("UPDATE app_users SET last_login_at=NOW() WHERE username=$1",[username]); await new Promise((resolve,reject)=>req.session.save(err=>err?reject(err):resolve())); await audit(req.session.user,"login","تسجيل دخول").catch(()=>{}); res.json({ok:true,user:req.session.user});
+    if(!q.rowCount) return res.status(401).json({error:"بيانات الدخول غير صحيحة"});
+    const r=q.rows[0],member=await findGuildMemberByUsername(r.discord_username); if(!member) return res.status(403).json({error:"لازم تكون داخل سيرفر MLD في Discord قبل تسجيل الدخول"});
+    let valid=await bcrypt.compare(password,r.password_hash),temp=false;
+    if(!valid){ const reset=await pool.query("SELECT id,temp_password_hash FROM password_resets WHERE username=$1 AND used_at IS NULL AND expires_at>NOW() ORDER BY id DESC LIMIT 1",[r.username]); if(reset.rowCount&&await bcrypt.compare(password,reset.rows[0].temp_password_hash)){ valid=true; temp=true; await pool.query("UPDATE password_resets SET used_at=NOW() WHERE id=$1",[reset.rows[0].id]); } }
+    if(!valid) return res.status(401).json({error:"بيانات الدخول غير صحيحة"});
+    req.session.user={username:r.username,discordUsername:r.discord_username,role:r.role,mustChangePassword:temp}; await pool.query("UPDATE app_users SET last_login_at=NOW() WHERE username=$1",[username]); await new Promise((resolve,reject)=>req.session.save(err=>err?reject(err):resolve())); await audit(req.session.user,"login","تسجيل دخول").catch(()=>{}); res.json({ok:true,user:req.session.user});
   }catch(e){console.error("Login:",e);res.status(500).json({error:"تعذر تسجيل الدخول"});}
+});
+app.post("/api/auth/forgot-password",async(req,res)=>{
+  try{
+    const username=String(req.body?.username||"").trim().toLowerCase(),discordUsername=String(req.body?.discordUsername||"").trim();
+    if(!username||!discordUsername) return res.status(400).json({error:"أدخل اسم الحساب وDiscord username"});
+    const q=await pool.query("SELECT username,discord_username FROM app_users WHERE username=$1",[username]); if(!q.rowCount) return res.status(404).json({error:"الحساب غير موجود"});
+    const account=q.rows[0]; if(account.discord_username.trim().toLowerCase()!==discordUsername.toLowerCase()) return res.status(400).json({error:"بيانات الاسترداد غير مطابقة"});
+    const member=await findGuildMemberByUsername(account.discord_username); if(!member) return res.status(403).json({error:"يجب أن تكون داخل سيرفر MLD أولًا"});
+    const crypto=require("crypto"),temp=crypto.randomBytes(9).toString("base64url"),hash=await bcrypt.hash(temp,12);
+    await pool.query("UPDATE password_resets SET used_at=NOW() WHERE username=$1 AND used_at IS NULL",[username]);
+    await pool.query("INSERT INTO password_resets(username,discord_username,temp_password_hash,expires_at) VALUES($1,$2,$3,NOW()+INTERVAL '15 minutes')",[username,member.user.username,hash]);
+    await member.send({embeds:[new EmbedBuilder().setTitle("MLD — إعادة كلمة المرور").setDescription("تم طلب إعادة كلمة المرور لحساب موقع MLD.\n\nكلمة المرور المؤقتة:\n**"+temp+"**\n\nتنتهي خلال 15 دقيقة وتستخدم مرة واحدة فقط. بعد تسجيل الدخول غيّرها فورًا.\n\nإذا لم تطلب هذه العملية، تجاهل الرسالة.").setColor("#ff9cdc").setTimestamp()]});
+    await audit({username,discordUsername:member.user.username},"password_reset_request","تم إرسال كلمة مرور مؤقتة عبر Discord DM").catch(()=>{}); res.json({ok:true,message:"أرسلنا كلمة مرور مؤقتة إلى الخاص في Discord"});
+  }catch(e){ console.error("Forgot password:",e.message); res.status(500).json({error:"تعذر إرسال كلمة المرور المؤقتة؛ تأكد أن الخاص مفتوح"}); }
+});
+app.post("/api/auth/change-password",requireAuth,async(req,res)=>{
+  try{ const u=req.session.user,newPassword=String(req.body?.newPassword||""); if(newPassword.length<6||newPassword.length>100) return res.status(400).json({error:"كلمة المرور الجديدة يجب أن تكون 6-100 أحرف"}); const hash=await bcrypt.hash(newPassword,12); await pool.query("UPDATE app_users SET password_hash=$2 WHERE username=$1",[u.username]); await pool.query("UPDATE password_resets SET used_at=COALESCE(used_at,NOW()) WHERE username=$1 AND used_at IS NULL",[u.username]); req.session.user.mustChangePassword=false; await new Promise((resolve,reject)=>req.session.save(err=>err?reject(err):resolve())); await audit(u,"password_change","تغيير كلمة المرور").catch(()=>{}); res.json({ok:true}); }
+  catch(e){ console.error("Change password:",e.message); res.status(500).json({error:"تعذر تغيير كلمة المرور"}); }
 });
 app.post("/api/auth/logout",async(req,res)=>{const u=currentUser(req);if(u) await audit(u,"logout","تسجيل خروج").catch(()=>{});req.session.destroy(()=>res.json({ok:true}));});
 
@@ -702,7 +740,10 @@ ${text}`).setColor("#ff9cdc").setFooter({text:"MLD Community"}).setTimestamp();
   }catch(error){console.error("DM endpoint:",error);res.status(500).json({error:"تعذر الإرسال؛ قد يكون الخاص مقفلًا"});}
 });
 client.on("guildMemberAdd", invalidateMemberSnapshot);
-client.on("guildMemberRemove", invalidateMemberSnapshot);
+client.on("guildMemberRemove", async (member) => {
+  invalidateMemberSnapshot();
+  try{ const username=String(member.user?.username||"").trim(); if(username) await pool.query("DELETE FROM user_sessions WHERE sess->'user'->>'discordUsername' = $1",[username]); }catch(e){ console.error("Membership session revoke:",e.message); }
+});
 client.on("guildMemberUpdate", invalidateMemberSnapshot);
 
 client.on("messageCreate", async (message) => {
