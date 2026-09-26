@@ -1454,6 +1454,74 @@ app.get("/api/admin/discord", requireAdmin, async (req, res) => {
   }
 });
 
+// -------------------- Discord slash commands --------------------
+const slashCommands = [
+  new SlashCommandBuilder().setName("site").setDescription("رابط منصة المجتمع"),
+  new SlashCommandBuilder().setName("server").setDescription("معلومات السيرفر"),
+  new SlashCommandBuilder().setName("members").setDescription("عدد أعضاء السيرفر وحالة الاتصال"),
+  new SlashCommandBuilder().setName("top").setDescription("أبرز إحصائيات التفاعل"),
+  new SlashCommandBuilder().setName("profile").setDescription("عرض ملف عضو Discord").addUserOption(o=>o.setName("user").setDescription("العضو").setRequired(false)),
+  new SlashCommandBuilder().setName("ticket").setDescription("فتح تذكرة دعم").addStringOption(o=>o.setName("subject").setDescription("عنوان التذكرة").setRequired(true)),
+  new SlashCommandBuilder().setName("group").setDescription("عرض المجموعات المنشورة"),
+  new SlashCommandBuilder().setName("games").setDescription("عرض جلسات الألعاب"),
+  new SlashCommandBuilder().setName("ping").setDescription("فحص استجابة البوت")
+].map(c=>c.toJSON());
+
+async function registerSlashCommands(){
+  if(!client.user || !token || !guildId) return;
+  try{
+    const rest=new REST({version:"10"}).setToken(token);
+    await rest.put(Routes.applicationGuildCommands(client.user.id,guildId),{body:slashCommands});
+    console.log("Registered Discord slash commands:", slashCommands.map(c=>c.name).join(", "));
+  }catch(error){console.error("Slash command registration failed:",error.message)}
+}
+
+client.on("interactionCreate", async interaction=>{
+  if(!interaction.isChatInputCommand()) return;
+  try{
+    const name=interaction.commandName;
+    if(name==="ping") return interaction.reply({content:"🏓 Pong · "+client.ws.ping+"ms",ephemeral:true});
+    if(name==="site") return interaction.reply({content:process.env.SITE_URL||"منصة المجتمع متاحة من رابط Railway الخاص بالمشروع.",ephemeral:true});
+    const guild=await getGuild();
+    if(name==="server") return interaction.reply({content:"**"+guild.name+"**\n👥 "+guild.memberCount+" عضو\n🤖 "+client.user.tag,ephemeral:true});
+    if(name==="members"){
+      const members=await getAllMembers(guild,{background:true});
+      const online=members.filter(m=>["online","idle","dnd"].includes(discordStatus(m))).length;
+      return interaction.reply({content:"👥 الأعضاء: "+(guild.memberCount||members.length)+"\n🟢 المتصلون/النشطون: "+online,ephemeral:true});
+    }
+    if(name==="top"){
+      const top=[...activity.values()].sort((a,b)=>b.messages-a.messages).slice(0,5);
+      return interaction.reply({content:top.length?top.map((x,i)=>(i+1)+". <@"+x.userId+"> — "+x.messages+" رسالة").join("\n"):"لا توجد إحصائيات بعد.",ephemeral:true});
+    }
+    if(name==="profile"){
+      const user=interaction.options.getUser("user")||interaction.user;
+      const member=await guild.members.fetch(user.id);
+      const m=memberJson(member);
+      return interaction.reply({content:"**"+m.name+"** (@"+m.username+")\nالحالة: "+m.status+"\nالرتبة: "+m.rank+"\nالرسائل: "+m.stats.messages+"\nالمنشنات: "+m.stats.mentionsReceived,ephemeral:true});
+    }
+    if(name==="ticket"){
+      const subject=interaction.options.getString("subject");
+      const u=findUserByDiscordId(interaction.user.id);
+      if(!u) return interaction.reply({content:"اربط Discord بحسابك في الموقع أولًا.",ephemeral:true});
+      const ticket=createTicket(u.id,subject,"تم فتح التذكرة من Discord بواسطة "+interaction.user.username);
+      await notifyDiscordWebsite("🎫 تذكرة جديدة","تم إنشاء التذكرة "+ticket.id+" من Discord.");
+      return interaction.reply({content:"تم فتح التذكرة #"+ticket.id+" بنجاح.",ephemeral:true});
+    }
+    if(name==="group"){
+      const groups=[...groups.values()].filter(g=>g.status==="approved"||g.status==="active").slice(0,10);
+      return interaction.reply({content:groups.length?groups.map(g=>"👥 **"+g.name+"** — "+(g.memberCount||0)+" عضو").join("\n"):"لا توجد مجموعات منشورة.",ephemeral:true});
+    }
+    if(name==="games"){
+      const active=[...games.values()].filter(g=>g.status!=="finished").slice(0,10);
+      return interaction.reply({content:active.length?active.map(g=>"🎮 **"+g.name+"** — "+g.players.length+"/"+g.maxPlayers).join("\n"):"لا توجد جلسات ألعاب حالية.",ephemeral:true});
+    }
+  }catch(error){
+    console.error("Discord interaction error:",error);
+    if(interaction.replied||interaction.deferred) await interaction.followUp({content:"حدث خطأ أثناء تنفيذ الأمر.",ephemeral:true});
+    else await interaction.reply({content:"حدث خطأ أثناء تنفيذ الأمر.",ephemeral:true});
+  }
+});
+
 // -------------------- Discord events --------------------
 
 client.on("guildMemberAdd", invalidateMemberSnapshot);
@@ -1501,7 +1569,7 @@ client.once("ready", () => {
   const activityType = typeMap[statusType] ?? 3;
   const botActivity = { name: statusName, type: activityType };
   if (activityType === 1) botActivity.url = process.env.BOT_STREAM_URL || "https://twitch.tv/Njm";
-  client.user.setPresence({ status: "online", activities: [botActivity] });
+  client.user.setPresence({ status: "online", activities: [botActivity] });\n  registerSlashCommands();
 });
 
 app.use((error, req, res, next) => {
