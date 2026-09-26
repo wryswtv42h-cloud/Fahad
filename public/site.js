@@ -1,6 +1,6 @@
 "use strict";
 
-const socket = io();
+const socket = typeof io === "function" ? io() : { on() {}, emit() {} };
 
 const state = {
   user: null,
@@ -482,7 +482,9 @@ function renderMembers(members) {
         "/logo.svg";
 
       const name =
+        member.name ||
         member.displayName ||
+        member.globalName ||
         member.username ||
         member.user?.username ||
         "عضو";
@@ -2838,6 +2840,7 @@ function closeModal() {
 document.addEventListener(
   "click",
   async event => {
+    try {
 
     const viewButton =
       event.target.closest(
@@ -3071,7 +3074,10 @@ document.addEventListener(
 
       return;
     }
-
+    } catch (error) {
+      console.error("Button action error:", error);
+      showToast(error?.message || "تعذر تنفيذ العملية", "error");
+    }
   }
 );
 
