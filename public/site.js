@@ -60,13 +60,144 @@ document.querySelectorAll("[data-watch]").forEach(btn=>btn.onclick=()=>openGameS
 document.querySelectorAll("[data-game-info]").forEach(btn=>btn.onclick=()=>{const g=catalog.find(x=>x[0]===btn.dataset.gameInfo);if(!g)return;openGameInfo(g)});
 setStatus("الألعاب جاهزة · MLD")}
 function openGameInfo(g){const modal=$("#modal"),box=$("#modal-content");box.innerHTML='<div class="game-info-modal"><div class="mld-watermark">MLD</div><div class="game-info-icon">'+g[2]+'</div><p class="eyebrow">MLD GAME</p><h2>'+esc(g[1])+'</h2><p class="game-info-description">'+esc(g[3])+'</p><div class="game-info-actions"><button class="primary" id="game-info-close">تمام، فهمت</button></div></div>';modal.classList.remove("hidden");$("#game-info-close").onclick=()=>modal.classList.add("hidden")}
-async function openGameSession(id,spectator=false){searchWrap.style.display="none";title.textContent=spectator?"مشاهدة الجلسة":"جلسة اللعبة";subtitle.textContent=spectator?"أنت متفرج — لا تحجز مكانًا ولا تحتاج دخولًا.":"أنت داخل الجلسة؛ لا يمكنك دخول جلسة ثانية حتى تخرج.";content.className="game-stage-wrap";const guestId=localStorage.getItem("mld_guest_game_id")||"";const guestName=sessionStorage.getItem("mld_guest_name")||"زائر";let stopped=false,joined=spectator;
-const load=async()=>{if(stopped)return;if(!spectator&&!joined){const r=await fetch("/api/games/"+id+"/join",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({guestId,guestName})});const d=await r.json();if(!r.ok){alert(d.error||"تعذر الدخول");return gamesReal()}joined=true}const r=await fetch("/api/games/"+id+(spectator?"/watch":""));const d=await r.json();if(!r.ok){stopped=true;return gamesReal()}const g=d.game,players=Array.isArray(g.players)?g.players:[],isHost=mldUser?g.host_username===mldUser.username:String(players[0]?.guestId||"")===guestId,me=players.find(x=>mldUser?x.username===mldUser.username:x.guestId===guestId);
-const prompts={CODENAMES:"اكشف كلمات فريقك بدون كشف كلمة الموت.",SPYFALL:"اكتشف الجاسوس قبل أن يعرف المكان.",PICTIONARY:"ارسم كلمة والآخرون يخمنون.",CHARADES:"مثّل الكلمة بدون كلام.",WHOAMI:"اسأل أسئلة نعم/لا حتى تعرف الشخصية.",TABOO:"اشرح الكلمة بدون الكلمات الممنوعة.",WORD_BOMB:"لا تتأخر! اكتب كلمة قبل انفجار القنبلة.",TRUTH_LIE:"اكتشف من يقول الحقيقة.",EMOJI_GUESS:"فك الإيموجي وخمن الكلمة.",TRIVIA:"جاوب أسرع من الباقين.",CATEGORIES:"هات كلمة تناسب التصنيف قبل الجميع.",LIAR:"اكشف الكذاب.",HOT_SEAT:"صاحب الكرسي يجاوب والسؤال على الشاشة.",WOULD_YOU_RATHER:"اختر بين خيارين وشوف تصويت الجلسة.",DRAW_GUESS:"ارسم والباقي يخمن.",FASTEST:"أول إجابة صحيحة تكسب.",RIDDLE_RUSH:"حل اللغز بأسرع وقت.",SECRET_WORD:"استخرج الكلمة السرية من التلميحات.",MIMIC:"قلد الحركة وخليهم يخمنون.",GUESS_PLAYER:"خمن اللاعب من التلميحات.",UNO:"اسحب ورقة والعب دورك.",LUDO:"حرّك قطعتك واربح السباق.",BALOOT:"العب يدك وخطط للفوز.",DAQSH:"ابدأ الجولة واضرب الخصم في الوقت المناسب.",QAWSAR:"اختَر ورقتك وحاول تكسب الجولة."};const prompt=prompts[g.game]||"ابدأ الجولة واستمتع.";
-content.innerHTML='<article class="game-stage"><div class="game-stage-top"><div><span class="eyebrow">'+(spectator?"👀 مشاهدة":"🎮 جلسة")+'</span><h2>'+esc(g.game)+'</h2><p class="muted">'+esc(prompt)+'</p></div><div class="stage-actions"><button id="fullscreen-btn">⛶ ملء الشاشة</button><button id="back-games">رجوع</button></div></div><div class="game-board" id="game-board"><div class="game-board-glow"></div><div class="game-board-content"><div class="game-emblem">'+(g.game==="CODENAMES"?"🕵️":g.game==="PICTIONARY"?"🎨":"🎮")+'</div><h2>'+esc(g.game)+'</h2><p>'+esc(prompt)+'</p><button class="primary" id="round-action">'+(g.status==="playing"?"ابدأ دورك":"بانتظار بداية الجلسة")+'</button><div id="round-result" class="round-result"></div></div></div><div class="stage-bottom"><div class="game-players">'+players.map(p=>'<div class="group-item"><span><b>'+esc(p.username)+'</b><small>'+(p.host?"👑 مالك":"")+(p.bot?" · 🤖 بوت":"")+'</small></span></div>').join("")+'</div><div class="stage-controls">'+(g.status!=="playing"&&!spectator&&isHost?'<button class="primary" id="game-start">ابدأ الجلسة + كمّل ببوتات</button>':"")+(g.status==="playing"&&!spectator&&mldUser&&me&&!me.bot?'<button class="primary" id="game-win">🏆 فوزي +10</button>':"")+(spectator?'<span class="muted">👀 وضع المشاهد — تقدر تكبّر اللعبة.</span>':'<button class="danger" id="game-leave">خروج من الجلسة</button>')+'</div></div></article>';
-$("#back-games").onclick=()=>{stopped=true;gamesReal()};$("#fullscreen-btn").onclick=()=>{const el=$("#game-board");if(!document.fullscreenElement)el.requestFullscreen?.();else document.exitFullscreen?.()};$("#round-action").onclick=()=>{if(g.status!=="playing")return;const actions=["🔥 حركة ناجحة!","⚡ سرعة ممتازة!","🎯 إصابة مباشرة!","🧠 إجابة صحيحة!","🎉 نقطة لك!"];$("#round-result").textContent=actions[Math.floor(Math.random()*actions.length)]};
-$("#game-start")?.addEventListener("click",async()=>{const rr=await fetch("/api/games/"+id+"/start",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({guestId})}),dd=await rr.json();if(!rr.ok)return alert(dd.error);load()});$("#game-win")?.addEventListener("click",async()=>{const rr=await fetch("/api/games/"+id+"/score",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({points:10})}),dd=await rr.json();if(!rr.ok)return alert(dd.error);alert("تم احتساب الفوز في TOP ✓");load()});$("#game-leave")?.addEventListener("click",async()=>{stopped=true;await fetch("/api/games/"+id+"/leave",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({guestId}));gamesReal()});
-};await load();if(!stopped){const t=setInterval(load,3000);setTimeout(()=>clearInterval(t),30*60*1000)}}
+async function openGameSession(id,spectator=false){
+  searchWrap.style.display="none";
+  title.textContent=spectator?"مشاهدة الجلسة":"جلسة اللعبة";
+  subtitle.textContent=spectator?"أنت متفرج — لا تحجز مكانًا ولا تحتاج دخولًا.":"أنت داخل الجلسة؛ لا يمكنك دخول جلسة ثانية حتى تخرج.";
+  content.className="game-stage-wrap";
+  const guestId=localStorage.getItem("mld_guest_game_id")||"";
+  const guestName=sessionStorage.getItem("mld_guest_name")||"زائر";
+  let stopped=false;
+  let joined=spectator;
+  const load=async()=>{
+    if(stopped)return;
+    try{
+      if(!spectator&&!joined){
+        const jr=await fetch("/api/games/"+id+"/join",{
+          method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({guestId,guestName})
+        });
+        const jd=await jr.json();
+        if(!jr.ok){
+          alert(jd.error||"تعذر الدخول");
+          stopped=true;
+          return gamesReal();
+        }
+        joined=true;
+      }
+      const url="/api/games/"+id+(spectator?"/watch":"");
+      const r=await fetch(url);
+      const d=await r.json();
+      if(!r.ok){
+        stopped=true;
+        return gamesReal();
+      }
+      const g=d.game||{};
+      const players=Array.isArray(g.players)?g.players:[];
+      const isHost=mldUser
+        ? g.host_username===mldUser.username
+        : String(players[0]?.guestId||"")===guestId;
+      const me=players.find(p=>mldUser?p.username===mldUser.username:p.guestId===guestId);
+      const prompts={
+        CODENAMES:"اكشف كلمات فريقك بدون كشف كلمة الموت.",
+        SPYFALL:"اكتشف الجاسوس قبل أن يعرف المكان.",
+        PICTIONARY:"ارسم كلمة والآخرون يخمنون.",
+        CHARADES:"مثّل الكلمة بدون كلام.",
+        WHOAMI:"اسأل أسئلة نعم/لا حتى تعرف الشخصية.",
+        TABOO:"اشرح الكلمة بدون الكلمات الممنوعة.",
+        WORD_BOMB:"لا تتأخر! اكتب كلمة قبل انفجار القنبلة.",
+        TRUTH_LIE:"اكتشف من يقول الحقيقة.",
+        EMOJI_GUESS:"فك الإيموجي وخمن الكلمة.",
+        TRIVIA:"جاوب أسرع من الباقين.",
+        CATEGORIES:"هات كلمة تناسب التصنيف قبل الجميع.",
+        LIAR:"اكشف الكذاب.",
+        HOT_SEAT:"صاحب الكرسي يجاوب والسؤال على الشاشة.",
+        WOULD_YOU_RATHER:"اختر بين خيارين وشوف تصويت الجلسة.",
+        DRAW_GUESS:"ارسم والباقي يخمن.",
+        FASTEST:"أول إجابة صحيحة تكسب.",
+        RIDDLE_RUSH:"حل اللغز بأسرع وقت.",
+        SECRET_WORD:"استخرج الكلمة السرية من التلميحات.",
+        MIMIC:"قلد الحركة وخليهم يخمنون.",
+        GUESS_PLAYER:"خمن اللاعب من التلميحات.",
+        UNO:"اسحب ورقة والعب دورك.",
+        LUDO:"حرّك قطعتك واربح السباق.",
+        BALOOT:"العب يدك وخطط للفوز.",
+        DAQSH:"ابدأ الجولة واضرب الخصم في الوقت المناسب.",
+        QAWSAR:"اختَر ورقتك وحاول تكسب الجولة."
+      };
+      const prompt=prompts[g.game]||"ابدأ الجولة واستمتع.";
+      const emblem=g.game==="CODENAMES"?"🕵️":g.game==="PICTIONARY"?"🎨":"🎮";
+      const playersHtml=players.map(p=>'<div class="group-item"><span><b>'+esc(p.username)+'</b><small>'+(p.host?"👑 مالك":"")+(p.bot?" · 🤖 بوت":"")+'</small></span></div>').join("");
+      const startButton=g.status!=="playing"&&!spectator&&isHost
+        ? '<button class="primary" id="game-start">ابدأ الجلسة + كمّل ببوتات</button>'
+        : "";
+      const winButton=g.status==="playing"&&!spectator&&mldUser&&me&&!me.bot
+        ? '<button class="primary" id="game-win">🏆 فوزي +10</button>'
+        : "";
+      const leaveButton=spectator
+        ? '<span class="muted">👀 وضع المشاهد — تقدر تكبّر اللعبة.</span>'
+        : '<button class="danger" id="game-leave">خروج من الجلسة</button>';
+      content.innerHTML='<article class="game-stage"><div class="game-stage-top"><div><span class="eyebrow">'+(spectator?"👀 مشاهدة":"🎮 جلسة")+'</span><h2>'+esc(g.game||"لعبة")+'</h2><p class="muted">'+esc(prompt)+'</p></div><div class="stage-actions"><button id="fullscreen-btn">⛶ ملء الشاشة</button><button id="back-games">رجوع</button></div></div><div class="game-board" id="game-board"><div class="game-board-glow"></div><div class="game-board-content"><div class="game-emblem">'+emblem+'</div><h2>'+esc(g.game||"لعبة")+'</h2><p>'+esc(prompt)+'</p><button class="primary" id="round-action">'+(g.status==="playing"?"ابدأ دورك":"بانتظار بداية الجلسة")+'</button><div id="round-result" class="round-result"></div></div></div><div class="stage-bottom"><div class="game-players">'+playersHtml+'</div><div class="stage-controls">'+startButton+winButton+leaveButton+'</div></div></article>';
+      $("#back-games").onclick=()=>{
+        stopped=true;
+        gamesReal();
+      };
+      $("#fullscreen-btn").onclick=()=>{
+        const el=$("#game-board");
+        if(!document.fullscreenElement)el.requestFullscreen?.();
+        else document.exitFullscreen?.();
+      };
+      $("#round-action").onclick=()=>{
+        if(g.status!=="playing")return;
+        const actions=["🔥 حركة ناجحة!","⚡ سرعة ممتازة!","🎯 إصابة مباشرة!","🧠 إجابة صحيحة!","🎉 نقطة لك!"];
+        $("#round-result").textContent=actions[Math.floor(Math.random()*actions.length)];
+      };
+      const start=$("#game-start");
+      if(start)start.onclick=async()=>{
+        const rr=await fetch("/api/games/"+id+"/start",{
+          method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({guestId})
+        });
+        const dd=await rr.json();
+        if(!rr.ok)return alert(dd.error||"تعذر بدء الجلسة");
+        await load();
+      };
+      const win=$("#game-win");
+      if(win)win.onclick=async()=>{
+        const rr=await fetch("/api/games/"+id+"/score",{
+          method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({points:10})
+        });
+        const dd=await rr.json();
+        if(!rr.ok)return alert(dd.error||"تعذر احتساب الفوز");
+        alert("تم احتساب الفوز في TOP ✓");
+        await load();
+      };
+      const leave=$("#game-leave");
+      if(leave)leave.onclick=async()=>{
+        stopped=true;
+        await fetch("/api/games/"+id+"/leave",{
+          method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({guestId})
+        });
+        gamesReal();
+      };
+    }catch(e){
+      console.error("Game session:",e);
+      stopped=true;
+      gamesReal();
+    }
+  };
+  await load();
+  if(!stopped){
+    const poll=setInterval(load,3000);
+    setTimeout(()=>clearInterval(poll),30*60*1000);
+  }
+}
 async function ownerLogs(){if(!mldUser||!["owner","admin"].includes(mldUser.role)){return change("login")}searchWrap.style.display="none";title.textContent=mldUser.role==="owner"?"سجل الأونر الكامل":"سجل الإدارة";subtitle.textContent="الألعاب، التيكت، التقديمات، القروبات، الآراء والرسائل الخاصة كلها هنا.";content.className="feature-card";content.innerHTML="<h3>آخر العمليات</h3><div id='owner-log-list' class='log-list'>جاري التحميل...</div>";const d=await fetch("/api/owner/logs").then(r=>r.json());$("#owner-log-list").innerHTML=(d.logs||[]).map(x=>`<div class="log-item"><b>${esc(x.action)}</b><span>${esc(x.username||"-")} · Discord: ${esc(x.discord_username||"-")} · ${new Date(x.created_at).toLocaleString("ar-SA")}</span><small>${esc(x.details||"")}</small></div>`).join("")||'<p class="muted">لا يوجد سجل.</p>';setStatus("السجل جاهز")}async function announcementsLoad(){
   const box=document.querySelector("#announcement-bar"); if(!box)return;
   try{const d=await fetch("/api/announcements").then(r=>r.json()); const a=d.announcements&&d.announcements[0];
