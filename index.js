@@ -244,6 +244,16 @@ app.post("/api/auth/login",async(req,res)=>{
   }catch(e){console.error("Login:",e);res.status(500).json({error:"تعذر تسجيل الدخول"});}
 });
 app.post("/api/auth/logout",async(req,res)=>{const u=currentUser(req);if(u) await audit(u,"logout","تسجيل خروج").catch(()=>{});req.session.destroy(()=>res.json({ok:true}));});
+\n
+app.get("/api/tickets",requireAuth,async(req,res)=>{const q=await pool.query("SELECT id,subject,message,status,created_at FROM tickets WHERE username=$1 ORDER BY id DESC",[req.session.user.username]);res.json({tickets:q.rows});});
+app.post("/api/tickets",requireAuth,async(req,res)=>{const subject=String(req.body?.subject||"").trim(),message=String(req.body?.message||"").trim(),u=req.session.user;if(subject.length<3||subject.length>120||message.length<3||message.length>3000)return res.status(400).json({error:"بيانات التيكت غير صحيحة"});const q=await pool.query("INSERT INTO tickets(username,discord_username,subject,message) VALUES($1,$2,$3,$4) RETURNING id",[u.username,u.discordUsername,subject,message]);await audit(u,"ticket_create",`#${q.rows[0].id} ${subject}`);res.json({ok:true,id:q.rows[0].id});});
+app.post("/api/applications",requireAuth,async(req,res)=>{const type=String(req.body?.type||"تقديم").trim(),answers=req.body?.answers||{},u=req.session.user;if(type.length>60||JSON.stringify(answers).length>8000)return res.status(400).json({error:"بيانات التقديم غير صحيحة"});const q=await pool.query("INSERT INTO applications(username,discord_username,type,answers) VALUES($1,$2,$3,$4) RETURNING id",[u.username,u.discordUsername,type,JSON.stringify(answers)]);await audit(u,"application_create",`#${q.rows[0].id} ${type}`);res.json({ok:true,id:q.rows[0].id});});
+app.get("/api/groups",requireAuth,async(req,res)=>{const q=await pool.query("SELECT id,name,description,created_at FROM community_groups WHERE username=$1 ORDER BY id DESC",[req.session.user.username]);res.json({groups:q.rows});});
+app.post("/api/groups",requireAuth,async(req,res)=>{const name=String(req.body?.name||"").trim(),description=String(req.body?.description||"").trim(),u=req.session.user;if(name.length<2||name.length>60||description.length>240)return res.status(400).json({error:"بيانات القروب غير صحيحة"});const q=await pool.query("INSERT INTO community_groups(username,discord_username,name,description) VALUES($1,$2,$3,$4) RETURNING *",[u.username,u.discordUsername,name,description]);await audit(u,"group_create",name);res.json({ok:true,group:q.rows[0]});});
+app.delete("/api/groups/:id",requireAuth,async(req,res)=>{await pool.query("DELETE FROM community_groups WHERE id=$1 AND username=$2",[req.params.id,req.session.user.username]);res.json({ok:true});});
+app.get("/api/owner/logs",requireOwner,async(req,res)=>{const q=await pool.query("SELECT id,username,discord_username,action,details,created_at FROM audit_logs ORDER BY id DESC LIMIT 200");res.json({logs:q.rows});});
+app.get("/api/owner/tickets",requireOwner,async(req,res)=>{const q=await pool.query("SELECT id,username,discord_username,subject,message,status,created_at FROM tickets ORDER BY id DESC LIMIT 100");res.json({tickets:q.rows});});
+app.get("/api/owner/applications",requireOwner,async(req,res)=>{const q=await pool.query("SELECT id,username,discord_username,type,answers,status,created_at FROM applications ORDER BY id DESC LIMIT 100");res.json({applications:q.rows});});
 \napp.get("/health", (req, res) => {
   res.json({
     ok: true,
@@ -475,7 +485,7 @@ app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-app.listen(port, () => console.log(`MLD listening on port ${port}`));
+app.listen(port, async () => { console.log(`MLD listening on port ${port}`); try { await initAppDatabase(); await ensureOwner(); console.log("App database ready"); } catch (error) { console.error("Database init failed:", error.message); } });
 client.once("ready", () => console.log(`Logged in as ${client.user.tag}`));
 client.login(token).catch((error) => {
   console.error("Discord login failed:", error.message);
