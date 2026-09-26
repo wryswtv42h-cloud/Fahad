@@ -103,6 +103,7 @@ const notifications = new Map();
 const games = new Map();
 const gameInvites = new Map();
 const gameStats = new Map();
+const announcements = [];
 
 let nextUserId = 1;
 let nextGroupId = 1;
@@ -116,6 +117,7 @@ let nextReviewId = 1;
 let nextNotificationId = 1;
 let nextGameId = 1;
 let nextInviteId = 1;
+let nextAnnouncementId = 1;
 
 const activity = new Map();
 const voiceSessions = new Map();
@@ -839,6 +841,23 @@ app.post("/api/groups/:id/join", requireAuth, async (req, res) => {
   res.status(201).json({ request });
 });
 
+// -------------------- Group chat --------------------
+app.get("/api/groups/:id/messages", requireAuth, (req,res) => {
+  const group=groups.get(req.params.id);
+  if(!group) return res.status(404).json({error:"المجموعة غير موجودة"});
+  if(!isGroupMember(group.id,req.user.id) && !isAdminUser(req.user)) return res.status(403).json({error:"يجب أن تكون عضوًا"});
+  res.json({messages:groupMessages.get(group.id)||[]});
+});
+app.post("/api/groups/:id/messages", requireAuth, async (req,res) => {
+  const group=groups.get(req.params.id);
+  if(!group) return res.status(404).json({error:"المجموعة غير موجودة"});
+  if(!isGroupMember(group.id,req.user.id) && !isAdminUser(req.user)) return res.status(403).json({error:"يجب أن تكون عضوًا"});
+  const message=cleanText(req.body?.message,1500);
+  if(!message) return res.status(400).json({error:"الرسالة مطلوبة"});
+  const item={id:String(nextMessageId++),groupId:group.id,userId:req.user.id,username:req.user.username,message,createdAt:now()};
+  const list=groupMessages.get(group.id)||[]; list.push(item); if(list.length>300) list.splice(0,list.length-300); groupMessages.set(group.id,list);
+  res.status(201).json({message:item});
+});
 // -------------------- Tickets --------------------
 
 app.get("/api/tickets", requireAuth, (req, res) => {
@@ -1057,6 +1076,18 @@ app.post("/api/watch/:id/chat", requireAuth, (req, res) => {
 
 // -------------------- Games --------------------
 
+app.get("/api/games/:id/messages", requireAuth, (req,res)=>{
+  const game=games.get(req.params.id); if(!game) return res.status(404).json({error:"اللعبة غير موجودة"});
+  if(!game.players.some(p=>p.userId===req.user.id) && !isAdminUser(req.user)) return res.status(403).json({error:"يجب أن تكون داخل اللعبة"});
+  res.json({messages:game.chat||[]});
+});
+app.post("/api/games/:id/messages", requireAuth, (req,res)=>{
+  const game=games.get(req.params.id); if(!game) return res.status(404).json({error:"اللعبة غير موجودة"});
+  if(!game.players.some(p=>p.userId===req.user.id) && !isAdminUser(req.user)) return res.status(403).json({error:"يجب أن تكون داخل اللعبة"});
+  const message=cleanText(req.body?.message,1000); if(!message) return res.status(400).json({error:"الرسالة مطلوبة"});
+  game.chat=Array.isArray(game.chat)?game.chat:[]; const item={id:randomToken(),userId:req.user.id,username:req.user.username,message,createdAt:now()};
+  game.chat.push(item); if(game.chat.length>200) game.chat.shift(); game.updatedAt=now(); res.status(201).json({message:item});
+});
 app.get("/api/games", (req, res) => {
   res.json({ games: [...games.values()].filter((g) => g.status !== "finished").map(publicGame) });
 });
@@ -1172,6 +1203,25 @@ app.post("/api/games/:id/finish", requireAuth, (req, res) => {
 
 app.get("/api/games/stats/me", requireAuth, (req, res) => res.json({ stats: gameStatsFor(req.user.id) }));
 
+// -------------------- Site announcements --------------------
+app.get("/api/announcements",(req,res)=>res.json({announcements:announcements.filter(a=>a.active!==false).slice(0,20)}));
+app.get("/api/admin/announcements",requireAdmin,(req,res)=>res.json({announcements:announcements.slice(0,100)}));
+app.post("/api/admin/announcements",requireAdmin,(req,res)=>{
+  const title=cleanText(req.body?.title,120), message=cleanText(req.body?.message,2000);
+  if(!title||!message)return res.status(400).json({error:"العنوان والنص مطلوبان"});
+  const item={id:String(nextAnnouncementId++),title,message,createdBy:req.user.id,createdByUsername:req.user.username,createdAt:now(),active:true};
+  announcements.unshift(item); if(announcements.length>100)announcements.length=100;
+  pushLog("announcement_created",{by:req.user.id,announcementId:item.id,title});
+  res.status(201).json({announcement:item});
+});
+app.patch("/api/admin/announcements/:id",requireAdmin,(req,res)=>{
+  const item=announcements.find(a=>a.id===req.params.id); if(!item)return res.status(404).json({error:"الإعلان غير موجود"});
+  if(req.body?.active!==undefined)item.active=Boolean(req.body.active);
+  if(req.body?.title!==undefined)item.title=cleanText(req.body.title,120);
+  if(req.body?.message!==undefined)item.message=cleanText(req.body.message,2000);
+  pushLog("announcement_updated",{by:req.user.id,announcementId:item.id});
+  res.json({announcement:item});
+});
 // -------------------- Admin management --------------------
 app.get("/api/admin/staff", requireAdmin, (req,res) => {
   res.json({ owner: userJson(owner), admins: [...admins].map((id) => userJson(users.get(id))).filter(Boolean) });
