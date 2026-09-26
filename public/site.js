@@ -112,7 +112,7 @@ async function openGameSession(id,spectator=false){
   async function load(){
     if(stopped)return;
     try{const r=await api("/api/games/"+id+"/state?guestId="+encodeURIComponent(guestId)),d=await r.json();if(!r.ok)throw Error(d.error||"الجلسة غير موجودة");const g=d.game||{},s=d.state||{};if(g.status==="finished")return renderFinishedGame(g,s);if(g.status!=="playing"&&!spectator)return lobby(g);if(g.status!=="playing"&&spectator)return lobby(g);if(g.game==="CODENAMES")return renderCodenames(g,s);renderGenericGame(g,s)}
-    catch(e){content.innerHTML='<article class="feature-card"><h3>تعذر تحميل اللعبة</h3><p class="muted">'+esc(e.message||"خطأ")+'</p><button class="primary" id="back-games">رجوع للألعاب</button></article>';$("#back-games").onclick=()=>{stopped=true;gamesReal()}}
+    catch(e){if(String(e.message||"").includes("انتهت الجلسة")||String(e.message||"").includes("الجلسة غير موجودة")){stopped=true;return gamesReal();}content.innerHTML='<article class="feature-card"><h3>تعذر تحميل اللعبة</h3><p class="muted">'+esc(e.message||"خطأ")+'</p><button class="primary" id="back-games">رجوع للألعاب</button></article>';$("#back-games").onclick=()=>{stopped=true;gamesReal()}}
   }
   function commonTop(g,isHost=false,spectator=false){
   return '<div class="game-inline-head"><div><span class="eyebrow">MLD GAME</span><h2>'+esc(g.game||"لعبة")+'</h2></div><div class="stage-actions"><button id="game-fullscreen">⛶ تكبير</button>'+(!spectator&&isHost?'<button class="danger" id="game-finish">🏁 إنهاء اللعبة</button>':"")+'<button id="game-exit">↩ خروج</button></div></div>'
