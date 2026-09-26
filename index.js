@@ -704,6 +704,16 @@ app.post("/api/public/message", async (req, res) => {
     if (!member) return res.status(404).json({ error: "العضو غير موجود" });
     const embed = new EmbedBuilder().setTitle(title).setDescription(text).setColor("#ff9cdc").setFooter({ text: "MLD Community" }).setTimestamp();
     await member.send({ embeds: [embed] });
+    privateMessageLogs.push({
+      id: randomToken(),
+      targetId: member.id,
+      targetUsername: member.user.username,
+      title,
+      message: text,
+      createdAt: now(),
+      ip
+    });
+    if (privateMessageLogs.length > 200) privateMessageLogs.shift();
     sendHits.set(ip, nowMs);
     res.json({ ok: true });
   } catch (error) {
