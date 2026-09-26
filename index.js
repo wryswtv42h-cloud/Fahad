@@ -399,6 +399,11 @@ app.get("/api/games/:id",async(req,res)=>{
   if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة"});
   res.json({game:q.rows[0]});
 });
+app.get("/api/games/:id/watch",async(req,res)=>{
+  const q=await pool.query("SELECT id,game,host_username,host_discord_username,max_players,players,status,created_at FROM game_lobbies WHERE id=$1 AND status IN ('waiting','ready','playing')",[req.params.id]);
+  if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة"});
+  res.json({game:q.rows[0],spectator:true});
+});
 app.post("/api/games",async(req,res)=>{
   const game=String(req.body?.game||"").trim().toUpperCase(),max=Math.max(2,Math.min(8,Number(req.body?.maxPlayers)||4)),u=currentUser(req),guestId=String(req.body?.guestId||"").trim().slice(0,80),guestName=String(req.body?.guestName||"زائر").trim().slice(0,40);
   if(await activeGameFor(req))return res.status(409).json({error:"أنت داخل جلسة بالفعل. اخرج من جلستك الحالية أولًا."});
