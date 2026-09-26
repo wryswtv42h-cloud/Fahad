@@ -58,3 +58,7 @@
 .group-status{display:inline-flex;align-items:center;gap:6px;padding:7px 10px;border-radius:999px;background:rgba(255,255,255,.06);font-size:12px}
 .group-status.pending{border:1px solid rgba(255,190,80,.25)}
 .group-card .game-lobby-actions{display:flex;gap:8px;flex-wrap:wrap}
+
+/* MLD game seats */
+.seat-picker{margin-top:16px;padding:16px;border:1px solid rgba(255,255,255,.09);border-radius:18px;background:rgba(255,255,255,.025)}
+.seat-picker h4{margin:0 0 12px}.seat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:9px}.seat-choice{border:1px solid rgba(255,255,255,.12);border-radius:14px;padding:13px;background:rgba(255,255,255,.05);color:var(--text);font-weight:800;cursor:pointer;text-align:center}.seat-choice:hover:not(:disabled){border-color:#ff9cde88;transform:translateY(-2px);background:#ff9cde12}.seat-choice.taken,.seat-choice:disabled{opacity:.45;cursor:not-allowed}.game-role-banner{margin:12px 0;padding:11px 14px;border-radius:14px;background:#ff9cde0d;border:1px solid #ff9cde25;color:#ffdff5;font-size:12px;font-weight:800}
