@@ -397,7 +397,7 @@ app.post("/api/tickets/:id/messages",requireAuth,async(req,res)=>{
 app.post("/api/owner/tickets/:id/status",requireAdmin,async(req,res)=>{
   const status=String(req.body?.status||"").toLowerCase(),id=Number(req.params.id);
   if(!["open","closed","pending"].includes(status))return res.status(400).json({error:"حالة غير صحيحة"});
-  const q=await pool.query("UPDATE tickets SET status=$1 WHERE id=$2 RETURNING id,status",[status,id]);
+  const q=await pool.query("UPDATE tickets SET status=$1,closed_at=CASE WHEN $1='closed' THEN NOW() ELSE NULL END,closed_by=CASE WHEN $1='closed' THEN $2 ELSE NULL END WHERE id=$3 RETURNING id,status,closed_at,closed_by",[status,req.session.user.username,id]);
   if(!q.rowCount)return res.status(404).json({error:"التيكت غير موجود"});
   await audit(req.session.user,"ticket_status",`#${id} => ${status}`);
   res.json({ok:true,ticket:q.rows[0]});
