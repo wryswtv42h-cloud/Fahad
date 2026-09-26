@@ -122,7 +122,7 @@ async function openGroup(id){
   if(!await ensureAuth())return;
   try{
     const d=await api("/api/groups/"+encodeURIComponent(id)),g=d.group;
-    const isMember=state.user&&(g.owner?.id===state.user.id);
+    const isMember=state.user&&(g.owner?.id===state.user.id||(g.members||[]).some(m=>(m.id||m.userId)===state.user.id));
     const joinButton=isMember?'':'<button class="secondary" id="group-join-btn">طلب الانضمام</button>';
     modal("👥 "+esc(g.name),'<div class="group-room"><div class="group-room-head"><span class="badge">'+esc(g.status)+'</span><h3>'+esc(g.name)+'</h3><p>'+esc(g.description||"بدون وصف")+'</p><small>'+esc(g.category||"عام")+' · '+(g.memberCount||0)+' عضو</small></div><div class="chat-panel"><div class="chat-title">محادثة المجموعة</div><div id="group-chat" class="room-chat"><div class="empty">جاري تحميل المحادثة...</div></div><form id="group-chat-form" class="chat-form"><input id="group-chat-input" maxlength="1500" placeholder="اكتب رسالة للمجموعة..." required><button class="primary">إرسال</button></form></div><div class="game-actions">'+joinButton+'<button class="secondary" data-modal-close>إغلاق</button></div></div>');
     try{await refreshGroupChat(id)}catch(e){if($("#group-chat"))$("#group-chat").innerHTML='<div class="empty">'+esc(e.message)+'</div>'}
