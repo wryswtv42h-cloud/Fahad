@@ -5,6 +5,10 @@ const path = require("path");
 const express = require("express");
 const cors = require("cors");
 const { Client, GatewayIntentBits, EmbedBuilder } = require("discord.js");
+const bcrypt = require("bcryptjs");
+const session = require("express-session");
+const pgSession = require("connect-pg-simple")(session);
+const { Pool } = require("pg");
 
 const token = process.env.DISCORD_BOT_TOKEN;
 const guildId = process.env.DISCORD_GUILD_ID;
@@ -29,6 +33,8 @@ const app = express();
 app.disable("x-powered-by");
 app.use(cors());
 app.use(express.json({ limit: "20kb" }));
+const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : undefined });
+app.use(session({ secret: process.env.SESSION_SECRET || "mld-session-secret", resave: false, saveUninitialized: false, store: new pgSession({ pool, tableName: "user_sessions", createTableIfMissing: true }), cookie: { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", maxAge: 2592000000 } }));
 app.use(express.static(path.join(__dirname, "public")));
 
 const leadershipRoleIds = [
