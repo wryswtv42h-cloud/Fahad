@@ -597,6 +597,29 @@ app.get("/api/public/reviews", (req, res) => {
 
 // -------------------- Public Discord API --------------------
 
+app.get("/api/public/community", async (req, res) => {
+  try {
+    const guild = await getGuild();
+    const members = await getAllMembers(guild);
+    const online = members.filter(m => m.presence?.status && m.presence.status !== "offline").length;
+    const roleCounts = {};
+    for (const m of members) {
+      for (const r of m.roles.cache.values()) {
+        if (r.id !== guild.id) roleCounts[r.id] = (roleCounts[r.id] || 0) + 1;
+      }
+    }
+    const roles = [...guild.roles.cache.values()]
+      .filter(r => r.id !== guild.id)
+      .sort((a,b) => (roleCounts[b.id]||0) - (roleCounts[a.id]||0) || b.position-a.position)
+      .slice(0,12)
+      .map(r => ({id:r.id,name:r.name,color:r.hexColor,count:roleCounts[r.id]||0,position:r.position}));
+    const recent = members.filter(m => !m.user.bot).sort((a,b) => {
+      const aa=getActivity(a.id), bb=getActivity(b.id); return (bb.messages+bb.voiceJoins+bb.chatRounds)-(aa.messages+aa.voiceJoins+aa.chatRounds);
+    }).slice(0,10).map(memberJson);
+    res.json({communityName: process.env.COMMUNITY_NAME || "مجتمع ملاذ", guild:{id:guild.id,name:guild.name,icon:guild.iconURL({extension:"png",size:256}),memberCount:guild.memberCount}, online, roles, activeMembers:recent, bot:{online:client.isReady(),tag:client.user?.tag||null}});
+  } catch(error){ console.error("Community endpoint:",error); res.status(503).json({error:"Discord community unavailable"}); }
+});
+
 app.get("/api/public/server", async (req, res) => {
   try {
     const guild = await getGuild();
@@ -1280,7 +1303,7 @@ client.on("voiceStateUpdate", (oldState, newState) => {
 
 client.once("ready", () => {
   console.log(`Logged in as ${client.user.tag}`);
-  const statusName = process.env.BOT_STATUS_NAME || "Fahad Community";
+  const statusName = process.env.BOT_STATUS_NAME || process.env.COMMUNITY_NAME || "مجتمع ملاذ";
   const statusType = String(process.env.BOT_STATUS_TYPE || "WATCHING").toUpperCase();
   const typeMap = { PLAYING: 0, STREAMING: 1, LISTENING: 2, WATCHING: 3 };
   const activityType = typeMap[statusType] ?? 3;
