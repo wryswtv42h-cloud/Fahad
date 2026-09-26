@@ -102,18 +102,41 @@ async function openGameSession(id,spectator=false){
   }
   async function load(){
     if(stopped)return;
-    try{const r=await api("/api/games/"+id+"/state"),d=await r.json();if(!r.ok)throw Error(d.error||"الجلسة غير موجودة");const g=d.game||{},s=d.state||{};if(g.status!=="playing"&&!spectator)return lobby(g);if(g.status!=="playing"&&spectator)return lobby(g);if(g.game==="CODENAMES")return renderCodenames(g,s);renderGenericGame(g,s)}
+    try{const r=await api("/api/games/"+id+"/state"),d=await r.json();if(!r.ok)throw Error(d.error||"الجلسة غير موجودة");const g=d.game||{},s=d.state||{};if(g.status==="finished")return renderFinishedGame(g,s);if(g.status!=="playing"&&!spectator)return lobby(g);if(g.status!=="playing"&&spectator)return lobby(g);if(g.game==="CODENAMES")return renderCodenames(g,s);renderGenericGame(g,s)}
     catch(e){content.innerHTML='<article class="feature-card"><h3>تعذر تحميل اللعبة</h3><p class="muted">'+esc(e.message||"خطأ")+'</p><button class="primary" id="back-games">رجوع للألعاب</button></article>';$("#back-games").onclick=()=>{stopped=true;gamesReal()}}
   }
-  function commonTop(g){return '<div class="game-inline-head"><div><span class="eyebrow">MLD GAME</span><h2>'+esc(g.game||"لعبة")+'</h2></div><div class="stage-actions"><button id="game-fullscreen">⛶ تكبير</button><button id="game-back">رجوع</button></div></div>'}
+  function commonTop(g,isHost=false,spectator=false){
+  return '<div class="game-inline-head"><div><span class="eyebrow">MLD GAME</span><h2>'+esc(g.game||"لعبة")+'</h2></div><div class="stage-actions"><button id="game-fullscreen">⛶ تكبير</button>'+(!spectator&&isHost?'<button class="danger" id="game-finish">🏁 إنهاء اللعبة</button>':"")+'<button id="game-exit">↩ خروج</button></div></div>'
+}
+function bindPlayingControls(id,host,spectator,stoppedRef){
+  $("#game-exit")?.addEventListener("click",async()=>{
+    if(spectator){stoppedRef.value=true;return gamesReal();}
+    if(!confirm("هل تريد الخروج من اللعبة؟ لن تعود الجلسة الحالية لك."))return;
+    const r=await fetch("/api/games/"+id+"/leave",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({guestId})});
+    const d=await r.json(); if(!r.ok)return alert(d.error||"تعذر الخروج");
+    stoppedRef.value=true; gamesReal();
+  });
+  $("#game-finish")?.addEventListener("click",async()=>{
+    if(!host)return;
+    if(!confirm("إنهاء اللعبة الآن؟ ستتوقف الجلسة لجميع اللاعبين."))return;
+    const r=await fetch("/api/games/"+id+"/finish",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({guestId})});
+    const d=await r.json(); if(!r.ok)return alert(d.error||"تعذر إنهاء اللعبة");
+    stoppedRef.value=true; gamesReal();
+  });
+}
+function renderFinishedGame(g,s){
+  const winner=s?.winner?(s.winner==="red"?"الفريق الأحمر":s.winner==="blue"?"الفريق الأزرق":String(s.winner)):"لا يوجد فائز محدد";
+  content.innerHTML='<article class="feature-card game-unified-card"><div class="game-live game-finished-screen"><div class="game-emblem">🏁</div><span class="eyebrow">MLD GAME · انتهت</span><h2>انتهت اللعبة</h2><p class="muted">'+esc(g.game||"اللعبة")+'</p><div class="game-result">🏆 النتيجة: '+esc(winner)+'</div><p>تم إنهاء الجلسة بشكل رسمي. تقدر ترجع لمركز الألعاب وتبدأ جلسة جديدة.</p><button class="primary wide" id="finished-back">العودة لمركز الألعاب</button></div></article>';
+  $("#finished-back").onclick=()=>{gamesReal()};
+}
   function renderCodenames(g,s){
     const players=Array.isArray(g.players)?g.players:[],host=mldUser?g.host_username===mldUser.username:String(players[0]?.guestId||"")===guestId;
     const clueBox=host&&!spectator&&!s.winner?'<div class="codenames-clue-form"><input id="cn-clue" class="full" maxlength="30" placeholder="مثال: بحر"><input id="cn-num" class="full" type="number" min="1" max="9" value="2"><button class="primary" id="cn-send-clue">إرسال التلميح</button></div>':"";
     const clue=s.clue?'<div class="game-clue"><b>التلميح: '+esc(s.clue.word)+'</b><span>عدد الكلمات: '+s.clue.number+' · المتبقي: '+s.guessesLeft+'</span></div>':'<div class="game-clue muted">بانتظار تلميح صاحب الجلسة…</div>';
     const board=(s.words||[]).map((card,i)=>{let cls="cn-card";if(card.revealed)cls+=" revealed "+card.role;return '<button class="'+cls+'" data-cn-index="'+i+'" '+(card.revealed||spectator||!s.clue||s.winner?'disabled':'')+'><span>'+esc(card.word)+'</span></button>'}).join("");
     const winner=s.winner?'<div class="game-result">🏆 الفائز: '+(s.winner==="red"?"الفريق الأحمر":"الفريق الأزرق")+'</div>':""; const key=host?'<div class="codenames-key"><div><b>🔐 خريطة صاحب الجلسة</b><span class="muted">هذه الخريطة لا تظهر لبقية اللاعبين.</span></div><div class="key-grid">'+(s.words||[]).map((card,i)=>'<span class="key-cell '+card.role+'">'+(i+1)+' · '+esc(card.word)+'</span>').join("")+'</div></div>':"";
-    content.innerHTML='<article class="feature-card game-unified-card">'+commonTop(g)+'<div class="game-live" id="game-live-board"><div class="game-status-row"><b>الدور: '+(s.turn==="red"?"🔴 الأحمر":"🔵 الأزرق")+'</b><span>🔴 '+(s.scores?.red||0)+' · 🔵 '+(s.scores?.blue||0)+'</span></div>'+clue+clueBox+'<div class="codenames-board">'+board+'</div>'+winner+key+'<div class="game-help"><b>طريقة اللعب:</b> صاحب الجلسة يرسل كلمة + رقم. الفريق يختار الكلمات التي يعتقد أنها مرتبطة بالتلميح. الأحمر/الأزرق = فريق، الرمادي = محايد، الأسود = القاتل.</div></div></article>';
-    $("#game-back").onclick=()=>{stopped=true;gamesReal()};$("#game-fullscreen").onclick=()=>{const el=$("#game-live-board");if(!document.fullscreenElement)el.requestFullscreen?.();else document.exitFullscreen?.()};
+    content.innerHTML='<article class="feature-card game-unified-card">'+commonTop(g,host,spectator)+'<div class="game-live" id="game-live-board"><div class="game-status-row"><b>الدور: '+(s.turn==="red"?"🔴 الأحمر":"🔵 الأزرق")+'</b><span>🔴 '+(s.scores?.red||0)+' · 🔵 '+(s.scores?.blue||0)+'</span></div>'+clue+clueBox+'<div class="codenames-board">'+board+'</div>'+winner+key+'<div class="game-help"><b>طريقة اللعب:</b> صاحب الجلسة يرسل كلمة + رقم. الفريق يختار الكلمات التي يعتقد أنها مرتبطة بالتلميح. الأحمر/الأزرق = فريق، الرمادي = محايد، الأسود = القاتل.</div></div></article>';
+    $("#game-back").onclick=()=>{stopped=true;gamesReal()};bindPlayingControls(id,host,spectator,{get value(){return stopped},set value(v){stopped=v}});$("#game-fullscreen").onclick=()=>{const el=$("#game-live-board");if(!document.fullscreenElement)el.requestFullscreen?.();else document.exitFullscreen?.()};
     $("#cn-send-clue")?.addEventListener("click",async()=>{const word=$("#cn-clue").value.trim(),number=$("#cn-num").value,r=await api("/api/games/"+id+"/action",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"clue",word,number,guestId})}),d=await r.json();if(!r.ok)return alert(d.error||"تعذر إرسال التلميح");await load();setTimeout(()=>$("#cn-clue")?.focus(),60)});
     document.querySelectorAll("[data-cn-index]").forEach(btn=>btn.onclick=async()=>{const r=await api("/api/games/"+id+"/action",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"guess",index:Number(btn.dataset.cnIndex),guestId})}),d=await r.json();if(!r.ok)return alert(d.error||"无法");await load()});
   }
@@ -149,8 +172,8 @@ async function openGameSession(id,spectator=false){
     const input=s.kind==="text"?'<div class="game-input-row"><input id="game-answer-input" class="full" maxlength="120" placeholder="اكتب إجابتك هنا..."><button class="primary" id="game-submit-answer">تأكيد</button></div>':choice;
     const result=s.lastResult?'<div class="game-result '+(s.lastResult.correct?"success":"error")+'">'+(s.lastResult.correct?"✅ إجابة صحيحة! ":"❌ ليست الإجابة الصحيحة. ")+esc(s.lastResult.message||"انتقلت الجولة.")+'</div>':"";
     const help='<div id="game-detailed-help" class="game-help detailed hidden"><h3>📖 شرح '+esc(m.name)+'</h3><p><b>الهدف:</b> '+esc(m.goal)+'</p><ol>'+m.steps.map(x=>'<li>'+esc(x)+'</li>').join("")+'</ol><p><b>الفوز:</b> '+esc(m.win)+'</p></div>';
-    content.innerHTML='<article class="feature-card game-unified-card">'+commonTop(g)+'<div class="game-live" id="game-live-board"><div class="game-emblem">'+m.icon+'</div><h2>'+esc(m.name)+'</h2><p>'+esc(m.goal)+'</p><div class="game-score">النقاط: '+(s.score||0)+' · الجولة: '+(s.round||1)+'</div>'+result+'<div class="game-prompt"><b>🎯 التحدي الحالي</b><p>'+esc(s.prompt||"ابدأ الجولة.")+'</p></div>'+input+'<div class="game-lobby-actions"><button id="generic-round" class="primary">جولة جديدة ↻</button><button id="generic-help">شرح تفصيلي</button></div>'+help+'</div></article>';
-    $("#game-back").onclick=()=>{stopped=true;gamesReal()};$("#game-fullscreen").onclick=()=>{const el=$("#game-live-board");if(!document.fullscreenElement)el.requestFullscreen?.();else document.exitFullscreen?.()};
+    content.innerHTML='<article class="feature-card game-unified-card">'+commonTop(g,host,spectator)+'<div class="game-live" id="game-live-board"><div class="game-emblem">'+m.icon+'</div><h2>'+esc(m.name)+'</h2><p>'+esc(m.goal)+'</p><div class="game-score">النقاط: '+(s.score||0)+' · الجولة: '+(s.round||1)+'</div>'+result+'<div class="game-prompt"><b>🎯 التحدي الحالي</b><p>'+esc(s.prompt||"ابدأ الجولة.")+'</p></div>'+input+'<div class="game-lobby-actions"><button id="generic-round" class="primary">جولة جديدة ↻</button><button id="generic-help">شرح تفصيلي</button></div>'+help+'</div></article>';
+    $("#game-back").onclick=()=>{stopped=true;gamesReal()};bindPlayingControls(id,host,spectator,{get value(){return stopped},set value(v){stopped=v}});$("#game-fullscreen").onclick=()=>{const el=$("#game-live-board");if(!document.fullscreenElement)el.requestFullscreen?.();else document.exitFullscreen?.()};
     const submit=async(body)=>{const r=await api("/api/games/"+id+"/action",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...body,guestId})}),d=await r.json();if(!r.ok)return alert(d.error||"تعذر تنفيذ الحركة");await load();setTimeout(()=>$("#game-answer-input")?.focus(),60)};
     $("#generic-round").onclick=async()=>{const r=await api("/api/games/"+id+"/action",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"round",guestId})}),d=await r.json();if(!r.ok)return alert(d.error||"تعذر بدء الجولة");await load();};
     $("#generic-help").onclick=()=>$("#game-detailed-help").classList.toggle("hidden");
