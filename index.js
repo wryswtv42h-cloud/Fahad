@@ -211,6 +211,18 @@ function memberJson(member) {
     roles,
     importantRoles: leadershipRoles,
     rank: leadershipRoles[0]?.name || roles[0]?.name || "عضو",
+    activity: (member.presence?.activities || []).map(a => ({
+      name: a.name || "",
+      type: a.type ?? null,
+      details: a.details || "",
+      state: a.state || ""
+    })).slice(0, 3),
+    voice: member.voice?.channel ? {
+      channelId: member.voice.channel.id,
+      channelName: member.voice.channel.name,
+      mute: Boolean(member.voice.selfMute || member.voice.serverMute),
+      deaf: Boolean(member.voice.selfDeaf || member.voice.serverDeaf)
+    } : null,
     stats: getActivity(member.id)
   };
 }
