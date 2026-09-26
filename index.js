@@ -552,24 +552,12 @@ app.get("/api/public/roles/:id/members", async (req, res) => {
 
 app.get("/api/public/top", async (req, res) => {
   try {
-    const members = (await getAllMembers(await getGuild())).map(memberJson);
-    const top = (key) => [...members]
-      .sort((a, b) => (b.stats[key] || 0) - (a.stats[key] || 0))
-      .slice(0, 10);
-
-    res.json({
-      messages: top("messages"),
-      mentions: top("mentionsReceived"),
-      voice: top("voiceMinutes"),
-      joins: top("voiceJoins"),
-      updatedAt: memberSnapshotAt
-    });
-  } catch (error) {
-    console.error("Top endpoint:", error);
-    res.status(503).json({ error: "Top is temporarily unavailable" });
-  }
+    const members=(await getAllMembers(await getGuild())).map(memberJson);
+    const top=(key)=>[...members].sort((a,b)=>(b.stats[key]||0)-(a.stats[key]||0)).slice(0,10);
+    const games=await pool.query("SELECT username,discord_username,wins,points FROM game_scores WHERE guest=false ORDER BY wins DESC,points DESC LIMIT 10");
+    res.json({messages:top("messages"),mentions:top("mentionsReceived"),voice:top("voiceMinutes"),joins:top("voiceJoins"),gameTop:games.rows,updatedAt:memberSnapshotAt});
+  } catch(error){console.error("Top endpoint:",error);res.status(503).json({error:"Top is temporarily unavailable"});}
 });
-
 app.get("/api/public/member/:id", async (req, res) => {
   try {
     const guild = await getGuild();
