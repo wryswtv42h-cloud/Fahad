@@ -2187,6 +2187,18 @@ async function loadAdminTab(tab) {
 
     switch (tab) {
 
+      case "owner":
+        await renderAdminOwner();
+        break;
+
+      case "staff":
+        await renderAdminStaff();
+        break;
+
+      case "private":
+        await renderAdminPrivateMessages();
+        break;
+
       case "groups":
         await renderAdminGroups();
         break;
@@ -2220,6 +2232,27 @@ async function loadAdminTab(tab) {
       </div>
     `;
   }
+}
+
+
+async function renderAdminOwner() {
+  const content = $("#admin-content");
+  const data = await api("/api/admin/discord");
+  content.innerHTML = `<div class="admin-item"><div><p class="eyebrow">OWNER CONTROL</p><h3>فهد المطيري</h3><p>حالة البوت: ${data.ready ? "متصل" : "غير متصل"}</p><small>السيرفر: ${escapeHTML(data.guild?.name || "—")} · الأعضاء: ${data.guild?.memberCount || 0}</small></div><span class="status-badge">${data.ready ? "ONLINE" : "OFFLINE"}</span></div>`;
+}
+
+async function renderAdminStaff() {
+  const content = $("#admin-content");
+  const data = await api("/api/admin/users");
+  const staff = (data.users || []).filter(u => u.isAdmin);
+  content.innerHTML = staff.length ? staff.map(u => `<article class="admin-item"><div><strong>${escapeHTML(u.username)}</strong><p>حساب إداري</p><small>ID: ${escapeHTML(u.id)}</small></div><span class="status-badge">STAFF</span></article>`).join("") : '<div class="empty-state">لا يوجد موظفون مضافون.</div>';
+}
+
+async function renderAdminPrivateMessages() {
+  const content = $("#admin-content");
+  const data = await api("/api/admin/private-messages");
+  const messages = data.messages || [];
+  content.innerHTML = messages.length ? messages.map(m => `<article class="admin-item"><div><strong>${escapeHTML(m.title || "رسالة خاصة")}</strong><p>${escapeHTML(m.message || m.text || "")}</p><small>${formatDate(m.createdAt || m.at)}</small></div></article>`).join("") : '<div class="empty-state">لا توجد رسائل خاصة مسجلة.</div>';
 }
 
 async function renderAdminGroups() {
