@@ -949,6 +949,20 @@ app.post("/api/watch", requireAuth, (req, res) => {
   res.status(201).json({ room: { ...room, chat: undefined } });
 });
 
+app.get("/api/watch/:id", requireAuth, (req, res) => {
+  const room = watchRooms.get(req.params.id);
+  if (!room || room.status !== "open") return res.status(404).json({ error: "غرفة المشاهدة غير موجودة" });
+  res.json({ room: { ...room, ownerId: room.hostId, ownerUsername: users.get(room.hostId)?.username || "—", members: room.members || [], currentTime: room.position || 0 } });
+});
+
+app.post("/api/watch/:id/join", requireAuth, (req, res) => {
+  const room = watchRooms.get(req.params.id);
+  if (!room || room.status !== "open") return res.status(404).json({ error: "غرفة المشاهدة غير موجودة" });
+  room.members = Array.isArray(room.members) ? room.members : [];
+  if (!room.members.includes(req.user.id)) room.members.push(req.user.id);
+  res.json({ room: { ...room, ownerId: room.hostId, ownerUsername: users.get(room.hostId)?.username || "—" } });
+});
+
 app.post("/api/watch/:id/state", requireAuth, (req, res) => {
   const room = watchRooms.get(req.params.id);
   if (!room) return res.status(404).json({ error: "الغرفة غير موجودة" });
@@ -1179,6 +1193,8 @@ app.patch("/api/admin/applications/:id", requireAdmin, async (req, res) => {
   await notifyDiscordWebsite({ title: "تحديث طلب تقديم", description: `تم تحديث الطلب ${application.id} إلى ${status}.` });
   res.json({ application });
 });
+
+app.get("/api/admin/private-messages", requireAdmin, (req, res) => res.json({ messages: privateMessageLogs.slice(-200).reverse() }));
 
 app.get("/api/admin/logs", requireAdmin, (req, res) => res.json({ logs }));
 
