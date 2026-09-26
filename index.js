@@ -425,7 +425,7 @@ function makeGameState(game){
 }
 async function activeGameFor(req){const u=currentUser(req),guestId=String(req.body?.guestId||req.query?.guestId||"").trim(),q=await pool.query("SELECT id,players,status FROM game_lobbies WHERE status IN ('waiting','ready','playing') ORDER BY id DESC LIMIT 100");for(const g of q.rows){const ps=Array.isArray(g.players)?g.players:[];if(u&&ps.some(p=>!p.bot&&p.username===u.username))return g;if(!u&&guestId&&ps.some(p=>!p.bot&&p.guestId===guestId))return g}return null}
 app.get("/api/games",async(req,res)=>{
-  await pool.query("DELETE FROM game_lobbies WHERE status IN ('waiting','ready') AND created_at < NOW() - make_interval(mins => 5));
+  await pool.query("DELETE FROM game_lobbies WHERE status IN ('waiting','ready') AND created_at < NOW() - make_interval(mins => 5)");
   const q=await pool.query("SELECT id,game,host_username,host_discord_username,max_players,players,status,created_at FROM game_lobbies WHERE status IN ('waiting','ready','playing') ORDER BY id DESC LIMIT 50");
   res.json({games:q.rows});
 });
