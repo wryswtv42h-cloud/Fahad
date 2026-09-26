@@ -198,6 +198,6 @@ async function openGroupChat(id){
   const render=()=>{$("#group-chat-feed").innerHTML=(d.messages||[]).map(x=>chatMessageHtml(x,false)).join("")||"<div class='chat-empty'>ابدأ المحادثة ✦</div>";const f=$("#group-chat-feed");f.scrollTop=f.scrollHeight};
   render();$("#group-chat-back").onclick=()=>enhancedGroupsReal();$("#group-chat-form").onsubmit=async e=>{e.preventDefault();const body=$("#group-chat-input").value.trim();if(!body)return;const rr=await fetch("/api/chat/conversations/"+id+"/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({body})}),dd=await rr.json();if(!rr.ok)return $("#group-chat-error").textContent=dd.error||"تعذر الإرسال";$("#group-chat-input").value="";const nr=await fetch("/api/chat/conversations/"+id+"/messages"),nd=await nr.json();d.messages=nd.messages||[];render()};
 }
-const ticketView=enhancedTicketView;
-const groupsReal=enhancedGroupsReal;
+ticketView=enhancedTicketView;
+groupsReal=enhancedGroupsReal;
 
