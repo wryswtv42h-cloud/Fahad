@@ -725,7 +725,7 @@ async function ensureChatDatabase(){
 }
 function chatRole(u){return u?.role==="owner"?"owner":u?.role==="admin"?"admin":"user"}
 async function chatUser(username){
-  const q=await pool.query("SELECT u.username,u.role,COALESCE(p.display_name,u.username) display_name,COALESCE(p.avatar_url,'') avatar_url,COALESCE(p.bio,'') bio FROM app_users u LEFT JOIN chat_profiles p ON p.username=u.username WHERE u.username=$1",[username]);
+  const q=await pool.query("SELECT u.username,u.discord_username,u.role,COALESCE(p.display_name,u.username) display_name,COALESCE(p.avatar_url,'') avatar_url,COALESCE(p.bio,'') bio FROM app_users u LEFT JOIN chat_profiles p ON p.username=u.username WHERE u.username=$1",[username]);
   if(!q.rowCount)return null; return {...q.rows[0],badge:chatRole(q.rows[0])};
 }
 function chatClean(v,max){return String(v??"").replace(/[\u0000-\u001F\u007F]/g,"").trim().slice(0,max||2000)}
