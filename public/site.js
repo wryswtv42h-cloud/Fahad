@@ -146,7 +146,7 @@ async function mldPublicChat(){
 }
 async function mldPrivateChat(){
   const main=$("#chat-main");main.innerHTML="<div class='chat-top'><div><b>💬 المحادثات الخاصة</b><small>محادثة مع شخص أو مجموعة — لكل محادثة مالك</small></div><button class='primary' id='new-chat'>＋ محادثة</button></div><div id='private-list' class='private-list'><div class='loading'>جاري تحميل المحادثات...</div></div><div id='private-room' class='private-room hidden'></div>";
-  const d=await fetch("/api/chat/conversations").then(r=>r.json());const list=$("#private-list");list.innerHTML=(d.conversations||[]).map(x=>"<button class='conversation' data-conv='"+x.id+"'><span class='conv-icon'>"+(x.kind==="group"?"👥":"💬")+"</span><span><b>"+esc(x.title||"محادثة خاصة")+"</b><small>"+esc(x.last_message||"لا توجد رسائل بعد")+"</small></span>"+(x.unread?"<em>"+x.unread+"</em>":"")+"</button>").join("")||"<div class='chat-empty'>لا توجد محادثات. أنشئ أول محادثة.</div>";
+  const d=await fetch("/api/chat/conversations").then(r=>r.json());const list=$("#private-list");list.innerHTML=(d.conversations||[]).map(x=>"<button class='conversation' data-conv='"+x.id+"'><span class='conv-icon'>"+(x.kind==="private_group"?"👥":"💬")+"</span><span><b>"+esc(x.title||"محادثة خاصة")+"</b><small>"+esc(x.last_message||"لا توجد رسائل بعد")+"</small></span>"+(x.unread?"<em>"+x.unread+"</em>":"")+"</button>").join("")||"<div class='chat-empty'>لا توجد محادثات. أنشئ أول محادثة.</div>";
   document.querySelectorAll("[data-conv]").forEach(b=>b.onclick=()=>openPrivateRoom(Number(b.dataset.conv)));
   $("#new-chat").onclick=async()=>{const names=prompt("اكتب يوزرات الأعضاء مفصولة بفاصلة");if(!names)return;const participants=names.split(",").map(x=>x.trim()).filter(Boolean);const r=await fetch("/api/chat/conversations",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({participants,title:participants.length>1?"مجموعة MLD":"محادثة خاصة"})}),x=await r.json();if(!r.ok)return alert(x.error||"تعذر إنشاء المحادثة");await mldPrivateChat();openPrivateRoom(x.conversation.id)};
 }
@@ -182,14 +182,42 @@ async function enhancedOpenTicket(id){
   $("#ticket-reply-form").onsubmit=async e=>{e.preventDefault();const body=$("#ticket-reply").value.trim();if(!body)return;const rr=await fetch("/api/tickets/"+id+"/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:body})}),dd=await rr.json();if(!rr.ok)return $("#ticket-reply-status").textContent=dd.error||"تعذر الإرسال";$("#ticket-reply").value="";$("#ticket-reply-status").textContent="";const nr=await fetch("/api/tickets/"+id+"/messages");d.messages=(await nr.json()).messages||[];render()};
 }
 async function enhancedGroupsReal(){
-  await mldMe();searchWrap.style.display="none";title.textContent="القروبات";subtitle.textContent="كل قروب له مالك، أعضاء، طلبات ومحادثة نصية خاصة.";content.className="feature-grid";
-  const load=async()=>{const d=await fetch("/api/groups").then(r=>r.json());content.innerHTML="<article class='feature-card'><div class='feature-icon'>👥</div><h3>إنشاء قروب</h3><input id='group-name' class='full' maxlength='60' placeholder='اسم القروب'><input id='group-desc' class='full' maxlength='240' placeholder='وصف القروب'><button class='primary wide' id='group-create'>إنشاء القروب</button></article>"+(d.groups||[]).map(g=>"<article class='feature-card group-card'><div class='feature-icon'>👥</div><h3>"+esc(g.name)+"</h3><p class='muted'>"+esc(g.description)+"</p><div class='group-meta'>👑 "+esc(g.owner_username)+" · 👥 "+g.member_count+"</div><div class='group-members'>"+(g.members||[]).map(m=>"<span>"+esc(m.username)+(m.username===g.owner_username?" 👑":"")+"</span>").join("")+"</div><div class='game-lobby-actions'>"+(mldUser&&mldUser.username===g.owner_username?"<button data-add-group='"+g.id+"'>＋ إضافة</button><button data-kick-group='"+g.id+"'>طرد</button>":"")+"<button class='primary' data-group-chat='"+g.group_conversation_id+"'>💬 افتح المحادثة</button></div></article>").join("")||"<p class='muted'>لا توجد قروبات.</p>";
-    $("#group-create").onclick=async()=>{if(!needAuth())return;const r=await fetch("/api/groups",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:$("#group-name").value,description:$("#group-desc").value})});if(!r.ok)return alert((await r.json()).error);load()};
+  await mldMe();searchWrap.style.display="none";title.textContent="قروبات السيرفر";subtitle.textContent="نظام مستقل عن الخاص: طلب إنشاء، موافقة الأونر، رول وروم Discord، وطلبات انضمام.";content.className="feature-grid";
+  const load=async()=>{
+    const d=await fetch("/api/groups").then(r=>r.json()).catch(()=>({groups:[]}));
+    content.innerHTML="<article class='feature-card'><div class='feature-icon'>👥</div><h3>إنشاء قروب سيرفر</h3><p class='muted'>بعد الإنشاء يوصلك طلب اعتماد للأونر عبر Discord. عند الموافقة ينشأ رول وروم خاص بالقروب.</p><input id='group-name' class='full' maxlength='60' placeholder='اسم القروب'><input id='group-desc' class='full' maxlength='240' placeholder='وصف القروب'><button class='primary wide' id='group-create'>إرسال طلب إنشاء</button><p id='group-create-status' class='muted'></p></article>"+
+    (d.groups||[]).map(g=>{
+      const owner=mldUser&&mldUser.username===g.owner_username, approved=g.status==="approved";
+      const action=owner&&!approved?"<span class='group-status pending'>⏳ بانتظار موافقة الأونر</span>":approved?(owner?"<button data-group-requests='"+g.id+"'>طلبات الانضمام</button><button class='primary' data-group-chat='"+(g.group_conversation_id||0)+"'>💬 شات القروب</button>":"<button data-group-join='"+g.id+"'>➕ طلب انضمام</button>"):"<span class='group-status'>"+esc(g.status||"pending")+"</span>";
+      return "<article class='feature-card group-card'><div class='feature-icon'>👥</div><h3>"+esc(g.name)+"</h3><p class='muted'>"+esc(g.description||"بدون وصف")+"</p><div class='group-meta'>👑 "+esc(g.owner_username)+" · 👥 "+g.member_count+" · "+(approved?"🟢 معتمد":"🟡 قيد الاعتماد")+"</div><div class='group-members'>"+(g.members||[]).map(m=>"<span>"+esc(m.username)+(m.username===g.owner_username?" 👑":"")+"</span>").join("")+"</div><div class='game-lobby-actions'>"+action+"</div></article>";
+    }).join("")||"<p class='muted'>لا توجد قروبات معتمدة حتى الآن.</p>";
+    $("#group-create").onclick=async()=>{
+      if(!needAuth())return;
+      const r=await fetch("/api/groups",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:$("#group-name").value,description:$("#group-desc").value})}),x=await r.json();
+      $("#group-create-status").textContent=r.ok?"تم إرسال طلب القروب للأونر عبر Discord ✓":(x.error||"تعذر إرسال الطلب");
+      if(r.ok)await load();
+    };
     document.querySelectorAll("[data-group-chat]").forEach(b=>b.onclick=()=>openGroupChat(Number(b.dataset.groupChat)));
-    document.querySelectorAll("[data-add-group]").forEach(b=>b.onclick=async()=>{const u=prompt("يوزر العضو");if(!u)return;const r=await fetch("/api/groups/"+b.dataset.addGroup+"/members",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:u})});if(!r.ok)return alert((await r.json()).error);load()});
-    document.querySelectorAll("[data-kick-group]").forEach(b=>b.onclick=async()=>{const u=prompt("يوزر العضو الذي تريد طرده");if(!u)return;const r=await fetch("/api/groups/"+b.dataset.kickGroup+"/members/"+encodeURIComponent(u),{method:"DELETE"});if(!r.ok)return alert((await r.json()).error);load()});
-  };await load();
+    document.querySelectorAll("[data-group-join]").forEach(b=>b.onclick=async()=>{
+      if(!needAuth())return;
+      const r=await fetch("/api/groups/"+b.dataset.groupJoin+"/join",{method:"POST"}),x=await r.json();
+      alert(r.ok?"تم إرسال طلب الانضمام لمالك القروب ✓":(x.error||"تعذر إرسال الطلب")); if(r.ok)load();
+    });
+    document.querySelectorAll("[data-group-requests]").forEach(b=>b.onclick=async()=>{
+      const r=await fetch("/api/groups/"+b.dataset.groupRequests+"/requests"),x=await r.json();
+      if(!r.ok)return alert(x.error||"تعذر تحميل الطلبات");
+      const pending=(x.requests||[]).filter(v=>v.status==="pending");
+      if(!pending.length)return alert("ما فيه طلبات معلقة حاليًا.");
+      const item=pending[0];
+      const ok=confirm("طلب انضمام من "+item.username+"\nاضغط موافق لقبوله.");
+      if(!ok)return;
+      const rr=await fetch("/api/groups/"+b.dataset.groupRequests+"/requests/"+item.id,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({status:"approved"})});
+      alert(rr.ok?"تم قبول العضو ✓":"تعذر قبول العضو"); if(rr.ok)load();
+    });
+  };
+  await load();
 }
+
 async function openGroupChat(id){
   if(!id)return alert("هذه القروب لم يتم إنشاء محادثته بعد");
   const r=await fetch("/api/chat/conversations/"+id+"/messages"),d=await r.json();if(!r.ok)return alert(d.error||"لا تملك صلاحية المحادثة");
@@ -200,4 +228,3 @@ async function openGroupChat(id){
 }
 ticketView=enhancedTicketView;
 groupsReal=enhancedGroupsReal;
-
