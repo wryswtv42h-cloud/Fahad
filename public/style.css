@@ -46,3 +46,5 @@
 .room-message{padding:10px 12px;border-radius:13px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.06)}
 .room-message.mine{border-color:rgba(255,255,255,.14)}
 .room-message b{display:block}.room-message p{margin:4px 0}.room-message small{opacity:.55}
+
+.uno-hand{display:flex;flex-wrap:wrap;gap:9px;padding:12px 0}.game-card-btn{min-width:74px;min-height:88px;border-radius:14px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.045);color:inherit;display:grid;place-items:center;cursor:pointer}.game-card-btn b{font-size:17px}.game-card-btn small{opacity:.6}.game-card-btn.red{box-shadow:inset 0 0 0 1px rgba(255,70,70,.25)}.game-card-btn.blue{box-shadow:inset 0 0 0 1px rgba(70,130,255,.25)}.game-card-btn.green{box-shadow:inset 0 0 0 1px rgba(70,220,130,.25)}.game-card-btn.yellow{box-shadow:inset 0 0 0 1px rgba(240,210,70,.25)}.game-card-btn.wild{box-shadow:inset 0 0 0 1px rgba(220,220,220,.3)}.ludo-state,.game-hint{padding:12px 14px;border-radius:12px;background:rgba(255,255,255,.035);margin:8px 0}
