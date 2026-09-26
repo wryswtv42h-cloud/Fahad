@@ -25,7 +25,8 @@ const client = new Client({
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildVoiceStates
+    GatewayIntentBits.GuildVoiceStates,
+    GatewayIntentBits.GuildPresences
   ]
 });
 
@@ -207,6 +208,10 @@ async function initAppDatabase() {
     CREATE TABLE IF NOT EXISTS applications (id SERIAL PRIMARY KEY, username VARCHAR(32) NOT NULL, discord_username VARCHAR(100) NOT NULL, type VARCHAR(60) NOT NULL, answers JSONB NOT NULL DEFAULT '{}'::jsonb, status VARCHAR(20) NOT NULL DEFAULT 'pending', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
     CREATE TABLE IF NOT EXISTS community_groups (id SERIAL PRIMARY KEY, username VARCHAR(32) NOT NULL, discord_username VARCHAR(100) NOT NULL, name VARCHAR(60) NOT NULL, description VARCHAR(240) NOT NULL DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
     CREATE TABLE IF NOT EXISTS audit_logs (id BIGSERIAL PRIMARY KEY, username VARCHAR(32), discord_username VARCHAR(100), action VARCHAR(120) NOT NULL, details TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+    ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS username VARCHAR(32);
+    ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS discord_username VARCHAR(100);
+    CREATE TABLE IF NOT EXISTS group_members (id SERIAL PRIMARY KEY, group_id INTEGER NOT NULL REFERENCES community_groups(id) ON DELETE CASCADE, username VARCHAR(32) NOT NULL, discord_username VARCHAR(100) NOT NULL, joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE(group_id, username));
+    CREATE TABLE IF NOT EXISTS group_join_requests (id SERIAL PRIMARY KEY, group_id INTEGER NOT NULL REFERENCES community_groups(id) ON DELETE CASCADE, username VARCHAR(32) NOT NULL, discord_username VARCHAR(100) NOT NULL, status VARCHAR(20) NOT NULL DEFAULT 'pending', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE(group_id, username));
     CREATE TABLE IF NOT EXISTS game_lobbies (id SERIAL PRIMARY KEY, game VARCHAR(30) NOT NULL, host_username VARCHAR(32) NOT NULL, host_discord_username VARCHAR(100) NOT NULL, max_players INTEGER NOT NULL DEFAULT 4, players JSONB NOT NULL DEFAULT '[]'::jsonb, status VARCHAR(20) NOT NULL DEFAULT 'waiting', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
     CREATE TABLE IF NOT EXISTS reviews (id SERIAL PRIMARY KEY, username VARCHAR(32) NOT NULL, discord_username VARCHAR(100) NOT NULL, rating INTEGER NOT NULL DEFAULT 5, message VARCHAR(1000) NOT NULL, status VARCHAR(20) NOT NULL DEFAULT 'visible', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
     CREATE TABLE IF NOT EXISTS announcements (id SERIAL PRIMARY KEY, text VARCHAR(300) NOT NULL, link TEXT DEFAULT '', active BOOLEAN NOT NULL DEFAULT true, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
@@ -234,7 +239,7 @@ async function ensureOwner(){
 }
 
 
-app.get("/api/site/stats",async(req,res)=>{try{const s=await pool.query("SELECT visits FROM site_stats WHERE id=1");const g=await getGuild();const members=await getAllMembers(g);const online=members.filter(m=>!m.user.bot&&m.presence?.status&&m.presence.status!=="offline").length;res.json({visits:Number(s.rows[0]?.visits||0),online});}catch(e){res.status(500).json({visits:0,online:0});}});
+app.get("/api/site/stats",async(req,res)=>{try{const s=await pool.query("SELECT visits FROM site_stats WHERE id=1");const g=await getGuild();const members=await getAllMembers(g);const online=members.filter(m=>!m.user.bot&&m.presence?.status&&m.presence.status!=="offline").length || [...(g.presences?.cache?.values?.()||[])].filter(p=>p.status&&p.status!=="offline").length;res.json({visits:Number(s.rows[0]?.visits||0),online});}catch(e){res.status(500).json({visits:0,online:0});}});
 app.post("/api/site/visit",async(req,res)=>{try{await pool.query("UPDATE site_stats SET visits=visits+1,updated_at=NOW() WHERE id=1");res.json({ok:true});}catch(e){res.status(500).json({error:"stats"});}});
 app.get("/api/site/settings",async(req,res)=>{try{const q=await pool.query("SELECT key,value FROM site_settings");res.json({settings:Object.fromEntries(q.rows.map(x=>[x.key,x.value]))});}catch(e){res.status(500).json({settings:{}});}});
 app.post("/api/owner/settings",requireOwner,async(req,res)=>{try{const allowed=["siteName","creatorName","heroTitle","heroSubtitle"];for(const key of allowed){const value=String(req.body?.[key]??"").trim();if(value.length>500)return res.status(400).json({error:"إعداد طويل جدًا"});await pool.query("INSERT INTO site_settings(key,value) VALUES($1,$2) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value",[key,value]);}await audit(req.session.user,"site_settings_update","تعديل إعدادات الموقع");res.json({ok:true});}catch(e){console.error("Site settings:",e);res.status(500).json({error:"تعذر حفظ الإعدادات"});}});
@@ -265,7 +270,46 @@ app.post("/api/auth/logout",async(req,res)=>{const u=currentUser(req);if(u) awai
 app.get("/api/tickets",requireAuth,async(req,res)=>{const q=await pool.query("SELECT id,subject,message,status,created_at FROM tickets WHERE username=$1 ORDER BY id DESC",[req.session.user.username]);res.json({tickets:q.rows});});
 app.post("/api/tickets",requireAuth,async(req,res)=>{const subject=String(req.body?.subject||"").trim(),message=String(req.body?.message||"").trim(),u=req.session.user;if(subject.length<3||subject.length>120||message.length<3||message.length>3000)return res.status(400).json({error:"بيانات التيكت غير صحيحة"});const q=await pool.query("INSERT INTO tickets(username,discord_username,subject,message) VALUES($1,$2,$3,$4) RETURNING id",[u.username,u.discordUsername,subject,message]);await audit(u,"ticket_create",`#${q.rows[0].id} ${subject}`);res.json({ok:true,id:q.rows[0].id});});
 app.post("/api/applications",requireAuth,async(req,res)=>{const type=String(req.body?.type||"تقديم").trim(),answers=req.body?.answers||{},u=req.session.user;if(type.length>60||JSON.stringify(answers).length>8000)return res.status(400).json({error:"بيانات التقديم غير صحيحة"});const q=await pool.query("INSERT INTO applications(username,discord_username,type,answers) VALUES($1,$2,$3,$4) RETURNING id",[u.username,u.discordUsername,type,JSON.stringify(answers)]);await audit(u,"application_create",`#${q.rows[0].id} ${type}`);res.json({ok:true,id:q.rows[0].id});});
-app.get("/api/groups",requireAuth,async(req,res)=>{const q=await pool.query("SELECT id,name,description,created_at FROM community_groups WHERE username=$1 ORDER BY id DESC",[req.session.user.username]);res.json({groups:q.rows});});
+app.get("/api/groups",async(req,res)=>{
+  const q=await pool.query(`
+    SELECT g.id,g.name,g.description,g.username AS owner_username,g.discord_username AS owner_discord_username,g.created_at,
+           COALESCE((SELECT COUNT(*) FROM group_members gm WHERE gm.group_id=g.id),0) AS member_count,
+           COALESCE((SELECT json_agg(json_build_object('username',gm.username,'discordUsername',gm.discord_username) ORDER BY gm.joined_at) FROM group_members gm WHERE gm.group_id=g.id),'[]'::json) AS members
+    FROM community_groups g ORDER BY g.id DESC
+  `);
+  res.json({groups:q.rows});
+});
+app.post("/api/groups/:id/join",requireAuth,async(req,res)=>{
+  const u=req.session.user, gid=Number(req.params.id);
+  const g=await pool.query("SELECT id,name,username FROM community_groups WHERE id=$1",[gid]);
+  if(!g.rowCount)return res.status(404).json({error:"القروب غير موجود"});
+  if(g.rows[0].username===u.username)return res.json({ok:true,status:"owner"});
+  const exists=await pool.query("SELECT status FROM group_join_requests WHERE group_id=$1 AND username=$2",[gid,u.username]);
+  if(exists.rowCount && exists.rows[0].status==="pending")return res.json({ok:true,status:"pending"});
+  if(exists.rowCount) await pool.query("UPDATE group_join_requests SET status='pending',discord_username=$3,created_at=NOW() WHERE group_id=$1 AND username=$2",[gid,u.username,u.discordUsername]);
+  else await pool.query("INSERT INTO group_join_requests(group_id,username,discord_username) VALUES($1,$2,$3)",[gid,u.username,u.discordUsername]);
+  await audit(u,"group_join_request",`#${gid} ${g.rows[0].name}`);
+  res.json({ok:true,status:"pending"});
+});
+app.get("/api/groups/:id/requests",requireAuth,async(req,res)=>{
+  const u=req.session.user, gid=Number(req.params.id);
+  const own=await pool.query("SELECT id FROM community_groups WHERE id=$1 AND username=$2",[gid,u.username]);
+  if(!own.rowCount)return res.status(403).json({error:"أنت لست مالك القروب"});
+  const q=await pool.query("SELECT id,username,discord_username,status,created_at FROM group_join_requests WHERE group_id=$1 ORDER BY id DESC",[gid]);
+  res.json({requests:q.rows});
+});
+app.post("/api/groups/:id/requests/:requestId",requireAuth,async(req,res)=>{
+  const u=req.session.user,gid=Number(req.params.id),rid=Number(req.params.requestId),status=String(req.body?.status||"").toLowerCase();
+  if(!["approved","rejected"].includes(status))return res.status(400).json({error:"حالة غير صحيحة"});
+  const own=await pool.query("SELECT id,name FROM community_groups WHERE id=$1 AND username=$2",[gid,u.username]);
+  if(!own.rowCount)return res.status(403).json({error:"أنت لست مالك القروب"});
+  const rq=await pool.query("SELECT username,discord_username FROM group_join_requests WHERE id=$1 AND group_id=$2 AND status='pending'",[rid,gid]);
+  if(!rq.rowCount)return res.status(404).json({error:"الطلب غير موجود"});
+  await pool.query("UPDATE group_join_requests SET status=$1 WHERE id=$2",[status,rid]);
+  if(status==="approved")await pool.query("INSERT INTO group_members(group_id,username,discord_username) VALUES($1,$2,$3) ON CONFLICT DO NOTHING",[gid,rq.rows[0].username,rq.rows[0].discord_username]);
+  await audit(u,"group_join_request_update",`#${gid} request #${rid} => ${status}`);
+  res.json({ok:true});
+});
 app.post("/api/groups",requireAuth,async(req,res)=>{const name=String(req.body?.name||"").trim(),description=String(req.body?.description||"").trim(),u=req.session.user;if(name.length<2||name.length>60||description.length>240)return res.status(400).json({error:"بيانات القروب غير صحيحة"});const q=await pool.query("INSERT INTO community_groups(username,discord_username,name,description) VALUES($1,$2,$3,$4) RETURNING *",[u.username,u.discordUsername,name,description]);await audit(u,"group_create",name);res.json({ok:true,group:q.rows[0]});});
 app.delete("/api/groups/:id",requireAuth,async(req,res)=>{await pool.query("DELETE FROM community_groups WHERE id=$1 AND username=$2",[req.params.id,req.session.user.username]);res.json({ok:true});});
 app.get("/api/owner/logs",requireAdmin,async(req,res)=>{const q=await pool.query("SELECT id,username,discord_username,action,details,created_at FROM audit_logs ORDER BY id DESC LIMIT 200");res.json({logs:q.rows});});
