@@ -944,7 +944,7 @@ async function createWatchRoom() {
   try {
 
     const data = await api(
-      "/api/watch-rooms",
+      "/api/watch",
       {
         method: "POST",
         body: {
@@ -991,7 +991,7 @@ async function openWatchRoom(id) {
       data.room;
 
     await api(
-      `/api/watch-rooms/${encodeURIComponent(id)}/join`,
+      `/api/watch/${encodeURIComponent(id)}/join`,
       {
         method: "POST"
       }
