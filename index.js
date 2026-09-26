@@ -330,8 +330,9 @@ app.get("/api/public/members", async (req, res) => {
         })
       : allMembers;
 
+    const ranked = sortedMemberJson(filtered);
     res.json({
-      members: sortedMemberJson(filtered),
+      members: ranked.slice(0, Math.min(Number(req.query.limit) || (cleanQuery ? 8 : 5), 8)),
       total: filtered.length,
       totalServerMembers: allMembers.length,
       updatedAt: memberSnapshotAt,
