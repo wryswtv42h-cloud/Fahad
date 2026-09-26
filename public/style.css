@@ -14,7 +14,7 @@
 
 /* MLD identity + welcome */
 /* MLD quick blurred site intro */
-.mld-welcome{position:fixed;inset:0;z-index:99999;background:rgba(8,8,18,.18);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);opacity:1;visibility:visible;transition:opacity .45s ease,visibility .45s ease;pointer-events:none}
+.mld-welcome{position:fixed;inset:0;z-index:99999;background:rgba(8,8,18,.18);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);opacity:1;visibility:visible;transition:opacity .45s ease,visibility .45s ease;pointer-events:none;animation:mldWelcomeOut .45s ease 1s forwards}@keyframes mldWelcomeOut{to{opacity:0;visibility:hidden}}
 .mld-welcome.hide{opacity:0;visibility:hidden}
 
 .mld-welcome-message{position:absolute;inset:0;display:grid;place-items:center;color:#fff;font-size:clamp(28px,7vw,58px);font-weight:900;letter-spacing:.5px;text-shadow:0 2px 24px rgba(0,0,0,.5)}
