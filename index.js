@@ -465,13 +465,13 @@ function validateUsername(username) {
   return /^[\p{L}\p{N}_.-]{3,32}$/u.test(username);
 }
 
-function publicGame(game) {
+function publicGame(game, viewerId = null) {
   return {
     id: game.id, type: game.type, name: game.name, status: game.status,
     host: userJson(users.get(game.hostId)),
     players: game.players.map((p) => ({ ...p, user: userJson(users.get(p.userId)) })),
     maxPlayers: game.maxPlayers, createdAt: game.createdAt, updatedAt: game.updatedAt,
-    state: game.state || {}
+    state: (() => { const st = JSON.parse(JSON.stringify(game.state || {})); if (st.uno?.hands) { const own = viewerId ? st.uno.hands[viewerId] || [] : []; st.uno.hands = viewerId ? { [viewerId]: own } : {}; } return st; })()
   };
 }
 
@@ -1131,13 +1131,13 @@ app.post("/api/games/:id/messages", requireAuth, (req,res)=>{
   game.chat.push(item); if(game.chat.length>200) game.chat.shift(); game.updatedAt=now(); res.status(201).json({message:item});
 });
 app.get("/api/games", (req, res) => {
-  res.json({ games: [...games.values()].filter((g) => g.status !== "finished").map(publicGame) });
+  res.json({ games: [...games.values()].filter((g) => g.status !== "finished").map((g) => publicGame(g, currentUser(req)?.id || null)) });
 });
 
 app.get("/api/games/:id", (req, res) => {
   const game = games.get(req.params.id);
   if (!game) return res.status(404).json({ error: "اللعبة غير موجودة" });
-  res.json({ game: publicGame(game), state: game.state || {} });
+  res.json({ game: publicGame(game, currentUser(req)?.id || null), state: publicGame(game, currentUser(req)?.id || null).state || {} });
 });
 app.post("/api/games", requireAuth, (req, res) => {
   const type = cleanText(req.body?.type, 30).toLocaleLowerCase("ar");
@@ -1158,7 +1158,7 @@ app.post("/api/games/:id/join", requireAuth, async (req, res) => {
   game.players.push({ userId: req.user.id, seat: game.players.length + 1, ready: false });
   game.updatedAt = now();
   if (game.players.length >= game.maxPlayers) game.status = "active";
-  res.json({ game: publicGame(game) });
+  res.json({ game: publicGame(game, req.user.id) });
 });
 
 app.post("/api/games/:id/invite", requireAuth, async (req, res) => {
