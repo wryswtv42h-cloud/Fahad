@@ -605,6 +605,11 @@ app.get("/api/public/server", async (req, res) => {
       name: guild.name,
       icon: guild.iconURL({ extension: "png", size: 256 }),
       memberCount: guild.memberCount,
+      visits: siteVisits,
+      websiteUsers: users.size,
+      online: (await getAllMembers(guild)).filter((m) => m.presence?.status && m.presence.status !== "offline").length,
+      averageRating: (() => { const all = [...reviews.values()].flat(); return all.length ? Number((all.reduce((s, r) => s + Number(r.rating || 0), 0) / all.length).toFixed(1)) : 0; })(),
+      recentReviews: [...reviews.values()].flat().sort((a,b) => new Date(b.createdAt)-new Date(a.createdAt)).slice(0,8),
       ownerName: process.env.SERVER_FOUNDER_NAME || "فهد المطيري",
       invite: process.env.DISCORD_INVITE_URL || ""
     });
