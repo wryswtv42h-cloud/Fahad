@@ -49,3 +49,12 @@
 .announcement-bar>a{position:absolute;left:8px;top:4px;height:22px;padding:3px 10px;border-radius:99px;background:#ff9cde;color:#241329;text-decoration:none;font-size:10px;font-weight:900;z-index:2}
 @keyframes mldMarquee{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
 @media(max-width:760px){.announcement-bar{margin:5px 10px;height:28px}.announcement-bar>span{animation-duration:12s;font-size:10px}}
+/* MLD conversation identity + server group separation */
+.chat-shell{position:relative;overflow:hidden}
+.chat-shell::before{content:"MLD";position:absolute;inset:50% auto auto 50%;transform:translate(-50%,-50%) rotate(-18deg);font-size:clamp(90px,18vw,240px);font-weight:900;letter-spacing:.08em;opacity:.035;pointer-events:none;z-index:0}
+.chat-shell>*{position:relative;z-index:1}
+.chat-main,.chat-sidebar,.private-room,.chat-feed{position:relative}
+.chat-main::after,.private-room::after{content:"MLD • MLD • MLD";position:absolute;right:18px;bottom:14px;font-size:11px;letter-spacing:.18em;opacity:.22;pointer-events:none}
+.group-status{display:inline-flex;align-items:center;gap:6px;padding:7px 10px;border-radius:999px;background:rgba(255,255,255,.06);font-size:12px}
+.group-status.pending{border:1px solid rgba(255,190,80,.25)}
+.group-card .game-lobby-actions{display:flex;gap:8px;flex-wrap:wrap}
