@@ -11,8 +11,36 @@ function navigate(v){state.currentView=v;$$(".page-view").forEach(x=>x.classList
 async function loadView(v){try{if(v==="home")await loadHome();else if(v==="members")await loadMembers();else if(v==="groups")await loadGroups();else if(v==="games")await loadGames();else if(v==="watch")await loadWatch();else if(v==="tickets")await loadTickets();else if(v==="applications")await loadApplications();else if(v==="reviews")await loadReviews();else if(v==="account")renderAccount();else if(v==="admin")await loadAdmin()}catch(e){console.error(e);toast(e.message,"error")}}
 async function auth(){try{state.user=(await api("/api/auth/me")).user||null}catch{state.user=null}updateAuth();if(state.currentView==="home")loadHome()}
 function updateAuth(){const u=!!state.user;$("#login-nav")?.classList.toggle("hidden",u);$("#register-nav")?.classList.toggle("hidden",u);$("#account-nav")?.classList.toggle("hidden",!u);$("#mobile-login")?.classList.toggle("hidden",u);$("#mobile-register")?.classList.toggle("hidden",u);$("#mobile-account")?.classList.toggle("hidden",!u);$("#admin-nav")?.classList.toggle("hidden",!admin());$("#mobile-admin")?.classList.toggle("hidden",!admin())}
-async function loadHome(){try{await api("/api/public/visit",{method:"POST"});const [s,r,c]=await Promise.all([api("/api/public/stats"),api("/api/public/reviews"),api("/api/public/community")]);$("#visit-count").textContent=s.visits??"—";$("#website-user-count").textContent=s.websiteUsers??s.users??s.userCount??"—";$("#online-count").textContent=s.online??s.onlineCount??"—";const list=r.reviews||[];$("#average-rating").textContent=list.length?(list.reduce((a,x)=>a+Number(x.rating||0),0)/list.length).toFixed(1):"—";renderReviews(list,"#home-reviews-content",4); renderCommunity(c)}catch(e){console.error(e)}}
-async function loadMembers(){const c=$("#members-content"),st=$("#members-status");st.textContent="جاري التحميل...";try{state.members=(await api("/api/public/members")).members||[];renderMembers(state.members);st.textContent=state.members.length+" عضو"}catch(e){st.textContent=e.message}}
+async function loadHome(){
+  try{await api("/api/public/visit",{method:"POST"})}catch(e){console.warn("visit",e.message)}
+  try{
+    const [s,r,c]=await Promise.all([api("/api/public/stats"),api("/api/public/reviews"),api("/api/public/community")]);
+    $("#visit-count").textContent=s.visits??"—";
+    $("#website-user-count").textContent=s.websiteUsers??s.users??s.userCount??"—";
+    $("#online-count").textContent=s.online??s.members??s.onlineCount??"—";
+    const list=r.reviews||[];
+    $("#average-rating").textContent=list.length?(list.reduce((a,x)=>a+Number(x.rating||0),0)/list.length).toFixed(1):"—";
+    renderReviews(list,"#home-reviews-content",4);
+    renderCommunity(c);
+  }catch(e){
+    console.error("home",e);
+    $("#community-sub").textContent="تعذر الاتصال ببيانات Discord — تأكد من تشغيل البوت وربطه بالسيرفر.";
+    $("#bot-state").textContent="BOT OFFLINE";
+    $("#bot-state").className="badge";
+  }
+}
+async function loadMembers(){
+  const c=$("#members-content"),st=$("#members-status"); st.textContent="جاري التحميل...";
+  try{
+    const d=await api("/api/public/members");
+    state.members=d.members||[];
+    renderMembers(state.members);
+    st.textContent=(d.totalServerMembers??state.members.length)+" عضو في Discord";
+  }catch(e){
+    c.innerHTML='<div class="empty">تعذر تحميل أعضاء Discord: '+esc(e.message)+'</div>';
+    st.textContent="تعذر الاتصال بـ Discord";
+  }
+}
 function renderMembers(list){$("#members-content").innerHTML=list.length?list.map(m=>`<article class="member-card"><img src="${esc(m.avatar)}"><div><b>${esc(m.name||m.username)}</b><small>@${esc(m.username||"")}</small><span class="status-dot ${m.status==="online"?"on":""}">${m.status==="online"?"متصل":"غير متصل"}</span><div class="tags">${(m.importantRoles||m.roles||[]).slice(0,3).map(r=>`<i>${esc(r.name)}</i>`).join("")}</div></div></article>`).join(""):'<div class="empty">لا يوجد أعضاء.</div>'}
 async function loadGroups(){const c=$("#groups-content"),st=$("#groups-status");st.textContent="جاري التحميل...";try{state.groups=(await api("/api/groups")).groups||[];c.innerHTML=state.groups.length?state.groups.map(g=>`<article class="card"><div class="card-icon">👥</div><span class="badge">${esc(g.status||"active")}</span><h3>${esc(g.name)}</h3><p>${esc(g.description||"بدون وصف")}</p><div class="meta">👤 ${g.memberCount||0} عضو · ${esc(g.category||"عام")}</div><button class="secondary" data-group="${esc(g.id)}">عرض المجموعة</button></article>`).join(""):'<div class="empty">لا توجد مجموعات حالياً.</div>';st.textContent=""}catch(e){st.textContent=e.message}}
 async function loadGames(){const c=$("#games-list");try{state.games=(await api("/api/games")).games||[];c.innerHTML=state.games.length?state.games.map(g=>`<article class="session-card"><div><span class="game-mark">🎮</span><b>${esc(g.name||g.type)}</b><small>${esc(g.status||"waiting")} · ${(g.players||g.members||[]).length}/${g.maxPlayers||4}</small></div><button class="secondary" data-join-game="${esc(g.id)}">انضمام</button></article>`).join(""):'<div class="empty">لا توجد جلسات حالياً. اختر لعبة بالأعلى لإنشاء جلسة.</div>'}catch(e){c.innerHTML='<div class="empty">'+esc(e.message)+"</div>"}}
