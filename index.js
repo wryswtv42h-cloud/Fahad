@@ -198,7 +198,30 @@ function sortedMemberJson(members) {
     .map(memberJson);
 }
 
-app.get("/health", (req, res) => {
+
+async function initAppDatabase() {
+  if (!process.env.DATABASE_URL) return;
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS app_users (id SERIAL PRIMARY KEY, username VARCHAR(32) UNIQUE NOT NULL, password_hash TEXT NOT NULL, discord_username VARCHAR(100) NOT NULL, role VARCHAR(20) NOT NULL DEFAULT 'user', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), last_login_at TIMESTAMPTZ);
+    CREATE TABLE IF NOT EXISTS tickets (id SERIAL PRIMARY KEY, username VARCHAR(32) NOT NULL, discord_username VARCHAR(100) NOT NULL, subject VARCHAR(120) NOT NULL, message TEXT NOT NULL, status VARCHAR(20) NOT NULL DEFAULT 'open', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+    CREATE TABLE IF NOT EXISTS applications (id SERIAL PRIMARY KEY, username VARCHAR(32) NOT NULL, discord_username VARCHAR(100) NOT NULL, type VARCHAR(60) NOT NULL, answers JSONB NOT NULL DEFAULT '{}'::jsonb, status VARCHAR(20) NOT NULL DEFAULT 'pending', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+    CREATE TABLE IF NOT EXISTS community_groups (id SERIAL PRIMARY KEY, username VARCHAR(32) NOT NULL, discord_username VARCHAR(100) NOT NULL, name VARCHAR(60) NOT NULL, description VARCHAR(240) NOT NULL DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+    CREATE TABLE IF NOT EXISTS audit_logs (id BIGSERIAL PRIMARY KEY, username VARCHAR(32), discord_username VARCHAR(100), action VARCHAR(120) NOT NULL, details TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+  `);
+}
+function currentUser(req){ return req.session?.user || null; }
+function requireAuth(req,res,next){ if(!currentUser(req)) return res.status(401).json({error:"يجب تسجيل الدخول أولًا"}); next(); }
+function requireOwner(req,res,next){ const u=currentUser(req); if(!u || u.role!=="owner") return res.status(403).json({error:"هذه الصفحة للأونر فقط"}); next(); }
+async function audit(u,action,details=""){ if(!process.env.DATABASE_URL) return; await pool.query("INSERT INTO audit_logs(username,discord_username,action,details) VALUES($1,$2,$3,$4)",[u?.username||null,u?.discordUsername||null,action,details]); }
+async function ensureOwner(){
+  if(!process.env.DATABASE_URL || !process.env.OWNER_USERNAME || !process.env.OWNER_PASSWORD) return;
+  const username=String(process.env.OWNER_USERNAME).trim().toLowerCase();
+  const hash=await bcrypt.hash(String(process.env.OWNER_PASSWORD),12);
+  const found=await pool.query("SELECT id FROM app_users WHERE username=$1",[username]);
+  if(!found.rowCount) await pool.query("INSERT INTO app_users(username,password_hash,discord_username,role) VALUES($1,$2,$3,'owner')",[username,hash,process.env.OWNER_DISCORD_USERNAME||process.env.SERVER_FOUNDER_NAME||"فهد المطيري"]);
+  else await pool.query("UPDATE app_users SET password_hash=$2,role='owner',discord_username=$3 WHERE username=$1",[username,hash,process.env.OWNER_DISCORD_USERNAME||process.env.SERVER_FOUNDER_NAME||"فهد المطيري"]);
+}
+\napp.get("/health", (req, res) => {
   res.json({
     ok: true,
     botReady: client.isReady(),
