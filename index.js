@@ -293,6 +293,7 @@ async function getAllMembers(guild, options = {}) {
   return refreshMemberSnapshot(guild);
 }
 
+function isOwnerUser(user) { return Boolean(user && ((process.env.OWNER_ID && user.discordId === process.env.OWNER_ID) || (process.env.OWNER_USERNAME && user.username === process.env.OWNER_USERNAME))); }
 function userJson(user) {
   if (!user) return null;
   return {
@@ -301,7 +302,8 @@ function userJson(user) {
     discordId: user.discordId || null,
     createdAt: user.createdAt,
     suspended: Boolean(user.suspended),
-    isAdmin: admins.has(user.id)
+    isAdmin: admins.has(user.id) || isOwnerUser(user),
+    isOwner: isOwnerUser(user)
   };
 }
 
@@ -572,6 +574,7 @@ let owner = findUserByUsername(ownerUsername);
 if (!owner) owner = createUser(ownerUsername, ownerPassword, process.env.OWNER_ID || "");
 else owner.passwordHash = bcrypt.hashSync(ownerPassword, 12);
 admins.add(owner.id);
+owner.isOwner = true;
 
 // -------------------- Health / auth --------------------
 
@@ -782,9 +785,7 @@ app.get("/api/public/member/:id", async (req, res) => {
     const member = await guild.members.fetch(req.params.id).catch(() => null);
     if (!member) return res.status(404).json({ error: "Member not found" });
     const highest = member.roles.cache.filter((role) => role.id !== guild.id && !role.managed).sort((a, b) => b.position - a.position).first();
-    res.json({
-      ...memberJson(member),
-      highestRole: highest ? roleJson(highest) : null,
+    res.json({ member: memberJson(member), highestRole: highest ? roleJson(highest) : null,
       permissions: highest ? highest.permissions.toArray().filter((p) => importantPermissionNames.has(p)) : []
     });
   } catch (error) {
