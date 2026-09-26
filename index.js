@@ -259,8 +259,10 @@ function currentUser(req){ return req.session?.user || null; }
 async function findGuildMemberByUsername(discordUsername){
   const wanted=String(discordUsername||"").trim().toLowerCase();
   if(!wanted) return null;
-  try{ const members=await getAllMembers(await getGuild()); return members.find(m=>String(m.user?.username||"").trim().toLowerCase()===wanted)||null; }
-  catch(e){ console.error("Discord membership check:",e.message); return null; }
+  try{
+    const members=await getAllMembers(await getGuild());
+    return members.find(m=>String(m.user?.username||"").trim().toLowerCase()===wanted)||null;
+  }catch(e){ console.error("Discord membership check:",e.message); return null; }
 }
 async function requireGuildMember(req,res,next){
   const u=currentUser(req); if(!u) return res.status(401).json({error:"يجب تسجيل الدخول أولًا"});
@@ -277,7 +279,7 @@ async function ensureOwner(){
   const username=String(process.env.OWNER_USERNAME).trim().toLowerCase();
   const hash=await bcrypt.hash(String(process.env.OWNER_PASSWORD),12);
   const found=await pool.query("SELECT id FROM app_users WHERE username=$1",[username]);
-  if(!found.rowCount) await pool.query("INSERT INTO app_users(username,password_hash,discord_username,role) VALUES($1,$2,$3,'owner')",[username,hash,process.env.OWNER_DISCORD_USERNAME||process.env.SERVER_FOUNDER_NAME||"فهد المطيري"]);
+  if(!found.rowCount) await pool.query("INSERT INTO app_users(username,password_hash,discord_username,role) VALUES($1,$2,$3,'owner')",[username,hash,process.env.OWNER_DISCORD_USERNAME||process.env.OWNER_USERNAME||process.env.SERVER_FOUNDER_NAME||"w4px"]);
   else await pool.query("UPDATE app_users SET password_hash=$2,role='owner',discord_username=$3 WHERE username=$1",[username,hash,process.env.OWNER_DISCORD_USERNAME||process.env.SERVER_FOUNDER_NAME||"فهد المطيري"]);
 }
 
@@ -477,13 +479,41 @@ app.delete("/api/owner/announcements/:id",requireAdmin,async(req,res)=>{await po
 
 
 
-const CODE_WORDS=["قمر","مفتاح","نهر","صحراء","روبوت","مدرسة","سيف","مطر","نجم","حديقة","مسرح","ذهب","بحر","كتاب","طائرة","قلعة","تفاحة","قهوة","نظارة","صاروخ","بوصلة","جزيرة","ثلج","طريق","مغناطيس","برق","نار","ملك","بنك","كرة","طبيب","موسيقى","سفينة","سر","جسر","شمس","ظل","وردة","ساعة","باب","مدينة","غابة","عين","قلب","صوت","فيلم","لؤلؤ","قلم","حصان","موجة","صقر","نقطة","سلم","حجر","خبز","كوكب","دخان","نسر","مرآة","نفق","شيفرة","رعد","قناع","خاتم","برج","نجمة","مخيم","صندوق","قطار","ملعب","رمل","عسل","ورق","جبل","ساحر","دائرة","تاج","سهم","شبكة","مسبار","كنز","ساحل","ليل","نهار","مجرة","كأس","نخلة","بركان","ريشة","موج","حبر","قفل"];
-function shuffle(a){return [...a].sort(()=>Math.random()-0.5)}
+const CODE_WORDS=["قمر","مفتاح","نهر","صحراء","روبوت","مدرسة","سيف","مطر","نجم","حديقة","مسرح","ذهب","بحر","كتاب","طائرة","قلعة","تفاحة","قهوة","نظارة","صاروخ","بوصلة","جزيرة","ثلج","طريق","مغناطيس","برق","نار","ملك","بنك","كرة","طبيب","موسيقى","سفينة","سر","جسر","شمس","ظل","وردة","ساعة","باب","مدينة","غابة","عين","قلب","صوت","فيلم","لؤلؤ","قلم","حصان","موجة","صقر","نقطة","سلم","حجر","خبز","كوكب","دخان","نسر","مرآة","نفق","شيفرة","رعد","قناع","خاتم","برج","نجمة","مخيم","صندوق","قطار","ملعب","رمل","عسل","ورق","جبل","ساحر","دائرة","تاج","سهم","شبكة","مسبار","كنز","ساحل","ليل","نهار","مجرة","كأس","نخلة","بركان","ريشة","موج","حبر","نسر"];
+const GAME_ENGINE={
+  SPYFALL:{kind:"choice",prompt:"أنت في محطة فضائية. اختر السؤال الذي يكشف الجاسوس دون أن تكشف المكان.",choices:["ما لون الجدار؟","كم عدد الموظفين؟","متى يبدأ الدوام؟"],answer:0},
+  PICTIONARY:{kind:"text",prompt:"الكلمة السرية للرسم: «صاروخ». اكتب وصفًا قصيرًا لما سيرسمه اللاعب.",answer:"صاروخ"},
+  CHARADES:{kind:"choice",prompt:"الكلمة المطلوب تمثيلها: «مظلة». اختر أسلوب التمثيل الصحيح.",choices:["تمثيل بلا كلام","قول الكلمة مباشرة","كتابة الكلمة"],answer:0},
+  WHOAMI:{kind:"text",prompt:"أنا شخصية مشهورة، أعيش في عالم الألعاب، وأرتدي قبعة حمراء. من أنا؟",answer:"ماريو"},
+  TABOO:{kind:"text",prompt:"اشرح «البحر» دون استخدام: ماء، موج، شاطئ. اكتب شرحك.",answer:""},
+  WORD_BOMB:{kind:"text",prompt:"القنبلة على حرف «م». اكتب كلمة عربية تبدأ بحرف م قبل انتهاء الدور.",answer:"م"},
+  TRUTH_LIE:{kind:"choice",prompt:"اختر: الأرض تدور حول الشمس.",choices:["حقيقة","كذبة"],answer:0},
+  EMOJI_GUESS:{kind:"choice",prompt:"🦁👑 خمن الفيلم.",choices:["الأسد الملك","توي ستوري","علاء الدين"],answer:0},
+  TRIVIA:{kind:"choice",prompt:"ما أكبر كوكب في المجموعة الشمسية؟",choices:["الأرض","المشتري","المريخ"],answer:1},
+  CATEGORIES:{kind:"text",prompt:"التصنيف: فواكه. اكتب اسم فاكهة تبدأ بحرف «ت».",answer:"ت"},
+  LIAR:{kind:"choice",prompt:"ثلاث عبارات أمامك. أيها تبدو كذبة في هذه الجولة؟",choices:["أنا أحب القهوة","أنا زرت القمر","أنا أحب الألعاب"],answer:1},
+  HOT_SEAT:{kind:"choice",prompt:"أنت في المقعد الساخن: ماذا تختار؟",choices:["تحدي سريع","سؤال صريح","مضاعفة النقاط"],answer:2},
+  WOULD_YOU_RATHER:{kind:"choice",prompt:"ماذا تختار؟",choices:["تقرأ أفكار الناس","توقف الوقت","تطير"],answer:1},
+  DRAW_GUESS:{kind:"text",prompt:"ارسم في خيالك «قلعة» ثم اكتب اسم الشيء الذي يجب أن يخمنه الفريق.",answer:"قلعة"},
+  FASTEST:{kind:"text",prompt:"أسرع إجابة: ما ناتج 7 × 8؟",answer:"56"},
+  RIDDLE_RUSH:{kind:"text",prompt:"لغز: شيء له أسنان ولا يعض. ما هو؟",answer:"مشط"},
+  SECRET_WORD:{kind:"text",prompt:"التلميحات: لون أصفر، حلو، يعيش في عناقيد. اكتب الكلمة السرية.",answer:"موز"},
+  MIMIC:{kind:"choice",prompt:"قلّد حركة القفز. أي خيار يمثل الجولة بشكل صحيح؟",choices:["🦘 قفز","🧍 وقوف","🛌 نوم"],answer:0},
+  GUESS_PLAYER:{kind:"choice",prompt:"اللاعب الغامض يحب الألعاب ويشارك في كل الجولات. اختر التلميح الأقوى لكشفه.",choices:["نشاطه في الجلسة","لون الموقع","وقت اليوم"],answer:0},
+  UNO:{kind:"choice",prompt:"لديك أحمر 5. الورقة المفتوحة أحمر 9. ماذا يمكنك لعبه؟",choices:["أحمر 5","أزرق 2","أخضر 7"],answer:0},
+  LUDO:{kind:"choice",prompt:"قطعتك على 12 ورمية النرد 4. إلى أي خانة تتحرك؟",choices:["14","16","18"],answer:1},
+  BALOOT:{kind:"choice",prompt:"في الجولة اخترت ورقة من نفس النوع المطلوب. ماذا يحدث؟",choices:["تُحسب للغلبة","تنحذف الجولة","تخسر تلقائيًا"],answer:0},
+  DAQSH:{kind:"choice",prompt:"إشارة السرعة ظهرت الآن! اختر رد الفعل الصحيح.",choices:["اضغط فورًا","انتظر","اخرج من الجولة"],answer:0},
+  QAWSAR:{kind:"choice",prompt:"لديك ورقتان قويتان. هل تحفظ القوة أم تستخدمها الآن؟",choices:["أحفظها","أستخدم الأقوى الآن","أرمي عشوائيًا"],answer:1}
+};
 function makeGameState(game){
-  if(game!=="CODENAMES")return {version:1,game,round:1,score:0,turn:"player",prompt:"ابدأ الجولة.",winner:null};
-  const words=shuffle(CODE_WORDS).slice(0,25);
-  const roles=shuffle(["red","red","red","red","red","red","red","red","red","blue","blue","blue","blue","blue","blue","blue","blue","neutral","neutral","neutral","neutral","neutral","neutral","neutral","assassin"]);
-  return {version:1,game,words:words.map((word,i)=>({word,role:roles[i],revealed:false})),turn:"red",clue:null,guessesLeft:0,scores:{red:0,blue:0},winner:null,turnNumber:1};
+  if(game==="CODENAMES"){
+    const words=shuffle(CODE_WORDS).slice(0,25);
+    const roles=shuffle(["red","red","red","red","red","red","red","red","red","blue","blue","blue","blue","blue","blue","blue","blue","blue","neutral","neutral","neutral","neutral","neutral","neutral","assassin"]);
+    return {version:2,game,words:words.map((word,i)=>({word,role:roles[i],revealed:false})),turn:"red",clue:null,guessesLeft:0,scores:{red:0,blue:0},winner:null,turnNumber:1};
+  }
+  const e=GAME_ENGINE[game]||{kind:"text",prompt:"ابدأ الجولة واكتب إجابتك.",answer:""};
+  return {version:2,game,round:1,score:0,turn:"player",prompt:e.prompt,choices:e.choices||[],kind:e.kind,answer:e.answer??"",winner:null,lastResult:null};
 }
 async function activeGameFor(req){const u=currentUser(req),guestId=String(req.body?.guestId||req.query?.guestId||"").trim(),q=await pool.query("SELECT id,players,status FROM game_lobbies WHERE status IN ('waiting','ready','playing') ORDER BY id DESC LIMIT 100");for(const g of q.rows){const ps=Array.isArray(g.players)?g.players:[];if(u&&ps.some(p=>!p.bot&&p.username===u.username))return g;if(!u&&guestId&&ps.some(p=>!p.bot&&p.guestId===guestId))return g}return null}
 app.get("/api/games",async(req,res)=>{
@@ -526,7 +556,7 @@ app.post("/api/games/:id/start",async(req,res)=>{
   const state=g.state&&Object.keys(g.state).length?g.state:makeGameState(g.game); const updated=await pool.query("UPDATE game_lobbies SET players=$1,status='playing',state=$2 WHERE id=$3 RETURNING *",[JSON.stringify(players),JSON.stringify(state),g.id]);if(u)await audit(u,"game_start","session "+g.id+" "+g.game+" players="+players.length);res.json({ok:true,game:updated.rows[0]});
 });
 app.post("/api/games/:id/leave",async(req,res)=>{
-  const u=currentUser(req),guestId=String(req.body?.guestId||"").trim().slice(0,80),q=await pool.query("SELECT * FROM game_lobbies WHERE id=$1",[req.params.id]);if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة"});
+  const u=currentUser(req),guestId=String(req.body?.guestId||"").trim(),q=await pool.query("SELECT * FROM game_lobbies WHERE id=$1",[req.params.id]);if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة"});
   const g=q.rows[0],players=Array.isArray(g.players)?g.players:[],i=u?players.findIndex(x=>x.username===u.username&&!x.bot):players.findIndex(x=>x.guestId===guestId&&!x.bot);if(i<0)return res.status(403).json({error:"أنت لست داخل هذه الجلسة"});
   if(players[i].host){await pool.query("UPDATE game_lobbies SET status='closed' WHERE id=$1",[g.id]);if(u)await audit(u,"game_leave","host closed session "+g.id);return res.json({ok:true,closed:true})}
   players.splice(i,1);const humans=players.filter(x=>!x.bot),status=humans.length>=g.max_players?"ready":"waiting";const updated=await pool.query("UPDATE game_lobbies SET players=$1,status=$2 WHERE id=$3 RETURNING *",[JSON.stringify(humans),status,g.id]);if(u)await audit(u,"game_leave","session "+g.id);res.json({ok:true,game:updated.rows[0]});
@@ -573,6 +603,7 @@ app.post("/api/games/:id/action",async(req,res)=>{
   const up=await pool.query("UPDATE game_lobbies SET state=$1 WHERE id=$2 RETURNING state,status,players",[JSON.stringify(state),g.id]);
   res.json({ok:true,state:up.rows[0].state,status:up.rows[0].status,players:up.rows[0].players});
 });
+app.get("/api/games/top",async(req,res)=>{try{const q=await pool.query("SELECT username,discord_username,wins,points FROM game_scores WHERE guest=false ORDER BY wins DESC,points DESC LIMIT 50");res.json({top:q.rows});}catch(e){res.json({top:[]});}});
 app.get("/api/games/top",async(req,res)=>{try{const q=await pool.query("SELECT username,discord_username,wins,points FROM game_scores WHERE guest=false ORDER BY wins DESC,points DESC LIMIT 50");res.json({top:q.rows});}catch(e){res.json({top:[]});}});
 app.post("/api/games/:id/score",requireAuth,async(req,res)=>{const points=Math.max(1,Math.min(100,Number(req.body?.points)||10)),u=req.session.user;await pool.query("INSERT INTO game_scores(username,discord_username,wins,points,guest) VALUES($1,$2,1,$3,false) ON CONFLICT(username) DO UPDATE SET wins=game_scores.wins+1,points=game_scores.points+$3,discord_username=EXCLUDED.discord_username",[u.username,u.discordUsername,points]);await audit(u,"game_win",`#${req.params.id} +${points}`);res.json({ok:true});});
 setInterval(async()=>{try{await pool.query("DELETE FROM game_lobbies WHERE status IN ('waiting','ready') AND created_at < NOW() - make_interval(mins => 5)")}catch(e){console.error("game cleanup:",e.message)}},30000);
