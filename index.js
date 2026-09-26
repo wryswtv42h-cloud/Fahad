@@ -959,6 +959,22 @@ app.post("/api/watch", requireAuth, (req, res) => {
   res.status(201).json({ room: { ...room, chat: undefined } });
 });
 
+app.post("/api/watch-rooms", requireAuth, (req, res) => {
+  const title = cleanText(req.body?.title, 160);
+  const mediaUrl = cleanText(req.body?.mediaUrl, 1000);
+  if (!title || !/^https?:\/\//i.test(mediaUrl)) return res.status(400).json({ error: "العنوان ورابط وسائط صالحان مطلوبان" });
+  const room = { id: String(nextWatchRoomId++), title, mediaUrl, hostId: req.user.id, status: "open", position: 0, playing: false, createdAt: now(), chat: [] };
+  watchRooms.set(room.id, room);
+  res.status(201).json({ room: { ...room, chat: undefined } });
+});
+app.post("/api/watch-rooms/:id/join", requireAuth, (req, res) => {
+  const room = watchRooms.get(req.params.id);
+  if (!room || room.status !== "open") return res.status(404).json({ error: "غرفة المشاهدة غير موجودة" });
+  room.members = Array.isArray(room.members) ? room.members : [];
+  if (!room.members.includes(req.user.id)) room.members.push(req.user.id);
+  res.json({ room: { ...room, ownerId: room.hostId, ownerUsername: users.get(room.hostId)?.username || "—" } });
+});
+
 app.get("/api/watch/:id", requireAuth, (req, res) => {
   const room = watchRooms.get(req.params.id);
   if (!room || room.status !== "open") return res.status(404).json({ error: "غرفة المشاهدة غير موجودة" });
@@ -1059,7 +1075,7 @@ app.post("/api/games/:id/action", requireAuth, (req, res) => {
   const game = games.get(req.params.id);
   if (!game) return res.status(404).json({ error: "اللعبة غير موجودة" });
   if (!game.players.some((p) => p.userId === req.user.id)) return res.status(403).json({ error: "أنت لست لاعبًا" });
-  if (game.status === "waiting") return res.status(400).json({ error: "اللعبة لم تبدأ بعد" });
+  if (game.status === "waiting" && req.body?.action !== "ready") return res.status(400).json({ error: "اللعبة لم تبدأ بعد" });
 
   // Generic action transport. Game-specific rule engines can be added here later.
   game.state.lastAction = { userId: req.user.id, action: req.body?.action || null, data: req.body?.data || null, at: now() };
