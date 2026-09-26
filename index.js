@@ -1185,6 +1185,8 @@ app.patch("/api/admin/groups/:id", requireAdmin, async (req, res) => {
   res.json({ group: groupView(group, true) });
 });
 
+app.patch("/api/admin/groups/:id/review", requireAdmin, async (req, res) => { const group = groups.get(req.params.id); if (!group) return res.status(404).json({ error: "المجموعة غير موجودة" }); const status = cleanText(req.body?.status, 30); if (!["approved","rejected","pending"].includes(status)) return res.status(400).json({ error: "الحالة غير صحيحة" }); group.status = status; group.reviewedAt = now(); group.reviewedBy = req.user.id; if (status === "approved" && !group.discordRoleId) { try { await setupDiscordGroup(group); } catch (e) { console.error("Group Discord setup:", e.message); } } pushLog("group_reviewed", { groupId: group.id, status, adminId: req.user.id }); res.json({ group: groupView(group, true) }); });
+
 app.get("/api/admin/groups/:id/requests", requireAdmin, (req, res) => {
   const group = groups.get(req.params.id);
   if (!group) return res.status(404).json({ error: "المجموعة غير موجودة" });
@@ -1224,6 +1226,10 @@ app.patch("/api/admin/applications/:id", requireAdmin, async (req, res) => {
   await notifyDiscordWebsite({ title: "تحديث طلب تقديم", description: `تم تحديث الطلب ${application.id} إلى ${status}.` });
   res.json({ application });
 });
+
+app.get("/api/admin/reviews", requireAdmin, (req, res) => { res.json({ reviews: [...reviews.values()].flat().slice(-200).reverse() }); });
+
+app.patch("/api/admin/tickets/:id", requireAdmin, (req, res) => { const ticket = tickets.get(req.params.id); if (!ticket) return res.status(404).json({ error: "التذكرة غير موجودة" }); const status = cleanText(req.body?.status, 30); if (!["open","closed","pending","answered"].includes(status)) return res.status(400).json({ error: "الحالة غير صحيحة" }); ticket.status = status; ticket.updatedAt = now(); pushLog("ticket_reviewed", { ticketId: ticket.id, status, adminId: req.user.id }); res.json({ ticket }); });
 
 app.get("/api/admin/private-messages", requireAdmin, (req, res) => res.json({ messages: privateMessageLogs.slice(-200).reverse() }));
 
