@@ -31,6 +31,7 @@ const client = new Client({
 });
 
 const app = express();
+app.set("trust proxy", 1);
 app.disable("x-powered-by");
 app.use(cors());
 app.use(express.json({ limit: "20kb" }));
