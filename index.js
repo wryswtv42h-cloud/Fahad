@@ -429,3 +429,5 @@ client.login(token).catch((error) => {
   console.error("Discord login failed:", error.message);
   process.exit(1);
 });
+
+// auth feature checkpoint
