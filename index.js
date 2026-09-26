@@ -314,13 +314,19 @@ app.post("/api/groups/:id/requests/:requestId",requireAuth,async(req,res)=>{
   const own=await pool.query("SELECT id,name FROM community_groups WHERE id=$1 AND username=$2",[gid,u.username]);
   if(!own.rowCount)return res.status(403).json({error:"أنت لست مالك القروب"});
   const rq=await pool.query("SELECT username,discord_username FROM group_join_requests WHERE id=$1 AND group_id=$2 AND status='pending'",[rid,gid]);
-  if(!rq.rowCount)return res.status(404).json({error:"الطلب غير موجود"});
+  if(!rq.rowCount)return res.status(404).json({error:"الطلب غير موجود أو تمت معالجته"});
   await pool.query("UPDATE group_join_requests SET status=$1 WHERE id=$2",[status,rid]);
   if(status==="approved")await pool.query("INSERT INTO group_members(group_id,username,discord_username) VALUES($1,$2,$3) ON CONFLICT DO NOTHING",[gid,rq.rows[0].username,rq.rows[0].discord_username]);
   await audit(u,"group_join_request_update",`#${gid} request #${rid} => ${status}`);
   res.json({ok:true});
 });
-app.post("/api/groups",requireAuth,async(req,res)=>{const name=String(req.body?.name||"").trim(),description=String(req.body?.description||"").trim(),u=req.session.user;if(name.length<2||name.length>60||description.length>240)return res.status(400).json({error:"بيانات القروب غير صحيحة"});const q=await pool.query("INSERT INTO community_groups(username,discord_username,name,description) VALUES($1,$2,$3,$4) RETURNING *",[u.username,u.discordUsername,name,description]);await pool.query("INSERT INTO group_members(group_id,username,discord_username) VALUES($1,$2,$3) ON CONFLICT DO NOTHING",[q.rows[0].id,u.username,u.discordUsername]);await audit(u,"group_create",name);res.json({ok:true,group:q.rows[0]});});
+app.post("/api/groups",requireAuth,async(req,res)=>{
+  const name=String(req.body?.name||"").trim(),description=String(req.body?.description||"").trim(),u=req.session.user;
+  if(name.length<2||name.length>60||description.length>240)return res.status(400).json({error:"بيانات القروب غير صحيحة"});
+  const q=await pool.query("INSERT INTO community_groups(username,discord_username,name,description) VALUES($1,$2,$3,$4) RETURNING *",[u.username,u.discordUsername,name,description]);
+  await pool.query("INSERT INTO group_members(group_id,username,discord_username) VALUES($1,$2,$3) ON CONFLICT DO NOTHING",[q.rows[0].id,u.username,u.discordUsername]);
+  await audit(u,"group_create",name);res.json({ok:true,group:q.rows[0]});
+});
 app.delete("/api/groups/:id",requireAuth,async(req,res)=>{await pool.query("DELETE FROM community_groups WHERE id=$1 AND username=$2",[req.params.id,req.session.user.username]);res.json({ok:true});});
 app.get("/api/owner/logs",requireAdmin,async(req,res)=>{const q=await pool.query("SELECT id,username,discord_username,action,details,created_at FROM audit_logs ORDER BY id DESC LIMIT 200");res.json({logs:q.rows});});
 app.get("/api/owner/tickets",requireAdmin,async(req,res)=>{const q=await pool.query("SELECT id,username,discord_username,subject,message,status,created_at FROM tickets ORDER BY id DESC LIMIT 100");res.json({tickets:q.rows});});
@@ -337,12 +343,57 @@ app.delete("/api/owner/announcements/:id",requireAdmin,async(req,res)=>{await po
 
 
 
-app.get("/api/games",async(req,res)=>{const q=await pool.query("SELECT id,game,host_username,max_players,players,status,created_at FROM game_lobbies WHERE status='waiting' ORDER BY id DESC LIMIT 50");res.json({games:q.rows});});
-app.post("/api/games",async(req,res)=>{const game=String(req.body?.game||"").trim().toUpperCase(),max=Math.max(2,Math.min(8,Number(req.body?.maxPlayers)||4)),u=currentUser(req),guestName=String(req.body?.guestName||"زائر").trim().slice(0,40);if(!["UNO","LUDO","BALOOT","DAQSH","QAWSAR","CODENAMES","SPYFALL","PICTIONARY","CHARADES","WHOAMI","TABOO","WORD_BOMB","TRUTH_LIE","EMOJI_GUESS","TRIVIA","CATEGORIES","LIAR","HOT_SEAT","WOULD_YOU_RATHER","DRAW_GUESS","FASTEST","RIDDLE_RUSH","SECRET_WORD","MIMIC","GUESS_PLAYER"].includes(game))return res.status(400).json({error:"اللعبة غير مدعومة"});const hostName=u?.username||guestName||"زائر",discordName=u?.discordUsername||guestName;const players=[{username:hostName,discordUsername:discordName,guest:!u}];const q=await pool.query("INSERT INTO game_lobbies(game,host_username,host_discord_username,max_players,players) VALUES($1,$2,$3,$4,$5) RETURNING *",[game,hostName,discordName,max,JSON.stringify(players)]);if(u)await audit(u,"game_create",game);res.json({ok:true,game:q.rows[0]});});
-app.post("/api/games/:id/join",async(req,res)=>{const u=currentUser(req),guestName=String(req.body?.guestName||"زائر").trim().slice(0,40),name=u?.username||guestName||"زائر",discordName=u?.discordUsername||guestName;const q=await pool.query("SELECT * FROM game_lobbies WHERE id=$1 AND status='waiting'",[req.params.id]);if(!q.rowCount)return res.status(404).json({error:"اللعبة غير موجودة"});const g=q.rows[0],players=Array.isArray(g.players)?g.players:[];if(players.some(x=>x.username===name&&x.discordUsername===discordName))return res.json({ok:true});if(players.length>=g.max_players)return res.status(409).json({error:"اللعبة مكتملة"});players.push({username:name,discordUsername:discordName,guest:!u});const st=players.length>=g.max_players?"ready":"waiting";await pool.query("UPDATE game_lobbies SET players=$1,status=$2 WHERE id=$3",[JSON.stringify(players),st,g.id]);if(u)await audit(u,"game_join",`#${g.id} ${g.game}`);res.json({ok:true});});
+app.get("/api/games",async(req,res)=>{
+  const q=await pool.query("SELECT id,game,host_username,host_discord_username,max_players,players,status,created_at FROM game_lobbies WHERE status IN ('waiting','ready','playing') ORDER BY id DESC LIMIT 50");
+  res.json({games:q.rows});
+});
+app.get("/api/games/:id",async(req,res)=>{
+  const q=await pool.query("SELECT id,game,host_username,host_discord_username,max_players,players,status,created_at FROM game_lobbies WHERE id=$1",[req.params.id]);
+  if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة"});
+  res.json({game:q.rows[0]});
+});
+app.post("/api/games",async(req,res)=>{
+  const game=String(req.body?.game||"").trim().toUpperCase(),max=Math.max(2,Math.min(8,Number(req.body?.maxPlayers)||4)),u=currentUser(req),guestName=String(req.body?.guestName||"زائر").trim().slice(0,40);
+  if(!["UNO","LUDO","BALOOT","DAQSH","QAWSAR","CODENAMES","SPYFALL","PICTIONARY","CHARADES","WHOAMI","TABOO","WORD_BOMB","TRUTH_LIE","EMOJI_GUESS","TRIVIA","CATEGORIES","LIAR","HOT_SEAT","WOULD_YOU_RATHER","DRAW_GUESS","FASTEST","RIDDLE_RUSH","SECRET_WORD","MIMIC","GUESS_PLAYER"].includes(game))return res.status(400).json({error:"اللعبة غير مدعومة"});
+  const hostName=u?.username||guestName||"زائر",discordName=u?.discordUsername||guestName;
+  const players=[{username:hostName,discordUsername:discordName,guest:!u,bot:false,host:true}];
+  const q=await pool.query("INSERT INTO game_lobbies(game,host_username,host_discord_username,max_players,players,status) VALUES($1,$2,$3,$4,$5,'waiting') RETURNING *",[game,hostName,discordName,max,JSON.stringify(players)]);
+  if(u)await audit(u,"game_create",game);
+  res.json({ok:true,game:q.rows[0]});
+});
+app.post("/api/games/:id/join",async(req,res)=>{
+  const u=currentUser(req),guestName=String(req.body?.guestName||"زائر").trim().slice(0,40),name=u?.username||guestName||"زائر",discordName=u?.discordUsername||guestName;
+  const q=await pool.query("SELECT * FROM game_lobbies WHERE id=$1",[req.params.id]);
+  if(!q.rowCount)return res.status(404).json({error:"اللعبة غير موجودة"});
+  const g=q.rows[0],players=Array.isArray(g.players)?g.players:[];
+  if(g.status==="playing")return res.status(409).json({error:"الجلسة بدأت بالفعل"});
+  if(g.status!=="waiting"&&g.status!=="ready")return res.status(409).json({error:"الجلسة غير متاحة"});
+  if(players.some(x=>x.username===name&&x.discordUsername===discordName))return res.json({ok:true,game:g});
+  if(players.length>=g.max_players)return res.status(409).json({error:"اللعبة مكتملة"});
+  players.push({username:name,discordUsername:discordName,guest:!u,bot:false,host:false});
+  const st=players.length>=g.max_players?"ready":"waiting";
+  const updated=await pool.query("UPDATE game_lobbies SET players=$1,status=$2 WHERE id=$3 RETURNING *",[JSON.stringify(players),st,g.id]);
+  if(u)await audit(u,"game_join",`#${g.id} ${g.game}`);
+  res.json({ok:true,game:updated.rows[0]});
+});
+app.post("/api/games/:id/start",async(req,res)=>{
+  const u=currentUser(req),q=await pool.query("SELECT * FROM game_lobbies WHERE id=$1",[req.params.id]);
+  if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة"});
+  const g=q.rows[0],hostMatches=u ? g.host_username===u.username : String(req.body?.guestName||"").trim().slice(0,40)===g.host_username;
+  if(!hostMatches)return res.status(403).json({error:"فقط صاحب الجلسة يقدر يبدأ"});
+  if(g.status==="playing")return res.json({ok:true,game:g});
+  let players=Array.isArray(g.players)?g.players:[];
+  let botNo=1;
+  while(players.length<g.max_players){
+    players.push({username:"بوت "+botNo,discordUsername:"BOT",guest:true,bot:true,host:false});
+    botNo++;
+  }
+  const updated=await pool.query("UPDATE game_lobbies SET players=$1,status='playing' WHERE id=$2 RETURNING *",[JSON.stringify(players),g.id]);
+  if(u)await audit(u,"game_start",`#${g.id} ${g.game} players=${players.length}`);
+  res.json({ok:true,game:updated.rows[0]});
+});
 app.get("/api/games/top",async(req,res)=>{try{const q=await pool.query("SELECT username,discord_username,wins,points FROM game_scores WHERE guest=false ORDER BY wins DESC,points DESC LIMIT 50");res.json({top:q.rows});}catch(e){res.json({top:[]});}});
 app.post("/api/games/:id/score",requireAuth,async(req,res)=>{const points=Math.max(1,Math.min(100,Number(req.body?.points)||10)),u=req.session.user;await pool.query("INSERT INTO game_scores(username,discord_username,wins,points,guest) VALUES($1,$2,1,$3,false) ON CONFLICT(username) DO UPDATE SET wins=game_scores.wins+1,points=game_scores.points+$3,discord_username=EXCLUDED.discord_username",[u.username,u.discordUsername,points]);await audit(u,"game_win",`#${req.params.id} +${points}`);res.json({ok:true});});
-
 app.get("/health", (req, res) => {
   res.json({
     ok: true,
