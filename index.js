@@ -222,7 +222,8 @@ async function ensureOwner(){
   if(!found.rowCount) await pool.query("INSERT INTO app_users(username,password_hash,discord_username,role) VALUES($1,$2,$3,'owner')",[username,hash,process.env.OWNER_DISCORD_USERNAME||process.env.SERVER_FOUNDER_NAME||"فهد المطيري"]);
   else await pool.query("UPDATE app_users SET password_hash=$2,role='owner',discord_username=$3 WHERE username=$1",[username,hash,process.env.OWNER_DISCORD_USERNAME||process.env.SERVER_FOUNDER_NAME||"فهد المطيري"]);
 }
-\n
+
+
 app.get("/api/auth/me",(req,res)=>{const u=currentUser(req);res.json({authenticated:Boolean(u),user:u?{username:u.username,discordUsername:u.discordUsername,role:u.role,isOwner:u.role==="owner"}:null});});
 app.post("/api/auth/register",async(req,res)=>{
   try{
@@ -245,7 +246,8 @@ app.post("/api/auth/login",async(req,res)=>{
   }catch(e){console.error("Login:",e);res.status(500).json({error:"تعذر تسجيل الدخول"});}
 });
 app.post("/api/auth/logout",async(req,res)=>{const u=currentUser(req);if(u) await audit(u,"logout","تسجيل خروج").catch(()=>{});req.session.destroy(()=>res.json({ok:true}));});
-\n
+
+
 app.get("/api/tickets",requireAuth,async(req,res)=>{const q=await pool.query("SELECT id,subject,message,status,created_at FROM tickets WHERE username=$1 ORDER BY id DESC",[req.session.user.username]);res.json({tickets:q.rows});});
 app.post("/api/tickets",requireAuth,async(req,res)=>{const subject=String(req.body?.subject||"").trim(),message=String(req.body?.message||"").trim(),u=req.session.user;if(subject.length<3||subject.length>120||message.length<3||message.length>3000)return res.status(400).json({error:"بيانات التيكت غير صحيحة"});const q=await pool.query("INSERT INTO tickets(username,discord_username,subject,message) VALUES($1,$2,$3,$4) RETURNING id",[u.username,u.discordUsername,subject,message]);await audit(u,"ticket_create",`#${q.rows[0].id} ${subject}`);res.json({ok:true,id:q.rows[0].id});});
 app.post("/api/applications",requireAuth,async(req,res)=>{const type=String(req.body?.type||"تقديم").trim(),answers=req.body?.answers||{},u=req.session.user;if(type.length>60||JSON.stringify(answers).length>8000)return res.status(400).json({error:"بيانات التقديم غير صحيحة"});const q=await pool.query("INSERT INTO applications(username,discord_username,type,answers) VALUES($1,$2,$3,$4) RETURNING id",[u.username,u.discordUsername,type,JSON.stringify(answers)]);await audit(u,"application_create",`#${q.rows[0].id} ${type}`);res.json({ok:true,id:q.rows[0].id});});
@@ -255,11 +257,13 @@ app.delete("/api/groups/:id",requireAuth,async(req,res)=>{await pool.query("DELE
 app.get("/api/owner/logs",requireOwner,async(req,res)=>{const q=await pool.query("SELECT id,username,discord_username,action,details,created_at FROM audit_logs ORDER BY id DESC LIMIT 200");res.json({logs:q.rows});});
 app.get("/api/owner/tickets",requireOwner,async(req,res)=>{const q=await pool.query("SELECT id,username,discord_username,subject,message,status,created_at FROM tickets ORDER BY id DESC LIMIT 100");res.json({tickets:q.rows});});
 app.get("/api/owner/applications",requireOwner,async(req,res)=>{const q=await pool.query("SELECT id,username,discord_username,type,answers,status,created_at FROM applications ORDER BY id DESC LIMIT 100");res.json({applications:q.rows});});
-\n
+
+
 app.get("/api/games",requireAuth,async(req,res)=>{const q=await pool.query("SELECT id,game,host_username,max_players,players,status,created_at FROM game_lobbies WHERE status='waiting' ORDER BY id DESC LIMIT 50");res.json({games:q.rows});});
 app.post("/api/games",requireAuth,async(req,res)=>{const game=String(req.body?.game||"").trim().toUpperCase(),max=Math.max(2,Math.min(8,Number(req.body?.maxPlayers)||4)),u=req.session.user;if(!["UNO","LUDO","BALOOT","DAQSH","QAWSAR"].includes(game))return res.status(400).json({error:"اللعبة غير مدعومة"});const players=[{username:u.username,discordUsername:u.discordUsername}];const q=await pool.query("INSERT INTO game_lobbies(game,host_username,host_discord_username,max_players,players) VALUES($1,$2,$3,$4,$5) RETURNING *",[game,u.username,u.discordUsername,max,JSON.stringify(players)]);await audit(u,"game_create",game);res.json({ok:true,game:q.rows[0]});});
 app.post("/api/games/:id/join",requireAuth,async(req,res)=>{const u=req.session.user;const q=await pool.query("SELECT * FROM game_lobbies WHERE id=$1 AND status='waiting' FOR UPDATE",[req.params.id]);if(!q.rowCount)return res.status(404).json({error:"اللعبة غير موجودة"});const g=q.rows[0],players=Array.isArray(g.players)?g.players:[];if(players.some(x=>x.username===u.username))return res.json({ok:true});if(players.length>=g.max_players)return res.status(409).json({error:"اللعبة مكتملة"});players.push({username:u.username,discordUsername:u.discordUsername});const status=players.length>=g.max_players?"ready":"waiting";await pool.query("UPDATE game_lobbies SET players=$1,status=$2 WHERE id=$3",[JSON.stringify(players),status,g.id]);await audit(u,"game_join",`#${g.id} ${g.game}`);res.json({ok:true});});
-\napp.get("/health", (req, res) => {
+
+app.get("/health", (req, res) => {
   res.json({
     ok: true,
     botReady: client.isReady(),
