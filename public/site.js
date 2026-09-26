@@ -3424,21 +3424,21 @@ async function loadGames() {
       ${invites.length ? `
         <div class="game-invites">
           <h3>دعوات الألعاب</h3>
-          ${invites.map(i=>`<div class="game-invite"><span>دعوة إلى لعبة #${esc(i.gameId)}</span><div><button class="primary game-accept" data-invite="${esc(i.id)}">قبول</button><button class="game-reject" data-invite="${esc(i.id)}">رفض</button></div></div>`).join("")}
+          ${invites.map(i=>`<div class="game-invite"><span>دعوة إلى لعبة #${escapeHTML(i.gameId)}</span><div><button class="primary game-accept" data-invite="${escapeHTML(i.id)}">قبول</button><button class="game-reject" data-invite="${escapeHTML(i.id)}">رفض</button></div></div>`).join("")}
         </div>` : ""}
       <div class="active-games">
         <div class="game-live-title"><h3>الغرف الحالية</h3><button id="game-refresh">تحديث</button></div>
         <div class="active-game-grid">
           ${games.length ? games.map(g=>`
             <article class="active-game-card">
-              <div class="card-top"><strong>${esc(g.name)}</strong><span class="status-badge">${g.status==="active"?"جارية":"بانتظار اللاعبين"}</span></div>
-              <p class="muted">المضيف: ${esc(g.host?.username||"—")}</p>
-              <div class="card-meta"><span>👥 ${g.players.length}/${g.maxPlayers}</span><span>#${esc(g.id)}</span></div>
-              <div class="tags">${g.players.map(p=>`<span class="tag">${esc(p.user?.username||"لاعب")}</span>`).join("")}</div>
+              <div class="card-top"><strong>${escapeHTML(g.name)}</strong><span class="status-badge">${g.status==="active"?"جارية":"بانتظار اللاعبين"}</span></div>
+              <p class="muted">المضيف: ${escapeHTML(g.host?.username||"—")}</p>
+              <div class="card-meta"><span>👥 ${g.players.length}/${g.maxPlayers}</span><span>#${escapeHTML(g.id)}</span></div>
+              <div class="tags">${g.players.map(p=>`<span class="tag">${escapeHTML(p.user?.username||"لاعب")}</span>`).join("")}</div>
               <div class="game-actions">
-                <button class="primary game-join" data-game-id="${esc(g.id)}">انضمام</button>
-                <button class="game-action" data-game-id="${esc(g.id)}" data-action="ready">جاهز</button>
-                <button class="game-finish" data-game-id="${esc(g.id)}">إنهاء</button>
+                <button class="primary game-join" data-game-id="${escapeHTML(g.id)}">انضمام</button>
+                <button class="game-action" data-game-id="${escapeHTML(g.id)}" data-action="ready">جاهز</button>
+                <button class="game-finish" data-game-id="${escapeHTML(g.id)}">إنهاء</button>
               </div>
             </article>`).join("") : `<div class="empty-state">لا توجد ألعاب حالية. أنشئ أول لعبة.</div>`}
         </div>
