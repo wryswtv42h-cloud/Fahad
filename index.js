@@ -1145,7 +1145,7 @@ app.post("/api/games", requireAuth, (req, res) => {
   if (!allowed.has(type)) return res.status(400).json({ error: "نوع اللعبة غير مدعوم" });
   const maxPlayers = Math.min(8, Math.max(2, Number(req.body?.maxPlayers) || 4));
   const game = createGame(type, req.user.id, maxPlayers);
-  res.status(201).json({ game: publicGame(game) });
+  res.status(201).json({ game: publicGame(game, req.user.id) });
 });
 
 app.post("/api/games/:id/join", requireAuth, async (req, res) => {
@@ -1201,11 +1201,11 @@ app.post("/api/games/:id/action", requireAuth, (req,res)=>{
   const player=game.players.find(p=>p.userId===req.user.id);if(!player)return res.status(403).json({error:"أنت لست لاعبًا"});
   const action=cleanText(req.body?.action,40).toLowerCase();
   try{
-    if(action==="ready"){player.ready=!player.ready;return res.json({game:publicGame(game),state:game.state});}
+    if(action==="ready"){player.ready=!player.ready;return res.json({game:publicGame(game,req.user.id),state:publicGame(game,req.user.id).state});}
     if(action==="start"){
       if(game.hostId!==req.user.id&&!isAdminUser(req.user))return res.status(403).json({error:"المضيف فقط يستطيع بدء اللعبة"});
       if(game.players.length<2)return res.status(400).json({error:"أضف لاعبًا واحدًا على الأقل"});
-      startGame(game);return res.json({game:publicGame(game),state:game.state});
+      startGame(game);return res.json({game:publicGame(game,req.user.id),state:publicGame(game,req.user.id).state});
     }
     if(game.status!=="active")return res.status(400).json({error:"ابدأ اللعبة أولًا"});
     if(game.type==="uno")applyUnoAction(game,req.user,action,req.body?.data||{});
@@ -1215,7 +1215,7 @@ app.post("/api/games/:id/action", requireAuth, (req,res)=>{
       if(!["play","move","pass","roll","draw"].includes(action))throw new Error("حركة اللعبة غير معروفة");
       game.state.lastAction={userId:req.user.id,action,data:req.body?.data||null,at:now()};advanceTurn(game);
     }
-    game.updatedAt=now();res.json({game:publicGame(game),state:game.state});
+    game.updatedAt=now();res.json({game:publicGame(game,req.user.id),state:publicGame(game,req.user.id).state});
   }catch(e){res.status(400).json({error:e.message||"تعذر تنفيذ الحركة"});}
 });
 app.post("/api/games/:id/finish", requireAuth, (req, res) => {
