@@ -129,8 +129,8 @@ let memberSnapshot = null;
 let memberSnapshotAt = 0;
 let memberFetchPromise = null;
 
-const MEMBER_CACHE_TTL = 45_000;
-const GUILD_CACHE_TTL = 15_000;
+const MEMBER_CACHE_TTL = 5 * 60_000;
+const GUILD_CACHE_TTL = 5 * 60_000;
 const MAX_LOGS = 500;
 
 function now() {
@@ -246,7 +246,7 @@ async function getAllMembers(guild) {
   if (memberSnapshot && Date.now() - memberSnapshotAt < MEMBER_CACHE_TTL) return memberSnapshot;
   if (memberFetchPromise) return memberFetchPromise;
 
-  memberFetchPromise = guild.members.fetch()
+  memberFetchPromise = Promise.race([guild.members.fetch(), new Promise((_, reject) => setTimeout(() => reject(new Error("Discord member fetch timeout")), 8000))])
     .then((collection) => {
       memberSnapshot = [...collection.values()];
       memberSnapshotAt = Date.now();
@@ -1138,6 +1138,24 @@ app.post("/api/games/:id/finish", requireAuth, (req, res) => {
 
 app.get("/api/games/stats/me", requireAuth, (req, res) => res.json({ stats: gameStatsFor(req.user.id) }));
 
+// -------------------- Admin management --------------------
+app.get("/api/admin/staff", requireAdmin, (req,res) => {
+  res.json({ owner: userJson(owner), admins: [...admins].map((id) => userJson(users.get(id))).filter(Boolean) });
+});
+app.post("/api/admin/staff", requireAdmin, (req,res) => {
+  const target = users.get(cleanText(req.body?.userId,50));
+  if (!target) return res.status(404).json({error:"المستخدم غير موجود"});
+  admins.add(target.id);
+  pushLog("admin_added",{by:req.user.id,userId:target.id,username:target.username});
+  res.json({user:userJson(target)});
+});
+app.delete("/api/admin/staff/:userId", requireAdmin, (req,res) => {
+  if (req.params.userId === owner.id) return res.status(400).json({error:"لا يمكن إزالة الـOwner"});
+  admins.delete(req.params.userId);
+  pushLog("admin_removed",{by:req.user.id,userId:req.params.userId});
+  res.json({ok:true});
+});
+
 // -------------------- Private Messenger --------------------
 app.get("/api/messages/users", requireAuth, (req, res) => {
   res.json({ users: [...users.values()].filter((u) => u.id !== req.user.id && !u.suspended).map((u) => ({ id:u.id, username:u.username, discordId:u.discordId||"" })) });
@@ -1153,7 +1171,8 @@ app.post("/api/messages", requireAuth, (req, res) => {
   if(!target||target.id===req.user.id||target.suspended) return res.status(404).json({error:"المستخدم غير موجود"});
   if(!message) return res.status(400).json({error:"الرسالة مطلوبة"});
   const key=[req.user.id,target.id].sort().join(":");
-  const item={id:randomToken(),fromUserId:req.user.id,toUserId:target.id,message,createdAt:now(),read:false};
+  const anonymous = Boolean(req.body?.anonymous);
+  const item={id:randomToken(),fromUserId:req.user.id,toUserId:target.id,message,createdAt:now(),read:false,anonymous};
   const list=privateMessages.get(key)||[]; list.push(item); if(list.length>300) list.splice(0,list.length-300); privateMessages.set(key,list);
   const ns=notifications.get(target.id)||[]; ns.unshift({id:String(nextNotificationId++),type:"private_message",fromUserId:req.user.id,text:`رسالة خاصة جديدة من ${req.user.username}`,createdAt:now(),read:false}); notifications.set(target.id,ns.slice(0,100));
   privateMessageLogs.unshift({...item,fromUsername:req.user.username,toUsername:target.username}); if(privateMessageLogs.length>500) privateMessageLogs.length=500;
