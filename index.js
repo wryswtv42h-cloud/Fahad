@@ -196,10 +196,12 @@ function memberJson(member) {
 
   return {
     id: member.id,
-    name: member.displayName,
+    name: member.displayName || member.user.globalName || member.user.username,
+    displayName: member.displayName,
     username: member.user.username,
     globalName: member.user.globalName,
     bot: member.user.bot,
+    status: member.presence?.status || "offline",
     avatar: member.user.displayAvatarURL({ extension: "png", size: 256 }),
     joinedAt: member.joinedAt,
     roles,
