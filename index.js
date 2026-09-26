@@ -32,7 +32,8 @@ const client = new Client({
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildVoiceStates
+    GatewayIntentBits.GuildVoiceStates,
+    GatewayIntentBits.GuildPresences
   ]
 });
 
@@ -251,7 +252,13 @@ async function getAllMembers(guild) {
       return memberSnapshot;
     })
     .catch((error) => {
-      if (memberSnapshot?.length) return memberSnapshot;
+      console.error("Discord member fetch failed:", error.message);
+      const cached = [...guild.members.cache.values()];
+      if (cached.length) {
+        memberSnapshot = cached;
+        memberSnapshotAt = Date.now();
+        return memberSnapshot;
+      }
       throw error;
     })
     .finally(() => { memberFetchPromise = null; });
@@ -572,7 +579,7 @@ app.post("/api/public/visit", (req, res) => {
 app.get("/api/public/stats", async (req, res) => {
   try {
     const guild = await getGuild();
-    const allMembers = await getAllMembers(guild);
+    const allMembers = await getAllMembers(guild).catch(() => [...guild.members.cache.values()]);
     const allReviews = [...reviews.values()].flat();
     const avg = allReviews.length ? allReviews.reduce((sum, r) => sum + Number(r.rating || 0), 0) / allReviews.length : 0;
     res.json({
@@ -600,7 +607,7 @@ app.get("/api/public/reviews", (req, res) => {
 app.get("/api/public/community", async (req, res) => {
   try {
     const guild = await getGuild();
-    const members = await getAllMembers(guild);
+    const members = await getAllMembers(guild).catch(() => [...guild.members.cache.values()]);
     const online = members.filter(m => m.presence?.status && m.presence.status !== "offline").length;
     const roleCounts = {};
     for (const m of members) {
