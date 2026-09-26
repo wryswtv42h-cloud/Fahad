@@ -204,7 +204,7 @@ async function initAppDatabase() {
   if (!process.env.DATABASE_URL) return;
   await pool.query(`
     CREATE TABLE IF NOT EXISTS app_users (id SERIAL PRIMARY KEY, username VARCHAR(32) UNIQUE NOT NULL, password_hash TEXT NOT NULL, discord_username VARCHAR(100) NOT NULL, role VARCHAR(20) NOT NULL DEFAULT 'user', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), last_login_at TIMESTAMPTZ);
-    CREATE TABLE IF NOT EXISTS tickets (id SERIAL PRIMARY KEY, username VARCHAR(32) NOT NULL, discord_username VARCHAR(100) NOT NULL, subject VARCHAR(120) NOT NULL, message TEXT NOT NULL, status VARCHAR(20) NOT NULL DEFAULT 'open', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+    CREATE TABLE IF NOT EXISTS tickets (id SERIAL PRIMARY KEY, username VARCHAR(32) NOT NULL, discord_username VARCHAR(100) NOT NULL, subject VARCHAR(120) NOT NULL, message TEXT NOT NULL, status VARCHAR(20) NOT NULL DEFAULT 'open', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()); CREATE TABLE IF NOT EXISTS ticket_messages (id SERIAL PRIMARY KEY, ticket_id INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE, username VARCHAR(32) NOT NULL, discord_username VARCHAR(100) NOT NULL, message TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
     CREATE TABLE IF NOT EXISTS applications (id SERIAL PRIMARY KEY, username VARCHAR(32) NOT NULL, discord_username VARCHAR(100) NOT NULL, type VARCHAR(60) NOT NULL, answers JSONB NOT NULL DEFAULT '{}'::jsonb, status VARCHAR(20) NOT NULL DEFAULT 'pending', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
     CREATE TABLE IF NOT EXISTS community_groups (id SERIAL PRIMARY KEY, username VARCHAR(32) NOT NULL, discord_username VARCHAR(100) NOT NULL, name VARCHAR(60) NOT NULL, description VARCHAR(240) NOT NULL DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
     CREATE TABLE IF NOT EXISTS audit_logs (id BIGSERIAL PRIMARY KEY, username VARCHAR(32), discord_username VARCHAR(100), action VARCHAR(120) NOT NULL, details TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
@@ -276,8 +276,53 @@ app.post("/api/auth/login",async(req,res)=>{
 app.post("/api/auth/logout",async(req,res)=>{const u=currentUser(req);if(u) await audit(u,"logout","تسجيل خروج").catch(()=>{});req.session.destroy(()=>res.json({ok:true}));});
 
 
-app.get("/api/tickets",async(req,res)=>{if(!currentUser(req))return res.json({tickets:[],public:true,canOpen:false});const q=await pool.query("SELECT id,subject,message,status,created_at FROM tickets WHERE username=$1 ORDER BY id DESC",[req.session.user.username]);res.json({tickets:q.rows,public:true,canOpen:true});});
-app.post("/api/tickets",requireAuth,async(req,res)=>{const subject=String(req.body?.subject||"").trim(),message=String(req.body?.message||"").trim(),u=req.session.user;if(subject.length<3||subject.length>120||message.length<3||message.length>3000)return res.status(400).json({error:"بيانات التيكت غير صحيحة"});const q=await pool.query("INSERT INTO tickets(username,discord_username,subject,message) VALUES($1,$2,$3,$4) RETURNING id",[u.username,u.discordUsername,subject,message]);await audit(u,"ticket_create",`#${q.rows[0].id} ${subject}`);res.json({ok:true,id:q.rows[0].id});});
+app.get("/api/tickets",async(req,res)=>{
+  const u=currentUser(req);
+  if(u && u.role && ["owner","admin"].includes(u.role)){
+    const q=await pool.query("SELECT id,username,discord_username,subject,status,created_at FROM tickets ORDER BY id DESC LIMIT 100");
+    return res.json({tickets:q.rows,public:true,canOpen:true,admin:true});
+  }
+  if(!u) {
+    const q=await pool.query("SELECT id,username,subject,status,created_at FROM tickets ORDER BY id DESC LIMIT 30");
+    return res.json({tickets:q.rows,public:true,canOpen:false});
+  }
+  const q=await pool.query("SELECT id,username,discord_username,subject,message,status,created_at FROM tickets WHERE username=$1 ORDER BY id DESC",[u.username]);
+  res.json({tickets:q.rows,public:true,canOpen:true});
+});
+app.get("/api/tickets/:id/messages",requireAuth,async(req,res)=>{
+  const u=req.session.user,id=Number(req.params.id);
+  const t=await pool.query("SELECT id,username FROM tickets WHERE id=$1",[id]);
+  if(!t.rowCount)return res.status(404).json({error:"التيكت غير موجود"});
+  if(t.rows[0].username!==u.username&&!["owner","admin"].includes(u.role))return res.status(403).json({error:"لا تملك صلاحية مشاهدة محادثة التيكت"});
+  const q=await pool.query("SELECT id,username,discord_username,message,created_at FROM ticket_messages WHERE ticket_id=$1 ORDER BY id ASC",[id]);
+  res.json({messages:q.rows});
+});
+app.post("/api/tickets",requireAuth,async(req,res)=>{
+  const subject=String(req.body?.subject||"").trim(),message=String(req.body?.message||"").trim(),u=req.session.user;
+  if(subject.length<3||subject.length>120||message.length<3||message.length>3000)return res.status(400).json({error:"بيانات التيكت غير صحيحة"});
+  const q=await pool.query("INSERT INTO tickets(username,discord_username,subject,message) VALUES($1,$2,$3,$4) RETURNING id",[u.username,u.discordUsername,subject,message]);
+  await pool.query("INSERT INTO ticket_messages(ticket_id,username,discord_username,message) VALUES($1,$2,$3,$4)",[q.rows[0].id,u.username,u.discordUsername,message]);
+  await audit(u,"ticket_create",`#${q.rows[0].id} ${subject}`);
+  res.json({ok:true,id:q.rows[0].id});
+});
+app.post("/api/tickets/:id/messages",requireAuth,async(req,res)=>{
+  const u=req.session.user,id=Number(req.params.id),message=String(req.body?.message||"").trim();
+  if(message.length<1||message.length>3000)return res.status(400).json({error:"الرسالة غير صحيحة"});
+  const t=await pool.query("SELECT id,username FROM tickets WHERE id=$1",[id]);
+  if(!t.rowCount)return res.status(404).json({error:"التيكت غير موجود"});
+  if(t.rows[0].username!==u.username&&!["owner","admin"].includes(u.role))return res.status(403).json({error:"لا تملك صلاحية الرد"});
+  const q=await pool.query("INSERT INTO ticket_messages(ticket_id,username,discord_username,message) VALUES($1,$2,$3,$4) RETURNING id,created_at",[id,u.username,u.discordUsername,message]);
+  await audit(u,"ticket_reply",`#${id} ${message.slice(0,120)}`);
+  res.json({ok:true,message:{id:q.rows[0].id,username:u.username,discord_username:u.discordUsername,message,created_at:q.rows[0].created_at}});
+});
+app.post("/api/owner/tickets/:id/status",requireAdmin,async(req,res)=>{
+  const status=String(req.body?.status||"").toLowerCase(),id=Number(req.params.id);
+  if(!["open","closed","pending"].includes(status))return res.status(400).json({error:"حالة غير صحيحة"});
+  const q=await pool.query("UPDATE tickets SET status=$1 WHERE id=$2 RETURNING id,status",[status,id]);
+  if(!q.rowCount)return res.status(404).json({error:"التيكت غير موجود"});
+  await audit(req.session.user,"ticket_status",`#${id} => ${status}`);
+  res.json({ok:true,ticket:q.rows[0]});
+});
 app.get("/api/applications",async(req,res)=>{const q=await pool.query("SELECT type,status,created_at FROM applications ORDER BY id DESC LIMIT 30");res.json({applications:q.rows,public:true,canSubmit:Boolean(currentUser(req))});});
 app.post("/api/applications",requireAuth,async(req,res)=>{const type=String(req.body?.type||"تقديم").trim(),answers=req.body?.answers||{},u=req.session.user;if(type.length>60||JSON.stringify(answers).length>8000)return res.status(400).json({error:"بيانات التقديم غير صحيحة"});const q=await pool.query("INSERT INTO applications(username,discord_username,type,answers) VALUES($1,$2,$3,$4) RETURNING id",[u.username,u.discordUsername,type,JSON.stringify(answers)]);await audit(u,"application_create",`#${q.rows[0].id} ${type}`);res.json({ok:true,id:q.rows[0].id});});
 app.get("/api/groups",async(req,res)=>{
@@ -331,6 +376,7 @@ app.delete("/api/groups/:id",requireAuth,async(req,res)=>{await pool.query("DELE
 app.get("/api/owner/logs",requireAdmin,async(req,res)=>{const q=await pool.query("SELECT id,username,discord_username,action,details,created_at FROM audit_logs ORDER BY id DESC LIMIT 200");res.json({logs:q.rows});});
 app.get("/api/owner/tickets",requireAdmin,async(req,res)=>{const q=await pool.query("SELECT id,username,discord_username,subject,message,status,created_at FROM tickets ORDER BY id DESC LIMIT 100");res.json({tickets:q.rows});});
 app.get("/api/owner/applications",requireAdmin,async(req,res)=>{const q=await pool.query("SELECT id,username,discord_username,type,answers,status,created_at FROM applications ORDER BY id DESC LIMIT 100");res.json({applications:q.rows});});
+app.post("/api/owner/applications/:id/status",requireAdmin,async(req,res)=>{const status=String(req.body?.status||"").toLowerCase(),id=Number(req.params.id);if(!["pending","approved","rejected"].includes(status))return res.status(400).json({error:"حالة غير صحيحة"});const q=await pool.query("UPDATE applications SET status=$1 WHERE id=$2 RETURNING id,status");if(!q.rowCount)return res.status(404).json({error:"التقديم غير موجود"});await audit(req.session.user,"application_status",`#${id} => ${status}`);res.json({ok:true,application:q.rows[0]});});
 app.get("/api/reviews",async(req,res)=>{const q=await pool.query("SELECT id,username,rating,message,created_at FROM reviews WHERE status='visible' ORDER BY id DESC LIMIT 30");res.json({reviews:q.rows});});
 app.post("/api/reviews",requireAuth,async(req,res)=>{const u=req.session.user,message=String(req.body?.message||"").trim(),rating=Math.max(1,Math.min(5,Number(req.body?.rating)||5));if(message.length<3||message.length>1000)return res.status(400).json({error:"الرأي يجب أن يكون بين 3 و1000 حرف"});const q=await pool.query("INSERT INTO reviews(username,discord_username,rating,message) VALUES($1,$2,$3,$4) RETURNING id",[u.username,u.discordUsername,rating,message]);await audit(u,"review_create",`#${q.rows[0].id}`);res.json({ok:true,id:q.rows[0].id});});
 app.get("/api/announcements",async(req,res)=>{const q=await pool.query("SELECT id,text,link FROM announcements WHERE active=true ORDER BY id DESC LIMIT 5");res.json({announcements:q.rows});});
@@ -552,43 +598,22 @@ app.get("/api/public/member/:id", async (req, res) => {
   }
 });
 
-app.post("/api/public/message", async (req, res) => {
-  const now = Date.now();
-  const ip = req.ip || "unknown";
-  const last = sendHits.get(ip) || 0;
+app.post("/api/public/message",requireAuth,async (req,res) => {
+  const now = Date.now(), ip = req.ip || "unknown", last = sendHits.get(ip) || 0, u=req.session.user;
+  if (now-last<10_000)return res.status(429).json({error:"انتظر 10 ثواني قبل الإرسال مرة أخرى"});
+  const title=String(req.body?.title||"رسالة من إدارة MLD").trim(), text=String(req.body?.message||"").trim(), targetId=String(req.body?.memberId||"").trim();
+  if(!targetId||!text||text.length>2000||title.length>120)return res.status(400).json({error:"بيانات الرسالة غير صحيحة"});
+  try{
+    const member=await (await getGuild()).members.fetch(targetId).catch(()=>null);
+    if(!member)return res.status(404).json({error:"العضو غير موجود"});
+    const embed=new EmbedBuilder().setTitle(title).setDescription(`من حساب الموقع: ${u.username} · Discord: ${u.discordUsername}
 
-  if (now - last < 10_000) {
-    return res.status(429).json({ error: "انتظر 10 ثواني قبل الإرسال مرة أخرى" });
-  }
-
-  const title = String(req.body?.title || "رسالة من إدارة MLD").trim();
-  const text = String(req.body?.message || "").trim();
-  const targetId = String(req.body?.memberId || "").trim();
-
-  if (!targetId || !text || text.length > 2000 || title.length > 120) {
-    return res.status(400).json({ error: "بيانات الرسالة غير صحيحة" });
-  }
-
-  try {
-    const member = await (await getGuild()).members.fetch(targetId).catch(() => null);
-    if (!member) return res.status(404).json({ error: "العضو غير موجود" });
-
-    const embed = new EmbedBuilder()
-      .setTitle(title)
-      .setDescription(text)
-      .setColor("#ff9cdc")
-      .setFooter({ text: "MLD Community" })
-      .setTimestamp();
-
-    await member.send({ embeds: [embed] });
-    sendHits.set(ip, now);
-    res.json({ ok: true });
-  } catch (error) {
-    console.error("DM endpoint:", error);
-    res.status(500).json({ error: "تعذر الإرسال؛ قد يكون الخاص مقفلًا" });
-  }
+${text}`).setColor("#ff9cdc").setFooter({text:"MLD Community"}).setTimestamp();
+    await member.send({embeds:[embed]}); sendHits.set(ip,now);
+    await audit(u,"dm_send",`إلى Discord ID ${targetId} · ${title}`);
+    res.json({ok:true});
+  }catch(error){console.error("DM endpoint:",error);res.status(500).json({error:"تعذر الإرسال؛ قد يكون الخاص مقفلًا"});}
 });
-
 client.on("guildMemberAdd", invalidateMemberSnapshot);
 client.on("guildMemberRemove", invalidateMemberSnapshot);
 client.on("guildMemberUpdate", invalidateMemberSnapshot);
