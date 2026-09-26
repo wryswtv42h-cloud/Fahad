@@ -256,12 +256,26 @@ async function initAppDatabase() {
   `);
 }
 function currentUser(req){ return req.session?.user || null; }
+function normalizeDiscordName(value){
+  return String(value||"").trim().replace(/^@/,"").toLowerCase();
+}
+function discordNameMatches(member,wanted){
+  const w=normalizeDiscordName(wanted);
+  if(!w||!member)return false;
+  const values=[
+    member.user?.username,
+    member.user?.globalName,
+    member.displayName
+  ].map(normalizeDiscordName).filter(Boolean);
+  return values.includes(w) || values.some(v=>v.split("#")[0]===w);
+}
 async function findGuildMemberByUsername(discordUsername){
-  const wanted=String(discordUsername||"").trim().toLowerCase();
+  const wanted=normalizeDiscordName(discordUsername);
   if(!wanted) return null;
   try{
-    const members=await getAllMembers(await getGuild());
-    return members.find(m=>String(m.user?.username||"").trim().toLowerCase()===wanted)||null;
+    const guild=await getGuild();
+    const members=await getAllMembers(guild);
+    return members.find(m=>discordNameMatches(m,wanted))||null;
   }catch(e){ console.error("Discord membership check:",e.message); return null; }
 }
 async function requireGuildMember(req,res,next){
@@ -277,10 +291,14 @@ async function audit(u,action,details=""){ if(!process.env.DATABASE_URL) return;
 async function ensureOwner(){
   if(!process.env.DATABASE_URL || !process.env.OWNER_USERNAME || !process.env.OWNER_PASSWORD) return;
   const username=String(process.env.OWNER_USERNAME).trim().toLowerCase();
+  const discordIdentity=String(process.env.OWNER_DISCORD_USERNAME||process.env.OWNER_USERNAME).trim();
   const hash=await bcrypt.hash(String(process.env.OWNER_PASSWORD),12);
   const found=await pool.query("SELECT id FROM app_users WHERE username=$1",[username]);
-  if(!found.rowCount) await pool.query("INSERT INTO app_users(username,password_hash,discord_username,role) VALUES($1,$2,$3,'owner')",[username,hash,process.env.OWNER_DISCORD_USERNAME||process.env.OWNER_USERNAME||process.env.SERVER_FOUNDER_NAME||"w4px"]);
-  else await pool.query("UPDATE app_users SET password_hash=$2,role='owner',discord_username=$3 WHERE username=$1",[username,hash,process.env.OWNER_DISCORD_USERNAME||process.env.SERVER_FOUNDER_NAME||"فهد المطيري"]);
+  if(!found.rowCount){
+    await pool.query("INSERT INTO app_users(username,password_hash,discord_username,role) VALUES($1,$2,$3,'owner')",[username,hash,discordIdentity]);
+  }else{
+    await pool.query("UPDATE app_users SET password_hash=$2,role='owner',discord_username=$3 WHERE username=$1",[username,hash,discordIdentity]);
+  }
 }
 
 
@@ -554,6 +572,20 @@ app.post("/api/games/:id/start",async(req,res)=>{
   const g=q.rows[0],hostMatches=u?g.host_username===u.username:String(g.players?.[0]?.guestId||"")===guestId;if(!hostMatches)return res.status(403).json({error:"فقط صاحب الجلسة يقدر يبدأ"});if(g.status==="playing")return res.json({ok:true,game:g});
   let players=Array.isArray(g.players)?g.players:[],botNo=1;while(players.length<g.max_players){players.push({username:"بوت "+botNo,discordUsername:"BOT",guest:true,bot:true,host:false});botNo++}
   const state=g.state&&Object.keys(g.state).length?g.state:makeGameState(g.game); const updated=await pool.query("UPDATE game_lobbies SET players=$1,status='playing',state=$2 WHERE id=$3 RETURNING *",[JSON.stringify(players),JSON.stringify(state),g.id]);if(u)await audit(u,"game_start","session "+g.id+" "+g.game+" players="+players.length);res.json({ok:true,game:updated.rows[0]});
+});
+app.post("/api/games/:id/finish",async(req,res)=>{
+  const u=currentUser(req),guestId=String(req.body?.guestId||"").trim();
+  const q=await pool.query("SELECT * FROM game_lobbies WHERE id=$1",[req.params.id]);
+  if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة"});
+  const g=q.rows[0],players=Array.isArray(g.players)?g.players:[],host=u?g.host_username===u.username:String(players[0]?.guestId||"")===guestId;
+  if(!host)return res.status(403).json({error:"فقط صاحب الجلسة يقدر ينهي اللعبة"});
+  if(g.status==="finished")return res.json({ok:true,finished:true});
+  const state=g.state&&Object.keys(g.state).length?g.state:{};
+  state.finishedAt=new Date().toISOString();
+  state.winner=state.winner||null;
+  await pool.query("UPDATE game_lobbies SET status='finished',state=$1 WHERE id=$2",[JSON.stringify(state),g.id]);
+  if(u)await audit(u,"game_finish","إنهاء الجلسة "+g.id+" "+g.game);
+  res.json({ok:true,finished:true});
 });
 app.post("/api/games/:id/leave",async(req,res)=>{
   const u=currentUser(req),guestId=String(req.body?.guestId||"").trim(),q=await pool.query("SELECT * FROM game_lobbies WHERE id=$1",[req.params.id]);if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة"});
