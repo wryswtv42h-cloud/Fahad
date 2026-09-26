@@ -96,6 +96,7 @@ const ticketMessages = new Map();
 const applications = new Map();
 const logs = [];
 const privateMessageLogs = [];
+const privateMessages = new Map();
 const watchRooms = new Map();
 const reviews = new Map();
 const notifications = new Map();
@@ -226,7 +227,7 @@ async function getGuild() {
   if (guildCache && Date.now() - guildCacheAt < GUILD_CACHE_TTL) return guildCache;
   if (guildFetchPromise) return guildFetchPromise;
 
-  guildFetchPromise = client.guilds.fetch(guildId)
+  guildFetchPromise = (client.guilds.cache.get(guildId) ? Promise.resolve(client.guilds.cache.get(guildId)) : client.guilds.fetch(guildId))
     .then((guild) => {
       guildCache = guild;
       guildCacheAt = Date.now();
@@ -1136,6 +1137,28 @@ app.post("/api/games/:id/finish", requireAuth, (req, res) => {
 });
 
 app.get("/api/games/stats/me", requireAuth, (req, res) => res.json({ stats: gameStatsFor(req.user.id) }));
+
+// -------------------- Private Messenger --------------------
+app.get("/api/messages/users", requireAuth, (req, res) => {
+  res.json({ users: [...users.values()].filter((u) => u.id !== req.user.id && !u.suspended).map((u) => ({ id:u.id, username:u.username, discordId:u.discordId||"" })) });
+});
+app.get("/api/messages/:userId", requireAuth, (req, res) => {
+  const other=users.get(req.params.userId);
+  if(!other||other.id===req.user.id||other.suspended) return res.status(404).json({error:"المستخدم غير موجود"});
+  const key=[req.user.id,other.id].sort().join(":");
+  res.json({user:{id:other.id,username:other.username,discordId:other.discordId||""},messages:privateMessages.get(key)||[]});
+});
+app.post("/api/messages", requireAuth, (req, res) => {
+  const toUserId=cleanText(req.body?.toUserId,50), message=cleanText(req.body?.message,1000), target=users.get(toUserId);
+  if(!target||target.id===req.user.id||target.suspended) return res.status(404).json({error:"المستخدم غير موجود"});
+  if(!message) return res.status(400).json({error:"الرسالة مطلوبة"});
+  const key=[req.user.id,target.id].sort().join(":");
+  const item={id:randomToken(),fromUserId:req.user.id,toUserId:target.id,message,createdAt:now(),read:false};
+  const list=privateMessages.get(key)||[]; list.push(item); if(list.length>300) list.splice(0,list.length-300); privateMessages.set(key,list);
+  const ns=notifications.get(target.id)||[]; ns.unshift({id:String(nextNotificationId++),type:"private_message",fromUserId:req.user.id,text:`رسالة خاصة جديدة من ${req.user.username}`,createdAt:now(),read:false}); notifications.set(target.id,ns.slice(0,100));
+  privateMessageLogs.unshift({...item,fromUsername:req.user.username,toUsername:target.username}); if(privateMessageLogs.length>500) privateMessageLogs.length=500;
+  res.status(201).json({message:item});
+});
 
 // -------------------- Notifications --------------------
 
