@@ -566,7 +566,9 @@ app.get("/api/games/:id/state",async(req,res)=>{
   if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة"});
   let row=q.rows[0],state=row.state&&Object.keys(row.state).length?row.state:null;
   if(row.status==="playing"&&!state){state=makeGameState(row.game);await pool.query("UPDATE game_lobbies SET state=$1 WHERE id=$2",[JSON.stringify(state),row.id]);}
-  res.json({game:row,state:state||{}});
+  const publicState=state?{...state}:{};
+  delete publicState.answer;
+  res.json({game:row,state:publicState});
 });
 app.post("/api/games/:id/action",async(req,res)=>{
   const u=currentUser(req),guestId=String(req.body?.guestId||"").trim(),action=String(req.body?.action||"").trim();
@@ -597,11 +599,40 @@ app.post("/api/games/:id/action",async(req,res)=>{
       }else{state.guessesLeft=0;state.turn=state.turn==="red"?"blue":"red";state.turnNumber++;state.clue=null;}
     }else if(action==="endTurn"){state.guessesLeft=0;state.turn=state.turn==="red"?"blue":"red";state.turnNumber++;state.clue=null;}
     else return res.status(400).json({error:"حركة غير معروفة"});
-  }else if(action==="round"){
-    state.round=(state.round||1)+1;state.score=(state.score||0)+1;state.prompt="🎯 جولة ناجحة! النقاط: "+state.score;
+  }else if(action==="round"||action==="answer"||action==="choose"){
+    const engine=GAME_ENGINE[g.game]||{kind:"text",prompt:"ابدأ الجولة واكتب إجابتك.",choices:[],answer:""};
+    if(action==="round"){
+      state.round=(state.round||1)+1;
+      state.prompt=engine.prompt;
+      state.choices=engine.choices||[];
+      state.kind=engine.kind;
+      state.lastResult=null;
+    }else{
+      let correct=false;
+      if(action==="choose"){
+        const choice=Number(req.body?.choice);
+        correct=Number.isInteger(choice)&&choice===Number(engine.answer);
+      }else{
+        const answer=String(req.body?.answer||"").trim().toLocaleLowerCase("ar");
+        const expected=String(engine.answer||"").trim().toLocaleLowerCase("ar");
+        if(!answer)return res.status(400).json({error:"اكتب إجابتك أولًا"});
+        if(["WORD_BOMB","CATEGORIES"].includes(g.game)) correct=expected.length>0&&answer.startsWith(expected);
+        else if(["TABOO"].includes(g.game)) correct=answer.length>=3;
+        else correct=expected.length>0&&answer===expected;
+      }
+      if(correct)state.score=(state.score||0)+1;
+      state.lastResult={correct,message:correct?"تم احتساب النقطة والانتقال للجولة التالية.":"حاول مرة أخرى أو ابدأ جولة جديدة."};
+      state.round=(state.round||1)+1;
+      state.prompt=engine.prompt;
+      state.choices=engine.choices||[];
+      state.kind=engine.kind;
+    }
   }else return res.status(400).json({error:"الحركة غير مدعومة"});
+  const safeState={...state};
+  delete safeState.answer;
   const up=await pool.query("UPDATE game_lobbies SET state=$1 WHERE id=$2 RETURNING state,status,players",[JSON.stringify(state),g.id]);
-  res.json({ok:true,state:up.rows[0].state,status:up.rows[0].status,players:up.rows[0].players});
+  const publicState={...up.rows[0].state}; delete publicState.answer;
+  res.json({ok:true,state:publicState,status:up.rows[0].status,players:up.rows[0].players});
 });
 app.get("/api/games/top",async(req,res)=>{try{const q=await pool.query("SELECT username,discord_username,wins,points FROM game_scores WHERE guest=false ORDER BY wins DESC,points DESC LIMIT 50");res.json({top:q.rows});}catch(e){res.json({top:[]});}});
 app.get("/api/games/top",async(req,res)=>{try{const q=await pool.query("SELECT username,discord_username,wins,points FROM game_scores WHERE guest=false ORDER BY wins DESC,points DESC LIMIT 50");res.json({top:q.rows});}catch(e){res.json({top:[]});}});
