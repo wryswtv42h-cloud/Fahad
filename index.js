@@ -221,6 +221,29 @@ async function ensureOwner(){
   if(!found.rowCount) await pool.query("INSERT INTO app_users(username,password_hash,discord_username,role) VALUES($1,$2,$3,'owner')",[username,hash,process.env.OWNER_DISCORD_USERNAME||process.env.SERVER_FOUNDER_NAME||"فهد المطيري"]);
   else await pool.query("UPDATE app_users SET password_hash=$2,role='owner',discord_username=$3 WHERE username=$1",[username,hash,process.env.OWNER_DISCORD_USERNAME||process.env.SERVER_FOUNDER_NAME||"فهد المطيري"]);
 }
+\n
+app.get("/api/auth/me",(req,res)=>{const u=currentUser(req);res.json({authenticated:Boolean(u),user:u?{username:u.username,discordUsername:u.discordUsername,role:u.role,isOwner:u.role==="owner"}:null});});
+app.post("/api/auth/register",async(req,res)=>{
+  try{
+    const username=String(req.body?.username||"").trim().toLowerCase(), password=String(req.body?.password||""), discordUsername=String(req.body?.discordUsername||"").trim();
+    if(!/^[a-z0-9_.-]{3,32}$/.test(username)) return res.status(400).json({error:"اليوزر يجب أن يكون 3-32 حرفًا إنجليزيًا أو أرقامًا"});
+    if(password.length<6||password.length>100) return res.status(400).json({error:"كلمة المرور يجب أن تكون 6 أحرف على الأقل"});
+    if(discordUsername.length<2||discordUsername.length>100) return res.status(400).json({error:"أدخل يوزرك في Discord"});
+    if(!process.env.DATABASE_URL) return res.status(503).json({error:"قاعدة البيانات غير متاحة"});
+    if((await pool.query("SELECT id FROM app_users WHERE username=$1",[username])).rowCount) return res.status(409).json({error:"اسم المستخدم مستخدم مسبقًا"});
+    const hash=await bcrypt.hash(password,12); await pool.query("INSERT INTO app_users(username,password_hash,discord_username) VALUES($1,$2,$3)",[username,hash,discordUsername]);
+    req.session.user={username,discordUsername,role:"user"}; await audit(req.session.user,"register","إنشاء حساب"); res.json({ok:true,user:req.session.user});
+  }catch(e){console.error("Register:",e);res.status(500).json({error:"تعذر إنشاء الحساب"});}
+});
+app.post("/api/auth/login",async(req,res)=>{
+  try{
+    const username=String(req.body?.username||"").trim().toLowerCase(),password=String(req.body?.password||"");
+    const q=await pool.query("SELECT username,password_hash,discord_username,role FROM app_users WHERE username=$1",[username]);
+    if(!q.rowCount||!(await bcrypt.compare(password,q.rows[0].password_hash))) return res.status(401).json({error:"بيانات الدخول غير صحيحة"});
+    const r=q.rows[0]; req.session.user={username:r.username,discordUsername:r.discord_username,role:r.role}; await pool.query("UPDATE app_users SET last_login_at=NOW() WHERE username=$1",[username]); await audit(req.session.user,"login","تسجيل دخول"); res.json({ok:true,user:req.session.user});
+  }catch(e){console.error("Login:",e);res.status(500).json({error:"تعذر تسجيل الدخول"});}
+});
+app.post("/api/auth/logout",async(req,res)=>{const u=currentUser(req);if(u) await audit(u,"logout","تسجيل خروج").catch(()=>{});req.session.destroy(()=>res.json({ok:true}));});
 \napp.get("/health", (req, res) => {
   res.json({
     ok: true,
