@@ -271,9 +271,11 @@ function refreshMemberSnapshot(guild) {
 }
 
 async function getAllMembers(guild, options = {}) {
+  const fresh = memberSnapshot && Date.now() - memberSnapshotAt < MEMBER_CACHE_TTL;
   const cached = memberSnapshot || [...guild.members.cache.values()];
-  if (cached.length) {
-    if (options.refresh) refreshMemberSnapshot(guild);
+  if (cached.length && fresh && !options.refresh) return cached;
+  if (cached.length && options.background !== false) {
+    refreshMemberSnapshot(guild);
     return cached;
   }
   return refreshMemberSnapshot(guild);
@@ -708,7 +710,7 @@ app.get("/api/public/server", async (req, res) => {
 app.get("/api/public/members", async (req, res) => {
   try {
     const guild = await getGuild();
-    const allMembers = await getAllMembers(guild);
+    const allMembers = await getAllMembers(guild, { background: true });
     const query = String(req.query.q || "").trim().toLocaleLowerCase("ar");
     const cleanQuery = query.replace(/^@/, "");
     const filtered = cleanQuery ? allMembers.filter((member) => {
@@ -726,7 +728,7 @@ app.get("/api/public/members", async (req, res) => {
 app.get("/api/public/roles", async (req, res) => {
   try {
     const guild = await getGuild();
-    const allMembers = await getAllMembers(guild);
+    const allMembers = await getAllMembers(guild, { background: true });
     const roles = leadershipRoleIds.map((roleId) => guild.roles.cache.get(roleId)).filter(Boolean).map((role) => {
       const count = allMembers.reduce((total, member) => total + (member.roles.cache.has(role.id) ? 1 : 0), 0);
       return roleJson(role, count);
