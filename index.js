@@ -418,20 +418,16 @@ app.post("/api/games/:id/join",async(req,res)=>{
   const updated=await pool.query("UPDATE game_lobbies SET players=$1,status=$2 WHERE id=$3 RETURNING *",[JSON.stringify(players),st,g.id]);if(u)await audit(u,"game_join","session "+g.id+" "+g.game);res.json({ok:true,game:updated.rows[0]});
 });
 app.post("/api/games/:id/start",async(req,res)=>{
-  const u=currentUser(req),q=await pool.query("SELECT * FROM game_lobbies WHERE id=$1",[req.params.id]);
-  if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة"});
-  const g=q.rows[0],hostMatches=u ? g.host_username===u.username : String(req.body?.guestName||"").trim().slice(0,40)===g.host_username;
-  if(!hostMatches)return res.status(403).json({error:"فقط صاحب الجلسة يقدر يبدأ"});
-  if(g.status==="playing")return res.json({ok:true,game:g});
-  let players=Array.isArray(g.players)?g.players:[];
-  let botNo=1;
-  while(players.length<g.max_players){
-    players.push({username:"بوت "+botNo,discordUsername:"BOT",guest:true,bot:true,host:false});
-    botNo++;
-  }
-  const updated=await pool.query("UPDATE game_lobbies SET players=$1,status='playing' WHERE id=$2 RETURNING *",[JSON.stringify(players),g.id]);
-  if(u)await audit(u,"game_start",`#${g.id} ${g.game} players=${players.length}`);
-  res.json({ok:true,game:updated.rows[0]});
+  const u=currentUser(req),guestId=String(req.body?.guestId||"").trim().slice(0,80),q=await pool.query("SELECT * FROM game_lobbies WHERE id=$1",[req.params.id]);if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة"});
+  const g=q.rows[0],hostMatches=u?g.host_username===u.username:String(g.players?.[0]?.guestId||"")===guestId;if(!hostMatches)return res.status(403).json({error:"فقط صاحب الجلسة يقدر يبدأ"});if(g.status==="playing")return res.json({ok:true,game:g});
+  let players=Array.isArray(g.players)?g.players:[],botNo=1;while(players.length<g.max_players){players.push({username:"بوت "+botNo,discordUsername:"BOT",guest:true,bot:true,host:false});botNo++}
+  const updated=await pool.query("UPDATE game_lobbies SET players=$1,status='playing' WHERE id=$2 RETURNING *",[JSON.stringify(players),g.id]);if(u)await audit(u,"game_start","session "+g.id+" "+g.game+" players="+players.length);res.json({ok:true,game:updated.rows[0]});
+});
+app.post("/api/games/:id/leave",async(req,res)=>{
+  const u=currentUser(req),guestId=String(req.body?.guestId||"").trim().slice(0,80),q=await pool.query("SELECT * FROM game_lobbies WHERE id=$1",[req.params.id]);if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة"});
+  const g=q.rows[0],players=Array.isArray(g.players)?g.players:[],i=u?players.findIndex(x=>x.username===u.username&&!x.bot):players.findIndex(x=>x.guestId===guestId&&!x.bot);if(i<0)return res.status(403).json({error:"أنت لست داخل هذه الجلسة"});
+  if(players[i].host){await pool.query("UPDATE game_lobbies SET status='closed' WHERE id=$1",[g.id]);if(u)await audit(u,"game_leave","host closed session "+g.id);return res.json({ok:true,closed:true})}
+  players.splice(i,1);const humans=players.filter(x=>!x.bot),status=humans.length>=g.max_players?"ready":"waiting";const updated=await pool.query("UPDATE game_lobbies SET players=$1,status=$2 WHERE id=$3 RETURNING *",[JSON.stringify(humans),status,g.id]);if(u)await audit(u,"game_leave","session "+g.id);res.json({ok:true,game:updated.rows[0]});
 });
 app.get("/api/games/top",async(req,res)=>{try{const q=await pool.query("SELECT username,discord_username,wins,points FROM game_scores WHERE guest=false ORDER BY wins DESC,points DESC LIMIT 50");res.json({top:q.rows});}catch(e){res.json({top:[]});}});
 app.post("/api/games/:id/score",requireAuth,async(req,res)=>{const points=Math.max(1,Math.min(100,Number(req.body?.points)||10)),u=req.session.user;await pool.query("INSERT INTO game_scores(username,discord_username,wins,points,guest) VALUES($1,$2,1,$3,false) ON CONFLICT(username) DO UPDATE SET wins=game_scores.wins+1,points=game_scores.points+$3,discord_username=EXCLUDED.discord_username",[u.username,u.discordUsername,points]);await audit(u,"game_win",`#${req.params.id} +${points}`);res.json({ok:true});});
