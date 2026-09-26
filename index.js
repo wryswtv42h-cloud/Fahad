@@ -389,6 +389,7 @@ app.delete("/api/owner/announcements/:id",requireAdmin,async(req,res)=>{await po
 
 
 
+async function activeGameFor(req){const u=currentUser(req),guestId=String(req.body?.guestId||req.query?.guestId||"").trim(),q=await pool.query("SELECT id,players,status FROM game_lobbies WHERE status IN ('waiting','ready','playing') ORDER BY id DESC LIMIT 100");for(const g of q.rows){const ps=Array.isArray(g.players)?g.players:[];if(u&&ps.some(p=>!p.bot&&p.username===u.username))return g;if(!u&&guestId&&ps.some(p=>!p.bot&&p.guestId===guestId))return g}return null}
 app.get("/api/games",async(req,res)=>{
   const q=await pool.query("SELECT id,game,host_username,host_discord_username,max_players,players,status,created_at FROM game_lobbies WHERE status IN ('waiting','ready','playing') ORDER BY id DESC LIMIT 50");
   res.json({games:q.rows});
@@ -399,28 +400,22 @@ app.get("/api/games/:id",async(req,res)=>{
   res.json({game:q.rows[0]});
 });
 app.post("/api/games",async(req,res)=>{
-  const game=String(req.body?.game||"").trim().toUpperCase(),max=Math.max(2,Math.min(8,Number(req.body?.maxPlayers)||4)),u=currentUser(req),guestName=String(req.body?.guestName||"زائر").trim().slice(0,40);
-  if(!["UNO","LUDO","BALOOT","DAQSH","QAWSAR","CODENAMES","SPYFALL","PICTIONARY","CHARADES","WHOAMI","TABOO","WORD_BOMB","TRUTH_LIE","EMOJI_GUESS","TRIVIA","CATEGORIES","LIAR","HOT_SEAT","WOULD_YOU_RATHER","DRAW_GUESS","FASTEST","RIDDLE_RUSH","SECRET_WORD","MIMIC","GUESS_PLAYER"].includes(game))return res.status(400).json({error:"اللعبة غير مدعومة"});
-  const hostName=u?.username||guestName||"زائر",discordName=u?.discordUsername||guestName;
-  const players=[{username:hostName,discordUsername:discordName,guest:!u,bot:false,host:true}];
+  const game=String(req.body?.game||"").trim().toUpperCase(),max=Math.max(2,Math.min(8,Number(req.body?.maxPlayers)||4)),u=currentUser(req),guestId=String(req.body?.guestId||"").trim().slice(0,80),guestName=String(req.body?.guestName||"زائر").trim().slice(0,40);
+  if(await activeGameFor(req))return res.status(409).json({error:"أنت داخل جلسة بالفعل. اخرج من جلستك الحالية أولًا."});
+  const allowed=["UNO","LUDO","BALOOT","DAQSH","QAWSAR","CODENAMES","SPYFALL","PICTIONARY","CHARADES","WHOAMI","TABOO","WORD_BOMB","TRUTH_LIE","EMOJI_GUESS","TRIVIA","CATEGORIES","LIAR","HOT_SEAT","WOULD_YOU_RATHER","DRAW_GUESS","FASTEST","RIDDLE_RUSH","SECRET_WORD","MIMIC","GUESS_PLAYER"];
+  if(!allowed.includes(game))return res.status(400).json({error:"اللعبة غير مدعومة"});if(!u&&!guestId)return res.status(400).json({error:"معرّف الزائر مفقود"});
+  const hostName=u?.username||guestName||"زائر",discordName=u?.discordUsername||guestName,players=[{username:hostName,discordUsername:discordName,guest:!u,guestId:u?undefined:guestId,bot:false,host:true}];
   const q=await pool.query("INSERT INTO game_lobbies(game,host_username,host_discord_username,max_players,players,status) VALUES($1,$2,$3,$4,$5,'waiting') RETURNING *",[game,hostName,discordName,max,JSON.stringify(players)]);
-  if(u)await audit(u,"game_create",game);
-  res.json({ok:true,game:q.rows[0]});
+  if(u)await audit(u,"game_create",game);res.json({ok:true,game:q.rows[0]});
 });
 app.post("/api/games/:id/join",async(req,res)=>{
-  const u=currentUser(req),guestName=String(req.body?.guestName||"زائر").trim().slice(0,40),name=u?.username||guestName||"زائر",discordName=u?.discordUsername||guestName;
-  const q=await pool.query("SELECT * FROM game_lobbies WHERE id=$1",[req.params.id]);
-  if(!q.rowCount)return res.status(404).json({error:"اللعبة غير موجودة"});
-  const g=q.rows[0],players=Array.isArray(g.players)?g.players:[];
-  if(g.status==="playing")return res.status(409).json({error:"الجلسة بدأت بالفعل"});
-  if(g.status!=="waiting"&&g.status!=="ready")return res.status(409).json({error:"الجلسة غير متاحة"});
-  if(players.some(x=>x.username===name&&x.discordUsername===discordName))return res.json({ok:true,game:g});
-  if(players.length>=g.max_players)return res.status(409).json({error:"اللعبة مكتملة"});
-  players.push({username:name,discordUsername:discordName,guest:!u,bot:false,host:false});
-  const st=players.length>=g.max_players?"ready":"waiting";
-  const updated=await pool.query("UPDATE game_lobbies SET players=$1,status=$2 WHERE id=$3 RETURNING *",[JSON.stringify(players),st,g.id]);
-  if(u)await audit(u,"game_join",`#${g.id} ${g.game}`);
-  res.json({ok:true,game:updated.rows[0]});
+  const u=currentUser(req),guestId=String(req.body?.guestId||"").trim().slice(0,80),guestName=String(req.body?.guestName||"زائر").trim().slice(0,40),name=u?.username||guestName||"زائر",discordName=u?.discordUsername||guestName;
+  if(await activeGameFor(req))return res.status(409).json({error:"أنت داخل جلسة أخرى بالفعل. اخرج منها أولًا."});
+  const q=await pool.query("SELECT * FROM game_lobbies WHERE id=$1",[req.params.id]);if(!q.rowCount)return res.status(404).json({error:"اللعبة غير موجودة"});const g=q.rows[0],players=Array.isArray(g.players)?g.players:[];
+  if(g.status==="playing")return res.status(409).json({error:"الجلسة بدأت بالفعل"});if(players.length>=g.max_players)return res.status(409).json({error:"اللعبة مكتملة"});if(!u&&!guestId)return res.status(400).json({error:"معرّف الزائر مفقود"});
+  if(players.some(x=>u?x.username===name:x.guestId===guestId))return res.json({ok:true,game:g});
+  players.push({username:name,discordUsername:discordName,guest:!u,guestId:u?undefined:guestId,bot:false,host:false});const st=players.length>=g.max_players?"ready":"waiting";
+  const updated=await pool.query("UPDATE game_lobbies SET players=$1,status=$2 WHERE id=$3 RETURNING *",[JSON.stringify(players),st,g.id]);if(u)await audit(u,"game_join","session "+g.id+" "+g.game);res.json({ok:true,game:updated.rows[0]});
 });
 app.post("/api/games/:id/start",async(req,res)=>{
   const u=currentUser(req),q=await pool.query("SELECT * FROM game_lobbies WHERE id=$1",[req.params.id]);
