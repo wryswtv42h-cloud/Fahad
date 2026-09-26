@@ -62,141 +62,58 @@ setStatus("الألعاب جاهزة · MLD")}
 function openGameInfo(g){const modal=$("#modal"),box=$("#modal-content");box.innerHTML='<div class="game-info-modal"><div class="mld-watermark">MLD</div><div class="game-info-icon">'+g[2]+'</div><p class="eyebrow">MLD GAME</p><h2>'+esc(g[1])+'</h2><p class="game-info-description">'+esc(g[3])+'</p><div class="game-info-actions"><button class="primary" id="game-info-close">تمام، فهمت</button></div></div>';modal.classList.remove("hidden");$("#game-info-close").onclick=()=>modal.classList.add("hidden")}
 async function openGameSession(id,spectator=false){
   searchWrap.style.display="none";
-  title.textContent=spectator?"مشاهدة الجلسة":"جلسة اللعبة";
-  subtitle.textContent=spectator?"أنت متفرج — لا تحجز مكانًا ولا تحتاج دخولًا.":"أنت داخل الجلسة؛ لا يمكنك دخول جلسة ثانية حتى تخرج.";
-  content.className="game-stage-wrap";
+  title.textContent=spectator?"مشاهدة اللعبة":"اللعبة";
+  subtitle.textContent="كل اللعبة داخل نفس واجهة MLD — لا توجد صفحة منفصلة.";
+  content.className="feature-grid";
+  let stopped=false;
   const guestId=localStorage.getItem("mld_guest_game_id")||"";
   const guestName=sessionStorage.getItem("mld_guest_name")||"زائر";
-  let stopped=false;
-  let joined=spectator;
-  const load=async()=>{
+  async function load(){
     if(stopped)return;
     try{
-      if(!spectator&&!joined){
-        const jr=await fetch("/api/games/"+id+"/join",{
-          method:"POST",
-          headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({guestId,guestName})
-        });
-        const jd=await jr.json();
-        if(!jr.ok){
-          alert(jd.error||"تعذر الدخول");
-          stopped=true;
-          return gamesReal();
-        }
-        joined=true;
-      }
-      const url="/api/games/"+id+(spectator?"/watch":"");
-      const r=await fetch(url);
-      const d=await r.json();
-      if(!r.ok){
-        stopped=true;
-        return gamesReal();
-      }
-      const g=d.game||{};
-      const players=Array.isArray(g.players)?g.players:[];
-      const isHost=mldUser
-        ? g.host_username===mldUser.username
-        : String(players[0]?.guestId||"")===guestId;
-      const me=players.find(p=>mldUser?p.username===mldUser.username:p.guestId===guestId);
-      const prompts={
-        CODENAMES:"اكشف كلمات فريقك بدون كشف كلمة الموت.",
-        SPYFALL:"اكتشف الجاسوس قبل أن يعرف المكان.",
-        PICTIONARY:"ارسم كلمة والآخرون يخمنون.",
-        CHARADES:"مثّل الكلمة بدون كلام.",
-        WHOAMI:"اسأل أسئلة نعم/لا حتى تعرف الشخصية.",
-        TABOO:"اشرح الكلمة بدون الكلمات الممنوعة.",
-        WORD_BOMB:"لا تتأخر! اكتب كلمة قبل انفجار القنبلة.",
-        TRUTH_LIE:"اكتشف من يقول الحقيقة.",
-        EMOJI_GUESS:"فك الإيموجي وخمن الكلمة.",
-        TRIVIA:"جاوب أسرع من الباقين.",
-        CATEGORIES:"هات كلمة تناسب التصنيف قبل الجميع.",
-        LIAR:"اكشف الكذاب.",
-        HOT_SEAT:"صاحب الكرسي يجاوب والسؤال على الشاشة.",
-        WOULD_YOU_RATHER:"اختر بين خيارين وشوف تصويت الجلسة.",
-        DRAW_GUESS:"ارسم والباقي يخمن.",
-        FASTEST:"أول إجابة صحيحة تكسب.",
-        RIDDLE_RUSH:"حل اللغز بأسرع وقت.",
-        SECRET_WORD:"استخرج الكلمة السرية من التلميحات.",
-        MIMIC:"قلد الحركة وخليهم يخمنون.",
-        GUESS_PLAYER:"خمن اللاعب من التلميحات.",
-        UNO:"اسحب ورقة والعب دورك.",
-        LUDO:"حرّك قطعتك واربح السباق.",
-        BALOOT:"العب يدك وخطط للفوز.",
-        DAQSH:"ابدأ الجولة واضرب الخصم في الوقت المناسب.",
-        QAWSAR:"اختَر ورقتك وحاول تكسب الجولة."
-      };
-      const prompt=prompts[g.game]||"ابدأ الجولة واستمتع.";
-      const emblem=g.game==="CODENAMES"?"🕵️":g.game==="PICTIONARY"?"🎨":"🎮";
-      const playersHtml=players.map(p=>'<div class="group-item"><span><b>'+esc(p.username)+'</b><small>'+(p.host?"👑 مالك":"")+(p.bot?" · 🤖 بوت":"")+'</small></span></div>').join("");
-      const startButton=g.status!=="playing"&&!spectator&&isHost
-        ? '<button class="primary" id="game-start">ابدأ الجلسة + كمّل ببوتات</button>'
-        : "";
-      const winButton=g.status==="playing"&&!spectator&&mldUser&&me&&!me.bot
-        ? '<button class="primary" id="game-win">🏆 فوزي +10</button>'
-        : "";
-      const leaveButton=spectator
-        ? '<span class="muted">👀 وضع المشاهد — تقدر تكبّر اللعبة.</span>'
-        : '<button class="danger" id="game-leave">خروج من الجلسة</button>';
-      content.innerHTML='<article class="game-stage"><div class="game-stage-top"><div><span class="eyebrow">'+(spectator?"👀 مشاهدة":"🎮 جلسة")+'</span><h2>'+esc(g.game||"لعبة")+'</h2><p class="muted">'+esc(prompt)+'</p></div><div class="stage-actions"><button id="fullscreen-btn">⛶ ملء الشاشة</button><button id="back-games">رجوع</button></div></div><div class="game-board" id="game-board"><div class="game-board-glow"></div><div class="game-board-content"><div class="game-emblem">'+emblem+'</div><h2>'+esc(g.game||"لعبة")+'</h2><p>'+esc(prompt)+'</p><button class="primary" id="round-action">'+(g.status==="playing"?"ابدأ دورك":"بانتظار بداية الجلسة")+'</button><div id="round-result" class="round-result"></div></div></div><div class="stage-bottom"><div class="game-players">'+playersHtml+'</div><div class="stage-controls">'+startButton+winButton+leaveButton+'</div></div></article>';
-      $("#back-games").onclick=()=>{
-        stopped=true;
-        gamesReal();
-      };
-      $("#fullscreen-btn").onclick=()=>{
-        const el=$("#game-board");
-        if(!document.fullscreenElement)el.requestFullscreen?.();
-        else document.exitFullscreen?.();
-      };
-      $("#round-action").onclick=()=>{
-        if(g.status!=="playing")return;
-        const actions=["🔥 حركة ناجحة!","⚡ سرعة ممتازة!","🎯 إصابة مباشرة!","🧠 إجابة صحيحة!","🎉 نقطة لك!"];
-        $("#round-result").textContent=actions[Math.floor(Math.random()*actions.length)];
-      };
-      const start=$("#game-start");
-      if(start)start.onclick=async()=>{
-        const rr=await fetch("/api/games/"+id+"/start",{
-          method:"POST",
-          headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({guestId})
-        });
-        const dd=await rr.json();
-        if(!rr.ok)return alert(dd.error||"تعذر بدء الجلسة");
-        await load();
-      };
-      const win=$("#game-win");
-      if(win)win.onclick=async()=>{
-        const rr=await fetch("/api/games/"+id+"/score",{
-          method:"POST",
-          headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({points:10})
-        });
-        const dd=await rr.json();
-        if(!rr.ok)return alert(dd.error||"تعذر احتساب الفوز");
-        alert("تم احتساب الفوز في TOP ✓");
-        await load();
-      };
-      const leave=$("#game-leave");
-      if(leave)leave.onclick=async()=>{
-        stopped=true;
-        await fetch("/api/games/"+id+"/leave",{
-          method:"POST",
-          headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({guestId})
-        });
-        gamesReal();
-      };
+      const r=await fetch("/api/games/"+id+"/state"),d=await r.json();
+      if(!r.ok)throw Error(d.error||"الجلسة غير موجودة");
+      const g=d.game||{},s=d.state||{};
+      if(g.game==="CODENAMES") return renderCodenames(g,s);
+      renderGenericGame(g,s);
     }catch(e){
-      console.error("Game session:",e);
-      stopped=true;
-      gamesReal();
+      console.error(e);
+      content.innerHTML='<article class="feature-card"><h3>تعذر تحميل اللعبة</h3><p class="muted">'+esc(e.message||"خطأ")+ '</p><button class="primary" id="back-games">رجوع للألعاب</button></article>';
+      $("#back-games").onclick=()=>{stopped=true;gamesReal()};
     }
-  };
-  await load();
-  if(!stopped){
-    const poll=setInterval(load,3000);
-    setTimeout(()=>clearInterval(poll),30*60*1000);
   }
+  function commonTop(g){
+    return '<div class="game-inline-head"><div><span class="eyebrow">MLD GAME</span><h2>'+esc(g.game||"لعبة")+'</h2></div><div class="stage-actions"><button id="game-fullscreen">⛶ تكبير</button><button id="game-back">رجوع</button></div></div>';
+  }
+  function bindCommon(){
+    $("#game-back").onclick=()=>{stopped=true;gamesReal()};
+    $("#game-fullscreen").onclick=()=>{const el=$("#game-live-board")||content;if(!document.fullscreenElement)el.requestFullscreen?.();else document.exitFullscreen?.()};
+  }
+  function renderCodenames(g,s){
+    const players=Array.isArray(g.players)?g.players:[];
+    const me=mldUser?players.find(p=>!p.bot&&p.username===mldUser.username):players.find(p=>!p.bot&&p.guestId===guestId);
+    const host=mldUser?g.host_username===mldUser.username:String(players[0]?.guestId||"")===guestId;
+    const clueBox=host&&!spectator&&!s.winner?'<div class="codenames-clue-form"><input id="cn-clue" class="full" maxlength="30" placeholder="كلمة التلميح"><input id="cn-num" class="full" type="number" min="1" max="9" value="2"><button class="primary" id="cn-send-clue">إرسال التلميح</button></div>':"";
+    const clue=s.clue?'<div class="game-clue"><b>التلميح: '+esc(s.clue.word)+'</b><span>عدد الكلمات: '+s.clue.number+' · المتبقي: '+s.guessesLeft+'</span></div>':'<div class="game-clue muted">بانتظار التلميح من صاحب الجلسة…</div>';
+    const board=(s.words||[]).map((card,i)=>{
+      let cls="cn-card";
+      if(card.revealed)cls+=" revealed "+card.role;
+      return '<button class="'+cls+'" data-cn-index="'+i+'" '+(card.revealed||spectator||!s.clue||s.winner?'disabled':'')+'><span>'+esc(card.word)+'</span></button>';
+    }).join("");
+    const winner=s.winner?'<div class="game-result">🏆 الفائز: '+(s.winner==="red"?"الفريق الأحمر":"الفريق الأزرق")+'</div>':"";
+    content.innerHTML='<article class="feature-card game-unified-card">'+commonTop(g)+'<div class="game-live" id="game-live-board"><div class="game-status-row"><b>دور: '+(s.turn==="red"?"🔴 الأحمر":"🔵 الأزرق")+'</b><span>🔴 '+(s.scores?.red||0)+' · 🔵 '+(s.scores?.blue||0)+'</span></div>'+clue+clueBox+'<div class="codenames-board">'+board+'</div>'+winner+'<p class="muted">25 كلمة، فريقان، تلميح + رقم، وتجنب القاتل.</p></div></article>';
+    bindCommon();
+    const clueBtn=$("#cn-send-clue");
+    if(clueBtn)clueBtn.onclick=async()=>{const word=$("#cn-clue").value.trim(),number=$("#cn-num").value;const r=await fetch("/api/games/"+id+"/action",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"clue",word,number,guestId})});const d=await r.json();if(!r.ok)return alert(d.error);await load()};
+    document.querySelectorAll("[data-cn-index]").forEach(btn=>btn.onclick=async()=>{const r=await fetch("/api/games/"+id+"/action",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"guess",index:Number(btn.dataset.cnIndex),guestId})});const d=await r.json();if(!r.ok)return alert(d.error);await load()});
+  }
+  function renderGenericGame(g,s){
+    content.innerHTML='<article class="feature-card game-unified-card">'+commonTop(g)+'<div class="game-live" id="game-live-board"><div class="game-emblem">🎮</div><h2>'+esc(g.game)+'</h2><p>'+esc(s.prompt||"ابدأ الجولة واستمتع.")+'</p><div class="game-score">النقاط: '+(s.score||0)+'</div><button class="primary" id="generic-round">ابدأ الجولة</button><p class="muted">الجولة تتزامن مع جلسة MLD الحالية.</p></div></article>';
+    bindCommon();
+    $("#generic-round").onclick=async()=>{const r=await fetch("/api/games/"+id+"/action",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"round",guestId})});const d=await r.json();if(!r.ok)return alert(d.error);await load()};
+  }
+  await load();
+  if(!stopped){const poll=setInterval(load,2500);setTimeout(()=>clearInterval(poll),30*60*1000);}
 }
 async function ownerLogs(){if(!mldUser||!["owner","admin"].includes(mldUser.role)){return change("login")}searchWrap.style.display="none";title.textContent=mldUser.role==="owner"?"سجل الأونر الكامل":"سجل الإدارة";subtitle.textContent="الألعاب، التيكت، التقديمات، القروبات، الآراء والرسائل الخاصة كلها هنا.";content.className="feature-card";content.innerHTML="<h3>آخر العمليات</h3><div id='owner-log-list' class='log-list'>جاري التحميل...</div>";const d=await fetch("/api/owner/logs").then(r=>r.json());$("#owner-log-list").innerHTML=(d.logs||[]).map(x=>`<div class="log-item"><b>${esc(x.action)}</b><span>${esc(x.username||"-")} · Discord: ${esc(x.discord_username||"-")} · ${new Date(x.created_at).toLocaleString("ar-SA")}</span><small>${esc(x.details||"")}</small></div>`).join("")||'<p class="muted">لا يوجد سجل.</p>';setStatus("السجل جاهز")}async function announcementsLoad(){
   const box=document.querySelector("#announcement-bar"); if(!box)return;
