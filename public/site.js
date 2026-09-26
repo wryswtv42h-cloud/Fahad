@@ -15,13 +15,13 @@ function updateAuth(){const u=!!state.user;$("#login-nav")?.classList.toggle("hi
 async function loadHome(){if(state.community&&Date.now()-state.communityAt<300000){renderCommunity(state.community);return}
   try{await api("/api/public/visit",{method:"POST"})}catch(e){console.warn("visit",e.message)}
   try{
-    const [s,r,c]=await Promise.all([api("/api/public/stats"),api("/api/public/reviews"),api("/api/public/community")]);
+    const [s,r,c,a]=await Promise.all([api("/api/public/stats"),api("/api/public/reviews"),api("/api/public/community"),api("/api/announcements")]);
     $("#visit-count").textContent=s.visits??"—";
     $("#website-user-count").textContent=s.websiteUsers??s.users??s.userCount??"—";
     $("#online-count").textContent=s.online??s.members??s.onlineCount??"—";
     const list=r.reviews||[];
     $("#average-rating").textContent=list.length?(list.reduce((a,x)=>a+Number(x.rating||0),0)/list.length).toFixed(1):"—";
-    renderReviews(list,"#home-reviews-content",4);
+    renderReviews(list,"#home-reviews-content",4);const ann=$("#site-announcements"), announcements=a.announcements||[]; if(announcements.length){ann.classList.remove("hidden");ann.innerHTML='<div class="section-head"><div><span class="eyebrow">ANNOUNCEMENTS</span><h2>إعلانات الموقع</h2></div></div>'+announcements.map(x=>'<article class="announcement"><b>'+esc(x.title)+'</b><p>'+esc(x.message)+'</p><small>'+esc(x.createdAt||"")+'</small></article>').join("")}else ann?.classList.add("hidden");
     renderCommunity(c);
   }catch(e){
     console.error("home",e);
