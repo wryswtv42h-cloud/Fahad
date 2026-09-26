@@ -838,7 +838,7 @@ async function loadWatchRooms() {
   try {
 
     const data = await api(
-      "/api/watch-rooms"
+      "/api/watch"
     );
 
     state.watchRooms =
@@ -984,7 +984,7 @@ async function openWatchRoom(id) {
   try {
 
     const data = await api(
-      `/api/watch-rooms/${encodeURIComponent(id)}`
+      `/api/watch/${encodeURIComponent(id)}`
     );
 
     const room =
@@ -2106,7 +2106,7 @@ async function loadAdminStats() {
   try {
 
     const data = await api(
-      "/api/admin/stats"
+      "/api/admin/overview"
     );
 
     const stats = [
