@@ -168,7 +168,7 @@ function memberJson(member) {
     username: member.user.username,
     globalName: member.user.globalName,
     bot: member.user.bot,
-    avatar: member.user.displayAvatarURL({ extension: "png", size: 256 }),
+    avatar: member.user.displayAvatarURL({ extension: "png", size: 128, forceStatic: false }),
     joinedAt: member.joinedAt,
     roles,
     importantRoles: leadershipRoles,
