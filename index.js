@@ -694,6 +694,7 @@ app.post("/api/games/:id/start",async(req,res)=>{
     state.playerSecrets[key]={prompt:engine.prompt||state.prompt||"ابدأ الجولة.",privateInfo:state.playerRoles[key]};
   });
   if(g.game==="CODENAMES")state.turn="red";
+  else state.turnPlayerKey=playerKey(players[0]);
   const updated=await pool.query("UPDATE game_lobbies SET status='playing',state=$1 WHERE id=$2 RETURNING *",[JSON.stringify(state),g.id]);
   if(u)await audit(u,"game_start","session "+g.id+" "+g.game+" players="+players.length);
   res.json({ok:true,game:updated.rows[0]});
@@ -717,12 +718,13 @@ app.post("/api/games/:id/leave",async(req,res)=>{
   const g=q.rows[0],players=Array.isArray(g.players)?g.players:[],i=u?players.findIndex(x=>x.username===u.username&&!x.bot):players.findIndex(x=>x.guestId===guestId&&!x.bot);
   if(i<0)return res.status(403).json({error:"أنت لست داخل هذه الجلسة"});
   if(g.status==="finished"||g.status==="closed")return res.json({ok:true,closed:true});
+  const wasHost=!!players[i]?.host;
   players.splice(i,1);
   if(players.length===0){
     await pool.query("UPDATE game_lobbies SET status='closed',players='[]'::jsonb WHERE id=$1",[g.id]);
     return res.json({ok:true,closed:true});
   }
-  if(players[i]?.host){
+  if(wasHost){
     players[0].host=true;
     await pool.query("UPDATE game_lobbies SET host_username=$1,host_discord_username=$2,players=$3,status='waiting' WHERE id=$4",[players[0].username,players[0].discordUsername,JSON.stringify(players),g.id]);
   }else{
@@ -737,6 +739,7 @@ app.get("/api/games/:id/state",async(req,res)=>{
   const q=await pool.query("SELECT id,game,players,status,state FROM game_lobbies WHERE id=$1",[req.params.id]);
   if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة"});
   const row=q.rows[0],players=Array.isArray(row.players)?row.players:[],actor=actorFromRequest(players,u,guestId);
+  if(row.status==="finished"||row.status==="closed")return res.status(410).json({error:"انتهت الجلسة وتم إغلاقها",closed:true});
   let state=row.state&&Object.keys(row.state).length?row.state:null;
   if(row.status==="playing"&&!state){state=makeGameState(row.game);await pool.query("UPDATE game_lobbies SET state=$1 WHERE id=$2",[JSON.stringify(state),row.id]);}
   const publicPlayers=players.map(p=>({username:p.username,guest:!!p.guest,host:!!p.host,seat:p.seat||null,seatLabel:p.seatLabel||null}));
@@ -778,6 +781,7 @@ app.post("/api/games/:id/action",async(req,res)=>{
     }else return res.status(400).json({error:"حركة غير معروفة"});
   }else if(action==="round"||action==="answer"||action==="choose"){
     const engine=GAME_ENGINE[g.game]||{kind:"text",prompt:"ابدأ الجولة واكتب إجابتك.",choices:[],answer:""};
+    if(state.turnPlayerKey && state.turnPlayerKey!==playerKey(actor))return res.status(403).json({error:"انتظر دور اللاعب الآخر"});
     if(action==="round"){state.round=(state.round||1)+1;state.prompt=engine.prompt;state.choices=engine.choices||[];state.kind=engine.kind;state.lastResult=null;}
     else{
       let correct=false;
@@ -786,9 +790,13 @@ app.post("/api/games/:id/action",async(req,res)=>{
       if(correct)state.score=(state.score||0)+1;
       state.lastResult={correct,message:correct?"تم احتساب النقطة والانتقال للجولة التالية.":"حاول مرة أخرى أو ابدأ جولة جديدة."};
       state.round=(state.round||1)+1;state.prompt=engine.prompt;state.choices=engine.choices||[];state.kind=engine.kind;
+      const next=players.filter(p=>!p.bot);
+      const currentIndex=Math.max(0,next.findIndex(p=>playerKey(p)===playerKey(actor)));
+      state.turnPlayerKey=playerKey(next[(currentIndex+1)%Math.max(1,next.length)]);
     }
   }else return res.status(400).json({error:"الحركة غير مدعومة"});
-  const up=await pool.query("UPDATE game_lobbies SET state=$1 WHERE id=$2 RETURNING state,status,players",[JSON.stringify(state),g.id]);
+  const finished=!!state.winner;
+  const up=await pool.query("UPDATE game_lobbies SET state=$1,status=$2 WHERE id=$3 RETURNING state,status,players",[JSON.stringify(state),finished?"finished":"playing",g.id]);
   res.json({ok:true,state:publicGameState(g.game,up.rows[0].state,actor),status:up.rows[0].status,players:up.rows[0].players.map(p=>({username:p.username,guest:!!p.guest,host:!!p.host,seat:p.seat||null,seatLabel:p.seatLabel||null}))});
 });
 app.get("/api/games/top",async(req,res)=>{try{const q=await pool.query("SELECT username,discord_username,wins,points FROM game_scores WHERE guest=false ORDER BY wins DESC,points DESC LIMIT 50");res.json({top:q.rows});}catch(e){res.json({top:[]});}});
