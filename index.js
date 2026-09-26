@@ -1134,6 +1134,7 @@ app.get("/api/admin/overview", requireAdmin, (req, res) => {
     openTickets: [...tickets.values()].filter((t) => t.status !== "closed").length,
     applications: applications.size,
     pendingApplications: [...applications.values()].filter((a) => a.status === "pending").length,
+    reviews: [...reviews.values()].reduce((n, list) => n + list.length, 0),
     games: games.size,
     watchRooms: watchRooms.size
   });
