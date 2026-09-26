@@ -392,6 +392,9 @@ app.post("/api/groups",requireAuth,async(req,res)=>{
   const name=String(req.body?.name||"").trim(),description=String(req.body?.description||"").trim(),u=req.session.user;
   if(name.length<2||name.length>60||description.length>240)return res.status(400).json({error:"بيانات القروب غير صحيحة"});
   const q=await pool.query("INSERT INTO community_groups(username,discord_username,name,description) VALUES($1,$2,$3,$4) RETURNING *",[u.username,u.discordUsername,name,description]);
+  const gc=await pool.query("INSERT INTO chat_conversations(kind,owner_username,title) VALUES('group',$1,$2) RETURNING id",[u.username,name]);
+  await pool.query("UPDATE community_groups SET group_conversation_id=$1 WHERE id=$2",[gc.rows[0].id,q.rows[0].id]);
+  await pool.query("INSERT INTO chat_participants(conversation_id,username) VALUES($1,$2) ON CONFLICT DO NOTHING",[gc.rows[0].id,u.username]);
   await pool.query("INSERT INTO group_members(group_id,username,discord_username) VALUES($1,$2,$3) ON CONFLICT DO NOTHING",[q.rows[0].id,u.username,u.discordUsername]);
   await audit(u,"group_create",name);res.json({ok:true,group:q.rows[0]});
 });
