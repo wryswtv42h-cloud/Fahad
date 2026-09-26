@@ -467,15 +467,11 @@ function validateUsername(username) {
 
 function publicGame(game) {
   return {
-    id: game.id,
-    type: game.type,
-    name: game.name,
-    status: game.status,
+    id: game.id, type: game.type, name: game.name, status: game.status,
     host: userJson(users.get(game.hostId)),
     players: game.players.map((p) => ({ ...p, user: userJson(users.get(p.userId)) })),
-    maxPlayers: game.maxPlayers,
-    createdAt: game.createdAt,
-    updatedAt: game.updatedAt
+    maxPlayers: game.maxPlayers, createdAt: game.createdAt, updatedAt: game.updatedAt,
+    state: game.state || {}
   };
 }
 
@@ -484,30 +480,76 @@ function gameStatsFor(userId) {
   return gameStats.get(userId);
 }
 
-function createGame(type, hostId, maxPlayers) {
-  const names = {
-    uno: "UNO",
-    ludo: "لودو",
-    baloot: "بلوت",
-    daqsh: "دقش",
-    qawsar: "قوسر"
-  };
-  const game = {
-    id: String(nextGameId++),
-    type,
-    name: names[type] || type,
-    status: "waiting",
-    hostId,
-    maxPlayers,
-    players: [{ userId: hostId, seat: 1, ready: true }],
-    state: {},
-    createdAt: now(),
-    updatedAt: now()
-  };
-  games.set(game.id, game);
-  return game;
+function makeDeck() {
+  const colors=["red","yellow","green","blue"], deck=[];
+  for(const color of colors){
+    deck.push({color,value:"0"});
+    for(let n=1;n<=9;n++){deck.push({color,value:String(n)});deck.push({color,value:String(n)});}
+    for(const value of ["skip","reverse","draw2"]){deck.push({color,value});deck.push({color,value});}
+  }
+  for(let i=0;i<4;i++){deck.push({color:"wild",value:"wild"});deck.push({color:"wild",value:"draw4"});}
+  return deck;
 }
-
+function shuffle(deck){for(let i=deck.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[deck[i],deck[j]]=[deck[j],deck[i]];}return deck;}
+function initGameState(type,players){
+  if(type==="uno"){
+    const deck=shuffle(makeDeck()), hands=Object.fromEntries(players.map(p=>[p.userId,[]]));
+    for(let n=0;n<7;n++) for(const p of players) hands[p.userId].push(deck.pop());
+    let top=deck.pop(); while(top?.color==="wild"){deck.unshift(top);top=deck.pop();}
+    return {turnUserId:players[0].userId,uno:{deck,discard:[top],hands,direction:1,drawPending:0,winnerId:null}};
+  }
+  if(type==="ludo") return {turnUserId:players[0].userId,ludo:{positions:Object.fromEntries(players.map(p=>[p.userId,[-1,-1,-1,-1]])),lastRoll:null,winnerId:null}};
+  return {turnUserId:players[0].userId,round:1,lastAction:null};
+}
+function createGame(type, hostId, maxPlayers) {
+  const names={uno:"UNO",ludo:"لودو",baloot:"بلوت",daqsh:"دقش",qawsar:"قوسر"};
+  const game={id:String(nextGameId++),type,name:names[type]||type,status:"waiting",hostId,maxPlayers,
+    players:[{userId:hostId,seat:1,ready:true}],state:{},chat:[],createdAt:now(),updatedAt:now()};
+  games.set(game.id,game); return game;
+}
+function startGame(game){
+  game.status="active"; game.players.forEach(p=>p.ready=true); game.state=initGameState(game.type,game.players); game.updatedAt=now();
+}
+function advanceTurn(game){
+  const players=game.players, current=Math.max(0,players.findIndex(p=>p.userId===game.state.turnUserId));
+  const direction=game.type==="uno" ? (game.state.uno?.direction||1) : 1;
+  game.state.turnUserId=players[(current+direction+players.length)%players.length].userId;
+}
+function unoCanPlay(card,top,wildColor){
+  return card.color==="wild" || card.color===top.color || card.value===top.value || (wildColor && card.color===wildColor);
+}
+function applyUnoAction(game,user,action,data){
+  const u=game.state.uno; if(!u) return;
+  if(game.state.turnUserId!==user.id) throw new Error("ليس دورك الآن");
+  const hand=u.hands[user.id]||[], top=u.discard[u.discard.length-1];
+  if(action==="draw"){
+    const count=u.drawPending||1;
+    for(let i=0;i<count;i++){if(!u.deck.length){const keep=u.discard.pop();u.deck=shuffle(u.discard.splice(0));if(keep)u.discard.push(keep);} if(u.deck.length) hand.push(u.deck.pop());}
+    u.drawPending=0; advanceTurn(game); return;
+  }
+  if(action!=="play") throw new Error("حركة UNO غير صحيحة");
+  const index=Number(data?.index); if(!Number.isInteger(index)||!hand[index]) throw new Error("اختر بطاقة صحيحة");
+  const card=hand[index]; if(!unoCanPlay(card,top,data?.color)) throw new Error("لا يمكنك لعب هذه البطاقة الآن");
+  if(card.value==="draw4" && !data?.color) throw new Error("اختر اللون بعد لعب +4");
+  hand.splice(index,1);u.discard.push(card);
+  if(!hand.length){u.winnerId=user.id;game.status="finished";gameStatsFor(user.id).wins++;for(const p of game.players)gameStatsFor(p.userId).played++;return;}
+  if(card.value==="reverse"){u.direction*=-1;if(game.players.length===2)advanceTurn(game);}
+  if(card.value==="skip")advanceTurn(game);
+  if(card.value==="draw2"){u.drawPending=2;advanceTurn(game);}
+  else if(card.value==="draw4"){u.drawPending=4;advanceTurn(game);}
+  else if(card.value!=="reverse" || game.players.length>2)advanceTurn(game);
+  u.wildColor=card.color==="wild"?data.color:null;
+}
+function applyLudoAction(game,user,action,data){
+  const l=game.state.ludo;if(!l||game.state.turnUserId!==user.id)throw new Error("ليس دورك الآن");
+  if(action!=="roll"&&action!=="move")throw new Error("حركة لودو غير صحيحة");
+  if(action==="roll"){l.lastRoll=Math.floor(Math.random()*6)+1;l.canMove=true;return;}
+  if(!l.canMove)throw new Error("ارمِ النرد أولاً");
+  const piece=Number(data?.piece);if(!Number.isInteger(piece)||piece<0||piece>3)throw new Error("اختر قطعة صحيحة");
+  const pos=l.positions[user.id];pos[piece]=Math.max(0,pos[piece]+l.lastRoll);l.canMove=false;
+  if(pos.every(x=>x>=56)){l.winnerId=user.id;game.status="finished";gameStatsFor(user.id).wins++;for(const p of game.players)gameStatsFor(p.userId).played++;return;}
+  advanceTurn(game);
+}
 // Bootstrap website owner account from environment.
 const ownerUsername = cleanText(process.env.OWNER_USERNAME || "owner", 32);
 const ownerPassword = String(process.env.OWNER_PASSWORD || "change-me");
@@ -1154,36 +1196,28 @@ app.post("/api/games/invites/:id/respond", requireAuth, (req, res) => {
   res.json({ invite });
 });
 
-app.post("/api/games/:id/action", requireAuth, (req, res) => {
-  const game = games.get(req.params.id);
-  if (!game) return res.status(404).json({ error: "اللعبة غير موجودة" });
-  const player = game.players.find((p) => p.userId === req.user.id);
-  if (!player) return res.status(403).json({ error: "أنت لست لاعبًا" });
-
-  const action = cleanText(req.body?.action, 40).toLowerCase();
-  if (action === "ready") {
-    player.ready = !player.ready;
-    const everyoneReady = game.players.length >= 2 && game.players.every((p) => p.ready);
-    if (everyoneReady || (game.players.length >= game.maxPlayers)) game.status = "active";
-  } else if (action === "start") {
-    if (game.hostId !== req.user.id && !isAdminUser(req.user)) return res.status(403).json({ error: "المضيف فقط يستطيع بدء اللعبة" });
-    if (game.players.length < 2) return res.status(400).json({ error: "أضف لاعبًا واحدًا على الأقل" });
-    game.status = "active";
-    game.players.forEach((p) => { p.ready = true; });
-  } else if (action === "move" || action === "play" || action === "roll" || action === "draw" || action === "pass") {
-    if (game.status !== "active") return res.status(400).json({ error: "ابدأ اللعبة أولًا" });
-    game.state.turnUserId = game.state.turnUserId || game.players[0].userId;
-    if (game.state.turnUserId !== req.user.id) return res.status(400).json({ error: "ليس دورك الآن" });
-    game.state.lastAction = { userId: req.user.id, action, data: req.body?.data || null, at: now() };
-    const current = game.players.findIndex((p) => p.userId === req.user.id);
-    game.state.turnUserId = game.players[(current + 1) % game.players.length].userId;
-  } else {
-    return res.status(400).json({ error: "حركة اللعبة غير معروفة" });
-  }
-  game.updatedAt = now();
-  res.json({ game: publicGame(game), state: game.state });
+app.post("/api/games/:id/action", requireAuth, (req,res)=>{
+  const game=games.get(req.params.id);if(!game)return res.status(404).json({error:"اللعبة غير موجودة"});
+  const player=game.players.find(p=>p.userId===req.user.id);if(!player)return res.status(403).json({error:"أنت لست لاعبًا"});
+  const action=cleanText(req.body?.action,40).toLowerCase();
+  try{
+    if(action==="ready"){player.ready=!player.ready;return res.json({game:publicGame(game),state:game.state});}
+    if(action==="start"){
+      if(game.hostId!==req.user.id&&!isAdminUser(req.user))return res.status(403).json({error:"المضيف فقط يستطيع بدء اللعبة"});
+      if(game.players.length<2)return res.status(400).json({error:"أضف لاعبًا واحدًا على الأقل"});
+      startGame(game);return res.json({game:publicGame(game),state:game.state});
+    }
+    if(game.status!=="active")return res.status(400).json({error:"ابدأ اللعبة أولًا"});
+    if(game.type==="uno")applyUnoAction(game,req.user,action,req.body?.data||{});
+    else if(game.type==="ludo")applyLudoAction(game,req.user,action,req.body?.data||{});
+    else {
+      if(game.state.turnUserId!==req.user.id)return res.status(400).json({error:"ليس دورك الآن"});
+      if(!["play","move","pass","roll","draw"].includes(action))throw new Error("حركة اللعبة غير معروفة");
+      game.state.lastAction={userId:req.user.id,action,data:req.body?.data||null,at:now()};advanceTurn(game);
+    }
+    game.updatedAt=now();res.json({game:publicGame(game),state:game.state});
+  }catch(e){res.status(400).json({error:e.message||"تعذر تنفيذ الحركة"});}
 });
-
 app.post("/api/games/:id/finish", requireAuth, (req, res) => {
   const game = games.get(req.params.id);
   if (!game) return res.status(404).json({ error: "اللعبة غير موجودة" });
