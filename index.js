@@ -33,7 +33,7 @@ const app = express();
 app.disable("x-powered-by");
 app.use(cors());
 app.use(express.json({ limit: "20kb" }));
-const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : undefined });
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 app.use(session({ secret: process.env.SESSION_SECRET || "mld-session-secret", resave: false, saveUninitialized: false, store: new pgSession({ pool, tableName: "user_sessions", createTableIfMissing: true }), cookie: { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", maxAge: 2592000000 } }));
 app.use(express.static(path.join(__dirname, "public")));
 
@@ -208,11 +208,15 @@ async function initAppDatabase() {
     CREATE TABLE IF NOT EXISTS community_groups (id SERIAL PRIMARY KEY, username VARCHAR(32) NOT NULL, discord_username VARCHAR(100) NOT NULL, name VARCHAR(60) NOT NULL, description VARCHAR(240) NOT NULL DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
     CREATE TABLE IF NOT EXISTS audit_logs (id BIGSERIAL PRIMARY KEY, username VARCHAR(32), discord_username VARCHAR(100), action VARCHAR(120) NOT NULL, details TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
     CREATE TABLE IF NOT EXISTS game_lobbies (id SERIAL PRIMARY KEY, game VARCHAR(30) NOT NULL, host_username VARCHAR(32) NOT NULL, host_discord_username VARCHAR(100) NOT NULL, max_players INTEGER NOT NULL DEFAULT 4, players JSONB NOT NULL DEFAULT '[]'::jsonb, status VARCHAR(20) NOT NULL DEFAULT 'waiting', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
-    CREATE TABLE IF NOT EXISTS reviews (id SERIAL PRIMARY KEY, username VARCHAR(32) NOT NULL, discord_username VARCHAR(100) NOT NULL, rating INTEGER NOT NULL DEFAULT 5, message VARCHAR(1000) NOT NULL, status VARCHAR(20) NOT NULL DEFAULT 'visible', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());\n    CREATE TABLE IF NOT EXISTS announcements (id SERIAL PRIMARY KEY, text VARCHAR(300) NOT NULL, link TEXT DEFAULT '', active BOOLEAN NOT NULL DEFAULT true, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+    CREATE TABLE IF NOT EXISTS reviews (id SERIAL PRIMARY KEY, username VARCHAR(32) NOT NULL, discord_username VARCHAR(100) NOT NULL, rating INTEGER NOT NULL DEFAULT 5, message VARCHAR(1000) NOT NULL, status VARCHAR(20) NOT NULL DEFAULT 'visible', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+    CREATE TABLE IF NOT EXISTS announcements (id SERIAL PRIMARY KEY, text VARCHAR(300) NOT NULL, link TEXT DEFAULT '', active BOOLEAN NOT NULL DEFAULT true, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+    CREATE TABLE IF NOT EXISTS site_stats (id INTEGER PRIMARY KEY DEFAULT 1, visits BIGINT NOT NULL DEFAULT 0, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+    INSERT INTO site_stats(id,visits) VALUES(1,0) ON CONFLICT (id) DO NOTHING;
   `);
 }
 function currentUser(req){ return req.session?.user || null; }
 function requireAuth(req,res,next){ if(!currentUser(req)) return res.status(401).json({error:"يجب تسجيل الدخول أولًا"}); next(); }
+function requireAdmin(req,res,next){ const u=currentUser(req); if(!u || !["owner","admin"].includes(u.role)) return res.status(403).json({error:"هذه الصفحة للأونر والإدارة فقط"}); next(); }
 function requireOwner(req,res,next){ const u=currentUser(req); if(!u || u.role!=="owner") return res.status(403).json({error:"هذه الصفحة للأونر فقط"}); next(); }
 async function audit(u,action,details=""){ if(!process.env.DATABASE_URL) return; await pool.query("INSERT INTO audit_logs(username,discord_username,action,details) VALUES($1,$2,$3,$4)",[u?.username||null,u?.discordUsername||null,action,details]); }
 async function ensureOwner(){
@@ -225,6 +229,8 @@ async function ensureOwner(){
 }
 
 
+app.get("/api/site/stats",async(req,res)=>{try{const s=await pool.query("SELECT visits FROM site_stats WHERE id=1");const g=await getGuild();const members=await getAllMembers(g);const online=members.filter(m=>!m.user.bot&&m.presence?.status&&m.presence.status!=="offline").length;res.json({visits:Number(s.rows[0]?.visits||0),online});}catch(e){res.status(500).json({visits:0,online:0});}});
+app.post("/api/site/visit",async(req,res)=>{try{await pool.query("UPDATE site_stats SET visits=visits+1,updated_at=NOW() WHERE id=1");res.json({ok:true});}catch(e){res.status(500).json({error:"stats"});}});
 app.get("/api/auth/me",(req,res)=>{const u=currentUser(req);res.json({authenticated:Boolean(u),user:u?{username:u.username,discordUsername:u.discordUsername,role:u.role,isOwner:u.role==="owner"}:null});});
 app.post("/api/auth/register",async(req,res)=>{
   try{
@@ -255,18 +261,18 @@ app.post("/api/applications",requireAuth,async(req,res)=>{const type=String(req.
 app.get("/api/groups",requireAuth,async(req,res)=>{const q=await pool.query("SELECT id,name,description,created_at FROM community_groups WHERE username=$1 ORDER BY id DESC",[req.session.user.username]);res.json({groups:q.rows});});
 app.post("/api/groups",requireAuth,async(req,res)=>{const name=String(req.body?.name||"").trim(),description=String(req.body?.description||"").trim(),u=req.session.user;if(name.length<2||name.length>60||description.length>240)return res.status(400).json({error:"بيانات القروب غير صحيحة"});const q=await pool.query("INSERT INTO community_groups(username,discord_username,name,description) VALUES($1,$2,$3,$4) RETURNING *",[u.username,u.discordUsername,name,description]);await audit(u,"group_create",name);res.json({ok:true,group:q.rows[0]});});
 app.delete("/api/groups/:id",requireAuth,async(req,res)=>{await pool.query("DELETE FROM community_groups WHERE id=$1 AND username=$2",[req.params.id,req.session.user.username]);res.json({ok:true});});
-app.get("/api/owner/logs",requireOwner,async(req,res)=>{const q=await pool.query("SELECT id,username,discord_username,action,details,created_at FROM audit_logs ORDER BY id DESC LIMIT 200");res.json({logs:q.rows});});
-app.get("/api/owner/tickets",requireOwner,async(req,res)=>{const q=await pool.query("SELECT id,username,discord_username,subject,message,status,created_at FROM tickets ORDER BY id DESC LIMIT 100");res.json({tickets:q.rows});});
-app.get("/api/owner/applications",requireOwner,async(req,res)=>{const q=await pool.query("SELECT id,username,discord_username,type,answers,status,created_at FROM applications ORDER BY id DESC LIMIT 100");res.json({applications:q.rows});});
+app.get("/api/owner/logs",requireAdmin,async(req,res)=>{const q=await pool.query("SELECT id,username,discord_username,action,details,created_at FROM audit_logs ORDER BY id DESC LIMIT 200");res.json({logs:q.rows});});
+app.get("/api/owner/tickets",requireAdmin,async(req,res)=>{const q=await pool.query("SELECT id,username,discord_username,subject,message,status,created_at FROM tickets ORDER BY id DESC LIMIT 100");res.json({tickets:q.rows});});
+app.get("/api/owner/applications",requireAdmin,async(req,res)=>{const q=await pool.query("SELECT id,username,discord_username,type,answers,status,created_at FROM applications ORDER BY id DESC LIMIT 100");res.json({applications:q.rows});});
 app.get("/api/reviews",async(req,res)=>{const q=await pool.query("SELECT id,username,rating,message,created_at FROM reviews WHERE status='visible' ORDER BY id DESC LIMIT 30");res.json({reviews:q.rows});});
 app.post("/api/reviews",requireAuth,async(req,res)=>{const u=req.session.user,message=String(req.body?.message||"").trim(),rating=Math.max(1,Math.min(5,Number(req.body?.rating)||5));if(message.length<3||message.length>1000)return res.status(400).json({error:"الرأي يجب أن يكون بين 3 و1000 حرف"});const q=await pool.query("INSERT INTO reviews(username,discord_username,rating,message) VALUES($1,$2,$3,$4) RETURNING id",[u.username,u.discordUsername,rating,message]);await audit(u,"review_create",`#${q.rows[0].id}`);res.json({ok:true,id:q.rows[0].id});});
 app.get("/api/announcements",async(req,res)=>{const q=await pool.query("SELECT id,text,link FROM announcements WHERE active=true ORDER BY id DESC LIMIT 5");res.json({announcements:q.rows});});
 app.get("/api/owner/users",requireOwner,async(req,res)=>{const q=await pool.query("SELECT id,username,discord_username,role,created_at,last_login_at FROM app_users ORDER BY id DESC LIMIT 300");res.json({users:q.rows});});
 app.post("/api/owner/users/:id/role",requireOwner,async(req,res)=>{const role=String(req.body?.role||"user");if(!["user","admin","owner"].includes(role))return res.status(400).json({error:"صلاحية غير صحيحة"});const q=await pool.query("UPDATE app_users SET role=$1 WHERE id=$2 RETURNING username,role",[role,req.params.id]);if(!q.rowCount)return res.status(404).json({error:"الحساب غير موجود"});await audit(req.session.user,"user_role_change",`${q.rows[0].username} => ${role}`);res.json({ok:true,user:q.rows[0]});});
-app.get("/api/owner/reviews",requireOwner,async(req,res)=>{const q=await pool.query("SELECT id,username,discord_username,rating,message,status,created_at FROM reviews ORDER BY id DESC LIMIT 200");res.json({reviews:q.rows});});
-app.delete("/api/owner/reviews/:id",requireOwner,async(req,res)=>{await pool.query("DELETE FROM reviews WHERE id=$1",[req.params.id]);await audit(req.session.user,"review_delete",`#${req.params.id}`);res.json({ok:true});});
-app.post("/api/owner/announcements",requireOwner,async(req,res)=>{const text=String(req.body?.text||"").trim(),link=String(req.body?.link||"").trim();if(text.length<2||text.length>300)return res.status(400).json({error:"الإعلان يجب أن يكون بين 2 و300 حرف"});const q=await pool.query("INSERT INTO announcements(text,link) VALUES($1,$2) RETURNING *",[text,link]);await audit(req.session.user,"announcement_create",text);res.json({ok:true,announcement:q.rows[0]});});
-app.delete("/api/owner/announcements/:id",requireOwner,async(req,res)=>{await pool.query("DELETE FROM announcements WHERE id=$1",[req.params.id]);await audit(req.session.user,"announcement_delete",`#${req.params.id}`);res.json({ok:true});});
+app.get("/api/owner/reviews",requireAdmin,async(req,res)=>{const q=await pool.query("SELECT id,username,discord_username,rating,message,status,created_at FROM reviews ORDER BY id DESC LIMIT 200");res.json({reviews:q.rows});});
+app.delete("/api/owner/reviews/:id",requireAdmin,async(req,res)=>{await pool.query("DELETE FROM reviews WHERE id=$1",[req.params.id]);await audit(req.session.user,"review_delete",`#${req.params.id}`);res.json({ok:true});});
+app.post("/api/owner/announcements",requireAdmin,async(req,res)=>{const text=String(req.body?.text||"").trim(),link=String(req.body?.link||"").trim();if(text.length<2||text.length>300)return res.status(400).json({error:"الإعلان يجب أن يكون بين 2 و300 حرف"});const q=await pool.query("INSERT INTO announcements(text,link) VALUES($1,$2) RETURNING *",[text,link]);await audit(req.session.user,"announcement_create",text);res.json({ok:true,announcement:q.rows[0]});});
+app.delete("/api/owner/announcements/:id",requireAdmin,async(req,res)=>{await pool.query("DELETE FROM announcements WHERE id=$1",[req.params.id]);await audit(req.session.user,"announcement_delete",`#${req.params.id}`);res.json({ok:true});});
 
 
 
