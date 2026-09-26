@@ -1444,7 +1444,8 @@ app.get("/api/admin/discord", requireAdmin, async (req, res) => {
 
 client.on("guildMemberAdd", invalidateMemberSnapshot);
 client.on("guildMemberRemove", invalidateMemberSnapshot);
-client.on("guildMemberUpdate", invalidateMemberSnapshot);\nclient.on("presenceUpdate", (oldPresence, newPresence) => {
+client.on("guildMemberUpdate", invalidateMemberSnapshot);
+client.on("presenceUpdate", (oldPresence, newPresence) => {
   invalidateMemberSnapshot();
   const member = newPresence?.member || oldPresence?.member;
   if (member) memberSnapshotAt = Date.now();
