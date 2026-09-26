@@ -457,13 +457,15 @@ app.post("/api/games/:id/leave",async(req,res)=>{
 app.get("/api/games/:id/state",async(req,res)=>{
   const q=await pool.query("SELECT id,game,players,status,state FROM game_lobbies WHERE id=$1",[req.params.id]);
   if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة"});
-  res.json({game:q.rows[0],state:q.rows[0].state||{}});
+  let row=q.rows[0],state=row.state&&Object.keys(row.state).length?row.state:null;
+  if(row.status==="playing"&&!state){state=makeGameState(row.game);await pool.query("UPDATE game_lobbies SET state=$1 WHERE id=$2",[JSON.stringify(state),row.id]);}
+  res.json({game:row,state:state||{}});
 });
 app.post("/api/games/:id/action",async(req,res)=>{
   const u=currentUser(req),guestId=String(req.body?.guestId||"").trim(),action=String(req.body?.action||"").trim();
   const q=await pool.query("SELECT * FROM game_lobbies WHERE id=$1",[req.params.id]);
   if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة"});
-  const g=q.rows[0],players=Array.isArray(g.players)?g.players:[],state=g.state||{};
+  const g=q.rows[0],players=Array.isArray(g.players)?g.players:[],state=g.state&&Object.keys(g.state).length?g.state:makeGameState(g.game);
   if(g.status!=="playing")return res.status(409).json({error:"الجلسة لم تبدأ"});
   const actor=u?players.find(p=>!p.bot&&p.username===u.username):players.find(p=>!p.bot&&p.guestId===guestId);
   if(!actor)return res.status(403).json({error:"لست داخل الجلسة"});
