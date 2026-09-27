@@ -94,7 +94,10 @@ const authLimiter=rateLimit(10*60*1000,30,req=>"auth:"+req.ip);
 const resetLimiter=rateLimit(15*60*1000,5,req=>"reset:"+req.ip);
 const writeLimiter=rateLimit(60*1000,90,req=>"write:"+((req.session&&req.session.user?.username)||req.ip));
 
-app.get("/health",(req,res)=>res.status(200).json({ok:true,service:"mld",version:"hardening-4",botReady:client.isReady(),membersCached:Boolean(memberSnapshot)}));
+app.get("/health",(req,res)=>{
+  const ready=client.isReady() && Boolean(memberSnapshot);
+  res.status(ready?200:503).json({ok:ready,service:"mld",version:"hardening-5",botReady:client.isReady(),membersCached:Boolean(memberSnapshot)});
+});
 app.use(express.static(path.join(__dirname, "public"),{maxAge:"1h",etag:true}));
 
 const leadershipRoleIds = [
