@@ -370,7 +370,6 @@ async function initAppDatabase() {
     if (pk.rowCount) {
       await pool.query(`ALTER TABLE "${table}" DROP CONSTRAINT IF EXISTS "${table}_pkey" CASCADE`);
       await pool.query(`ALTER TABLE "${table}" ADD COLUMN IF NOT EXISTS id SERIAL`);
-      await pool.query(`UPDATE "${table}" SET id=nextval(pg_get_serial_sequence('${table}','id')) WHERE id IS NULL`);
       await pool.query(`ALTER TABLE "${table}" ADD CONSTRAINT "${table}_pkey" PRIMARY KEY (id)`);
     }
     await pool.query(`ALTER TABLE "${table}" ALTER COLUMN user_id DROP NOT NULL`);
