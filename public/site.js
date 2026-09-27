@@ -376,7 +376,7 @@ function rebuildMobileMenu(){
   const isOwner=role==="owner";
   const base=[
     ["home","الرئيسية"],["members","الأعضاء"],["top","TOP"],["roles","الرتب القيادية"],
-    ["chat","الشات"],["profile","بروفايلي"],
+    ["chat","الشات"],["profile","بروفايلي"],["message","الزاجل"],
     ["games","الألعاب"],["groups","القروبات"],["account","حسابي"],["tickets","التذاكر"],
     ["apply","التقديم"],["reviews","الآراء"]
   ];
@@ -411,7 +411,7 @@ window.change=async function(v){
     if(v==="logout"){await fetch("/api/auth/logout",{method:"POST"});mldUser=null;updateAuthBar();await homeView();return}
     if(v==="reviews"){await reviewsView();return}
     if(v==="logs"){await ownerLogs();return}
-    if(v==="admin"){await mldMe();if(mldUser?.role==="owner")return ownerPanel();if(mldUser?.role==="admin")return window.adminPanel();return authView()}
+    if(v==="admin"){await mldMe();if(["admin","owner"].includes(mldUser?.role))return window.adminPanel();return authView()}
     if(v==="owner"){await ownerPanel();return}
     if(v==="blocks"){await mldChatBlocks();return}
     await homeView();
