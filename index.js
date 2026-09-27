@@ -49,7 +49,11 @@ app.use((req,res,next)=>{
   res.setHeader("Permissions-Policy","camera=(), microphone=(), geolocation=(), payment=()");
   next();
 });
-app.use(express.json({ limit: "20kb" }));
+app.use(express.json({ limit: "256kb" }));
+app.use((err,req,res,next)=>{
+  if(err && err.type==="entity.too.large") return res.status(413).json({error:"الطلب كبير جدًا، خفف البيانات وحاول مرة ثانية"});
+  next(err);
+});
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   max: Number(process.env.DB_POOL_MAX || 20),
