@@ -9,6 +9,7 @@ const session = require("express-session");
 const pgSession = require("connect-pg-simple")(session);
 const { Pool } = require("pg");
 const helmet = require("helmet");
+const compression = require("compression");
 
 const token = process.env.DISCORD_BOT_TOKEN;
 const guildId = process.env.DISCORD_GUILD_ID;
@@ -33,7 +34,19 @@ const client = new Client({
 const app = express();
 app.set("trust proxy", 1);
 app.disable("x-powered-by");
-app.use(helmet({contentSecurityPolicy:false,crossOriginEmbedderPolicy:false}));
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+  referrerPolicy: { policy: "strict-origin-when-cross-origin" },
+  frameguard: { action: "deny" },
+  noSniff: true,
+  hidePoweredBy: true
+}));
+app.use(compression({ threshold: 1024 }));
+app.use((req,res,next)=>{
+  res.setHeader("Permissions-Policy","camera=(), microphone=(), geolocation=(), payment=()");
+  next();
+});
 app.use(express.json({ limit: "20kb" }));
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -922,16 +935,6 @@ app.post("/api/games/:id/action",async(req,res)=>{
 app.get("/api/games/top",async(req,res)=>{try{const q=await pool.query("SELECT username,discord_username,wins,points FROM game_scores WHERE guest=false ORDER BY wins DESC,points DESC LIMIT 50");res.json({top:q.rows});}catch(e){res.json({top:[]});}});
 app.post("/api/games/:id/score",requireAuth,async(req,res)=>{const points=Math.max(1,Math.min(100,Number(req.body?.points)||10)),u=req.session.user;await pool.query("INSERT INTO game_scores(username,discord_username,wins,points,guest) VALUES($1,$2,1,$3,false) ON CONFLICT(username) DO UPDATE SET wins=game_scores.wins+1,points=game_scores.points+$3,discord_username=EXCLUDED.discord_username",[u.username,u.discordUsername,points]);await audit(u,"game_win",`#${req.params.id} +${points}`);res.json({ok:true});});
 setInterval(async()=>{try{await pool.query("DELETE FROM game_lobbies WHERE status IN ('waiting','ready') AND created_at < NOW() - make_interval(mins => 5)")}catch(e){console.error("game cleanup:",e.message)}},30000);
-
-app.get("/health", (req, res) => {
-  res.json({
-    ok: true,
-    botReady: client.isReady(),
-    membersCached: Boolean(memberSnapshot),
-    membersCachedCount: memberSnapshot?.length || 0,
-    membersUpdatedAt: memberSnapshotAt || null
-  });
-});
 
 app.get("/api/public/server", async (req, res) => {
   try {
