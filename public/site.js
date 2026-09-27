@@ -198,9 +198,9 @@ window.adminPanel=async function(){
   if(mldUser.role==="owner")return ownerPanel();
   searchWrap.style.display="none";
   title.textContent="لوحة الإدارة";
-  subtitle.textContent="إدارة التقديمات والتذاكر ومتابعة الطلبات.";
+  subtitle.textContent="لوحة الإدارة — التقديمات والتذاكر فقط.";
   content.className="feature-grid";
-  content.innerHTML="<article class='feature-card'><div class='feature-icon'>🛡️</div><h3>لوحة الإدارة</h3><p class='muted'>هذه اللوحة للإدارة فقط. لوحة الأونر منفصلة ولا تظهر للحسابات الإدارية.</p><div class='game-lobby-actions'><button class='primary' data-admin-tab='apps'>📝 التقديمات</button><button data-admin-tab='tickets'>🎫 التذاكر</button></div></article><div id='admin-panel-body' class='feature-grid'></div>";
+  content.innerHTML="<article class='feature-card'><div class='feature-icon'>📝</div><h3>التقديمات</h3><p class='muted'>عرض ومراجعة طلبات الأعضاء وقبولها أو رفضها.</p><button class='primary wide' data-admin-tab='apps'>فتح التقديمات</button></article><article class='feature-card'><div class='feature-icon'>🎫</div><h3>التذاكر</h3><p class='muted'>عرض التذاكر وفتح المحادثات وإغلاقها.</p><button class='primary wide' data-admin-tab='tickets'>فتح التذاكر</button></article><div id='admin-panel-body' class='feature-grid'></div>";
   const body=$("#admin-panel-body");
   async function loadApps(){
     const r=await fetch("/api/owner/applications"),d=await r.json();
