@@ -376,53 +376,88 @@ async function renderGames(){
     document.querySelectorAll("[data-game-watch]").forEach(b=>b.onclick=()=>openGameSession(Number(b.dataset.gameWatch),true));
   };
   const openGameSession=async(id,spectator)=>{
-    stop();sessionId=id;
-    const renderState=async()=>{
-      try{
-        const d=await api("/api/games/"+id+"/state?guestId="+encodeURIComponent(guestId));
-        const g=d.game,s=d.state||{},players=g.players||[];
-        const active=players.find(p=>mldUser ? p.username===mldUser.username : p.guestId===guestId);
-        const activeIndex=players.findIndex(p=>mldUser ? p.username===mldUser.username : p.guestId===guestId);
-        const seats=(players.map(p=>"<div class='log-item'><b>"+escGame(p.seatLabel||p.username)+"</b><small>"+(p.host?" صاحب الجلسة · ":"")+((p.guest)?"زائر":"عضو")+"</small></div>").join("")||"<p class='muted'>لاعبون سيظهرون هنا.</p>");
-        let action="";
-        if(spectator) action="<p class='muted'>وضع مشاهدة — لا يمكنك تنفيذ حركات.</p>";
-        else if(g.status!=="playing"){
-          const seatOptions=(seatNames[g.game]||[]).slice(0,Number(g.max_players)||4);
-          while(seatOptions.length<(Number(g.max_players)||4))seatOptions.push("مقعد "+(seatOptions.length+1));
-          const minPlayers=Math.max(2,Number(g.minPlayers)||2),need=Math.max(0,minPlayers-players.length);
-          action="<p class='muted'>اختر مقعدك إذا أردت، أو ابدأ مباشرة؛ عند البدء سيضيف النظام بوتات تلقائيًا للعدد الناقص ("+(need?need:0)+" بوت).</p><div class='game-lobby-actions'>"+seatOptions.map((x,i)=>"<button data-game-seat='"+i+"'>"+escGame(x)+"</button>").join("")+"</div>";
-          if(active?.host)action+="<button class='primary wide' id='game-start'>ابدأ اللعبة · أضف البوتات تلقائيًا</button>";
-        }else{
-          if(g.game==="CODENAMES"){
-            if(s.canGiveClue) action="<div class='form-stack'><input id='game-clue' class='full' maxlength='30' placeholder='التلميح'><input id='game-clue-num' class='full' type='number' min='1' max='9' value='1'><button class='primary wide' data-game-action='clue'>إعطاء التلميح</button></div>";
-            if(s.canGuess) action+="<div class='game-word-grid'>"+(s.words||[]).map((w,i)=>"<button data-game-guess='"+i+"'>"+escGame(w.word||"؟")+"</button>").join("")+"</div>";
-          }else if(g.game==="BALOOT"||g.game==="UNO"){
-            const myTurn=activeIndex===Number(s.turnPlayerIndex);
-            action="<p>"+(myTurn?"دورك الآن":"انتظر دور اللاعب الآخر")+"</p><div class='game-lobby-actions'>"+(s.hand||[]).map((card,i)=>"<button data-game-card='"+i+"' "+(myTurn?"":"disabled")+">"+escGame(card.rank?card.suit+" "+card.rank:(card.color||"")+" "+(card.value||"ورقة"))+"</button>").join("")+"</div>";
-          }else if(s.kind==="choice"&&Array.isArray(s.choices)) action="<p>"+escGame(s.prompt||"")+"</p><div class='game-lobby-actions'>"+s.choices.map((x,i)=>"<button data-game-choice='"+i+"'>"+escGame(x)+"</button>").join("")+"</div>";
-          else action="<p>"+escGame(s.prompt||"ابدأ الجولة.")+"</p><textarea id='game-answer' class='full' rows='4' placeholder='إجابتك'></textarea><button class='primary wide' data-game-action='answer'>إرسال الإجابة</button>";
-          action+="<button data-game-action='round'>جولة جديدة</button>";
-        }
-        content.innerHTML="<article class='feature-card'><button id='game-back'>رجوع للجلسات</button><div class='feature-icon'></div><h3>#"+id+" · "+escGame(names[g.game]||g.game)+"</h3><p class='muted'>الحالة: "+escGame(g.status)+" · "+players.length+"/"+g.max_players+" لاعبين</p><div class='log-list'>"+seats+"</div><div class='game-lobby-actions'>"+action+"<button id='game-leave'>"+(spectator?"خروج من المشاهدة":"مغادرة الجلسة")+"</button>"+(active?.host&&!spectator?"<button id='game-finish'>إنهاء الجلسة</button>":"")+"</div><p id='game-state-status' class='muted'>"+escGame(s.lastResult?.message||"")+"</p></article>";
-        $("#game-back").onclick=gamesList;
-        $("#game-leave").onclick=async()=>{try{if(!spectator)await api("/api/games/"+id+"/leave",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(guestPayload())});gamesList()}catch(e){alert(e.message)}};
-        $("#game-finish")?.addEventListener("click",async()=>{try{await api("/api/games/"+id+"/finish",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(guestPayload())});await gamesList()}catch(e){alert(e.message)}});
-        document.querySelectorAll("[data-game-seat]").forEach(b=>b.onclick=async()=>{if(b.disabled)return;const allSeatButtons=[...document.querySelectorAll("[data-game-seat]")];allSeatButtons.forEach(x=>x.disabled=true);try{await api("/api/games/"+id+"/seat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...guestPayload(),seat:String(Number(b.dataset.gameSeat))})});await renderState()}catch(e){alert(e.message);allSeatButtons.forEach(x=>x.disabled=false)}});
-        $("#game-start")?.addEventListener("click",async()=>{try{await api("/api/games/"+id+"/start",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(guestPayload())});renderState()}catch(e){alert(e.message)}});
-        document.querySelectorAll("[data-game-choice]").forEach(b=>b.onclick=()=>doAction("choose",{choice:Number(b.dataset.gameChoice)}));
-        document.querySelectorAll("[data-game-card]").forEach(b=>b.onclick=()=>doAction("playCard",{index:Number(b.dataset.gameCard)}));
-        document.querySelectorAll("[data-game-guess]").forEach(b=>b.onclick=()=>doAction("guess",{index:Number(b.dataset.gameGuess)}));
-        document.querySelectorAll("[data-game-action]").forEach(b=>b.onclick=()=>doAction(b.dataset.gameAction));
-      }catch(e){content.innerHTML="<article class='feature-card'><button id='game-back'>رجوع</button><h3>الجلسة</h3><p class='muted'>"+escGame(e.message)+"</p></article>";$("#game-back").onclick=gamesList}
-    };
-    const doAction=async(action,extra={})=>{
-      const body={...guestPayload(),action,...extra};
-      if(action==="clue"){body.word=$("#game-clue")?.value.trim();body.number=Number($("#game-clue-num")?.value)||1}
-      if(action==="answer")body.answer=$("#game-answer")?.value.trim()||"";
-      try{await api("/api/games/"+id+"/action",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});renderState()}catch(e){$("#game-state-status").textContent=e.message}
-    };
-    await renderState();sessionTimer=setInterval(renderState,1200);
+  stop();sessionId=id;
+  const gameMeta={
+    CODENAMES:{icon:"▦",theme:"codenames"},SPYFALL:{icon:"◉",theme:"spyfall"},PICTIONARY:{icon:"✎",theme:"pictionary"},CHARADES:{icon:"✦",theme:"charades"},
+    WHOAMI:{icon:"?",theme:"whoami"},TABOO:{icon:"⊘",theme:"taboo"},WORD_BOMB:{icon:"◈",theme:"wordbomb"},TRUTH_LIE:{icon:"✓",theme:"truthlie"},
+    EMOJI_GUESS:{icon:"☺",theme:"emoji"},TRIVIA:{icon:"?",theme:"trivia"},CATEGORIES:{icon:"A",theme:"categories"},LIAR:{icon:"!",theme:"liar"},
+    HOT_SEAT:{icon:"◉",theme:"hotseat"},WOULD_YOU_RATHER:{icon:"↔",theme:"wyr"},DRAW_GUESS:{icon:"✎",theme:"draw"},FASTEST:{icon:"⚡",theme:"fast"},
+    RIDDLE_RUSH:{icon:"?",theme:"riddle"},SECRET_WORD:{icon:"◆",theme:"secret"},MIMIC:{icon:"◌",theme:"mimic"},GUESS_PLAYER:{icon:"◎",theme:"guess"},
+    UNO:{icon:"UNO",theme:"uno"},LUDO:{icon:"●",theme:"ludo"},BALOOT:{icon:"♠",theme:"baloot"},DAQSH:{icon:"◆",theme:"daqsh"},QAWSAR:{icon:"♜",theme:"qawsar"}
   };
+  const meta=gameMeta;
+  const cardHtml=(card,i,disabled=false,selected=false)=>{
+    const label=card?.rank?String(card.suit||"")+" "+String(card.rank):String(card?.color||"")+" "+String(card?.value||"ورقة");
+    const cls="game-card-button "+(selected?"selected ":"")+(disabled?"disabled":"");
+    return "<button type='button' class='"+cls+"' data-game-card='"+i+"' "+(disabled?"disabled":"")+"><span>"+escGame(label)+"</span></button>";
+  };
+  const renderState=async()=>{
+    try{
+      const d=await api("/api/games/"+id+"/state?guestId="+encodeURIComponent(guestId));
+      const g=d.game,s=d.state||{},players=g.players||[];
+      const active=players.find(p=>mldUser?p.username===mldUser.username:p.guestId===guestId);
+      const activeIndex=players.findIndex(p=>mldUser?p.username===mldUser.username:p.guestId===guestId);
+      const theme=meta[g.game]||{icon:"◆",theme:"default"};
+      const currentIndex=Number(s.turnPlayerIndex);
+      const phase=s.phase||g.status;
+      const seatCards=players.map((p,i)=>{
+        const isTurn=(Number.isInteger(currentIndex)&&currentIndex===i)||(s.turnPlayerKey&&s.turnPlayerKey===playerKeyForClient(p));
+        return "<div class='game-seat "+(isTurn?"turn":"")+" "+(p.bot?"bot":"human")+"'><div class='game-seat-avatar'>"+(p.bot?"BOT":escGame((p.username||"ل").slice(0,2)))+"</div><div><b>"+escGame(p.seatLabel||p.username||"لاعب")+"</b><small>"+(p.host?"صاحب الجلسة · ":"")+(p.bot?"بوت":"لاعب")+"</small></div>"+(isTurn?"<i>الدور</i>":"")+"</div>";
+      }).join("");
+      let center="<div class='game-center-core'><span class='game-big-icon'>"+theme.icon+"</span><b>"+escGame(names[g.game]||g.game)+"</b><small>"+escGame(phase)+"</small></div>";
+      let action="";
+      if(s.winner){
+        action="<div class='game-result'><strong>انتهت الجولة</strong><span>الفائز: "+escGame(s.winner)+"</span></div>";
+      }else if(spectator){
+        action="<div class='game-spectator'>وضع مشاهدة مباشر — الحركات تظهر تلقائيًا.</div>";
+      }else if(g.status!=="playing"){
+        const opts=(seatNames[g.game]||[]).slice(0,Number(g.max_players)||4);
+        action="<div class='game-lobby-note'>اختر مقعدك أو ابدأ مباشرة. إذا كانت المقاعد ناقصة، يملؤها النظام ببوتات تلقائيًا.</div><div class='game-seat-picker'>"+opts.map((x,i)=>"<button type='button' data-game-seat='"+i+"'>"+escGame(x)+"</button>").join("")+"</div>"+(active?.host?"<button class='primary wide' id='game-start'>ابدأ الجلسة</button>":"");
+      }else if(g.game==="CODENAMES"){
+        center="<div class='codenames-board'>"+(s.words||[]).map((w,i)=>"<button class='code-word "+(w.revealed?"revealed":"")+"' data-game-guess='"+i+"' "+(!s.canGuess||w.revealed?"disabled":"")+"><span>"+escGame(w.word||"")+"</span></button>").join("")+"</div>";
+        action=(s.playerRole||"spectator")!=="spectator"?"<div class='game-phase-banner'>الفريق: "+escGame(s.playerRole||"")+" · الدور: "+escGame(s.turn||"")+(s.guessesLeft?" · التخمينات المتبقية: "+s.guessesLeft:"")+"</div>":"";
+        if(s.canGiveClue)action+="<div class='game-control-row'><input id='game-clue' class='full' maxlength='30' placeholder='كلمة التلميح'><input id='game-clue-num' type='number' min='1' max='9' value='1'><button class='primary' data-game-action='clue'>إعطاء التلميح</button></div>";
+        if(s.canGuess)action+="<button class='ghost' data-game-action='endTurn'>إنهاء الدور</button>";
+      }else if(g.game==="BALOOT"){
+        const myTurn=activeIndex===currentIndex;
+        if(s.phase==="bidding"){
+          const suits=["♠","♥","♦","♣"];
+          action="<div class='game-phase-banner'>مرحلة الشراء · الجولة "+escGame(s.bidRound||1)+"</div><div class='game-bid-actions'><button data-game-action='bid' data-bid='pass'>بس</button><button data-game-action='bid' data-bid='sun'>صن</button>"+suits.map(x=>"<button data-game-action='bid' data-bid='hokum' data-suit='"+x+"'>حكم "+x+"</button>").join("")+"</div>";
+        }else{
+          action="<div class='game-phase-banner'>"+(myTurn?"دورك — اختر ورقة قانونية":"انتظر دورك")+" · العقد: "+escGame(s.contract||"—")+"</div><div class='game-hand'>"+(s.hand||[]).map((c,i)=>cardHtml(c,i,!myTurn||(Array.isArray(s.legalIndices)&&!s.legalIndices.includes(i)))).join("")+"</div><div class='game-trick'>"+(s.trick||[]).map(c=>"<span class='played-card'>"+escGame((c.card?.suit||"")+" "+(c.card?.rank||""))+"</span>").join("")+"</div>";
+        }
+      }else if(g.game==="UNO"){
+        const myTurn=activeIndex===currentIndex;
+        action="<div class='game-phase-banner'>"+(myTurn?"دورك":"انتظر دورك")+" · اللون: "+escGame(s.currentColor||"—")+" · الأوراق في السحب: "+escGame(s.drawCount??0)+"</div><div class='uno-table-card'>"+(s.discardTop?escGame((s.discardTop.color||"")+" "+(s.discardTop.value||"")):"—")+"</div><div class='game-hand'>"+(s.hand||[]).map((c,i)=>cardHtml(c,i,!myTurn||(Array.isArray(s.legalIndices)&&!s.legalIndices.includes(i)))).join("")+"</div><button class='ghost' data-game-action='draw' "+(myTurn?"":"disabled")+">سحب ورقة</button>";
+      }else if(g.game==="LUDO"){
+        action="<div class='game-phase-banner'>"+(s.awaitingMove?"اختر قطعة لتحريكها":"اضغط رمي النرد")+" · النرد: "+(s.dice??"—")+"</div><div class='ludo-board'>"+(Array.isArray(s.tokens)?s.tokens.map((t,i)=>"<button class='ludo-token' data-ludo-token='"+i+"' "+(!s.awaitingMove||!((s.legalTokens||[]).includes(i))?"disabled":"")+">"+escGame(t===-1?"🏠":String(t))+"</button>").join(""):"")+"</div><button class='primary' data-game-action='roll' "+(s.awaitingMove?"disabled":"")+">🎲 رمي النرد</button>";
+      }else if(s.kind==="choice"&&Array.isArray(s.choices)){
+        action="<div class='game-prompt'>"+escGame(s.prompt||"")+"</div><div class='game-choice-grid'>"+s.choices.map((x,i)=>"<button data-game-choice='"+i+"'>"+escGame(x)+"</button>").join("")+"</div>";
+      }else{
+        action="<div class='game-prompt'>"+escGame(s.prompt||"ابدأ الجولة.")+"</div><textarea id='game-answer' class='full' rows='4' placeholder='اكتب إجابتك...'></textarea><button class='primary wide' data-game-action='answer'>إرسال الإجابة</button>";
+      }
+      content.innerHTML="<section class='game-room game-theme-"+escGame(theme.theme)+"'><header class='game-room-top'><div><button id='game-back' class='ghost'>← الجلسات</button><span class='game-live-pill'>LIVE</span></div><div class='game-room-title'><span>"+theme.icon+"</span><div><b>"+escGame(names[g.game]||g.game)+"</b><small>جلسة #"+id+" · "+players.length+"/"+g.max_players+"</small></div></div><div class='game-room-actions'><button id='game-leave'>"+(spectator?"خروج":"مغادرة")+"</button>"+(active?.host&&!spectator?"<button id='game-finish'>إنهاء</button>":"")+"</div></header><div class='game-table'><div class='game-seats game-seats-top'>"+(seatCards.split("</div>").slice(0,2).join("</div>")||"")+"</div><div class='game-board'>"+center+"<div class='game-board-status'>"+escGame(s.lastResult?.message||"")+" "+(s.winner?"":"")+"</div></div><div class='game-seats game-seats-bottom'>"+(seatCards.split("</div>").slice(2).join("</div>")||"")+"</div></div><section class='game-controls'>"+action+"</section></section>";
+      $("#game-back").onclick=gamesList;
+      $("#game-leave").onclick=async()=>{try{if(!spectator)await api("/api/games/"+id+"/leave",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(guestPayload())});gamesList()}catch(e){alert(e.message)}};
+      $("#game-finish")?.addEventListener("click",async()=>{try{await api("/api/games/"+id+"/finish",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(guestPayload())});await gamesList()}catch(e){alert(e.message)}});
+      document.querySelectorAll("[data-game-seat]").forEach(b=>b.onclick=async()=>{const all=[...document.querySelectorAll("[data-game-seat]")];all.forEach(x=>x.disabled=true);try{await api("/api/games/"+id+"/seat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...guestPayload(),seat:String(Number(b.dataset.gameSeat))})});await renderState()}catch(e){alert(e.message);all.forEach(x=>x.disabled=false)}});
+      $("#game-start")?.addEventListener("click",async()=>{try{await api("/api/games/"+id+"/start",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(guestPayload())});await renderState()}catch(e){alert(e.message)}});
+      document.querySelectorAll("[data-game-choice]").forEach(b=>b.onclick=()=>doAction("choose",{choice:Number(b.dataset.gameChoice)}));
+      document.querySelectorAll("[data-game-card]").forEach(b=>b.onclick=()=>doAction("playCard",{index:Number(b.dataset.gameCard)}));
+      document.querySelectorAll("[data-game-guess]").forEach(b=>b.onclick=()=>doAction("guess",{index:Number(b.dataset.gameGuess)}));
+      document.querySelectorAll("[data-ludo-token]").forEach(b=>b.onclick=()=>doAction("moveToken",{token:Number(b.dataset.ludoToken)}));
+      document.querySelectorAll("[data-game-action]").forEach(b=>b.onclick=()=>doAction(b.dataset.gameAction,{bid:b.dataset.bid,suit:b.dataset.suit}));
+    }catch(e){content.innerHTML="<section class='game-room'><button id='game-back' class='ghost'>← رجوع</button><h3>تعذر فتح الجلسة</h3><p class='muted'>"+escGame(e.message)+"</p></section>";$("#game-back").onclick=gamesList}
+  };
+  const playerKeyForClient=p=>p?.guest?"g:"+String(p.guestId||""):"u:"+String(p?.username||"").toLowerCase();
+  const doAction=async(action,extra={})=>{
+    const body={...guestPayload(),action,...extra};
+    if(action==="clue"){body.word=$("#game-clue")?.value.trim();body.number=Number($("#game-clue-num")?.value)||1}
+    if(action==="answer")body.answer=$("#game-answer")?.value.trim()||"";
+    try{await api("/api/games/"+id+"/action",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});await renderState()}catch(e){const st=document.querySelector(".game-board-status");if(st)st.textContent=e.message}
+  };
+  await renderState();sessionTimer=setInterval(renderState,1200);
+};
   await gamesList();setStatus("الألعاب والجلسات جاهزة");
 }
 
