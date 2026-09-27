@@ -305,9 +305,17 @@ async function initAppDatabase() {
     ALTER TABLE game_lobbies ADD COLUMN IF NOT EXISTS state JSONB NOT NULL DEFAULT '{}'::jsonb;
     ALTER TABLE community_groups ADD COLUMN IF NOT EXISTS group_conversation_id BIGINT; ALTER TABLE community_groups ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'pending'; ALTER TABLE community_groups ADD COLUMN IF NOT EXISTS discord_role_id VARCHAR(32); ALTER TABLE community_groups ADD COLUMN IF NOT EXISTS discord_channel_id VARCHAR(32);
     CREATE TABLE IF NOT EXISTS reviews (id SERIAL PRIMARY KEY, username VARCHAR(32) NOT NULL, discord_username VARCHAR(100) NOT NULL, rating INTEGER NOT NULL DEFAULT 5, message VARCHAR(1000) NOT NULL, status VARCHAR(20) NOT NULL DEFAULT 'visible', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+    ALTER TABLE reviews ADD COLUMN IF NOT EXISTS is_demo BOOLEAN NOT NULL DEFAULT false;
     ALTER TABLE reviews ADD COLUMN IF NOT EXISTS username VARCHAR(32);
     ALTER TABLE reviews ADD COLUMN IF NOT EXISTS discord_username VARCHAR(100);
     ALTER TABLE reviews ADD COLUMN IF NOT EXISTS rating INTEGER NOT NULL DEFAULT 5;
+    ALTER TABLE reviews ADD COLUMN IF NOT EXISTS is_demo BOOLEAN NOT NULL DEFAULT false;
+    INSERT INTO reviews(username,discord_username,rating,message,is_demo,status)
+    SELECT 'زائر مجهول','غير مسجل',r.rating,r.message,true,'visible'
+    FROM (VALUES
+      (5,'التصميم مرتب وسريع، خصوصًا من الجوال.'),(5,'واجهة جميلة والتنقل بين الأقسام واضح.'),(4,'الألعاب فكرة ممتازة، وأتمنى إضافة ألعاب أكثر.'),(5,'الأعضاء والمعلومات تظهر بشكل مرتب.'),(4,'تجربة الشات سهلة وواضحة.'),(5,'يعجبني أن الموقع يجمع أكثر من خدمة في مكان واحد.'),(5,'الصفحات تفتح بسرعة والتصميم مريح.'),(4,'فكرة القروبات ممتازة للمجتمع.'),(5,'قسم الآراء نفسه سهل الاستخدام.'),(5,'التجربة على الجوال ممتازة.'),(4,'الألعاب تعطي الموقع جو مختلف.'),(5,'التصميم فخم وبسيط بنفس الوقت.'),(5,'التنقل بين الصفحات واضح جدًا.'),(4,'أحببت فكرة الرسائل الخاصة.'),(5,'الموقع مرتب من أول دخول.'),(5,'الأعضاء والرتب معروضة بشكل جميل.'),(4,'واجهة الألعاب واضحة.'),(5,'الدعم والتذاكر مرتبة.'),(5,'تجربة المستخدم عمومًا ممتازة.'),(4,'الستايل مناسب لمجتمع ديسكورد.'),(5,'الموقع خفيف وما فيه تعقيد.'),(5,'فكرة مشاهدة جلسات الألعاب حلوة.'),(4,'أعجبني ترتيب الأقسام.'),(5,'إضافة الرأي سهلة وسريعة.'),(5,'التصميم على الشاشة الصغيرة ممتاز.'),(4,'قسم القروبات مفيد للمجتمع.'),(5,'الشات مرتب وسهل القراءة.'),(5,'فكرة الأونر والإدارة واضحة.'),(4,'الألعاب تحتاج وقت للتجربة لكن الفكرة جميلة.'),(5,'الموقع يعطي إحساس منصة مجتمع متكاملة.'),(5,'الواجهة نظيفة وواضحة.'),(4,'أحببت عرض الأعضاء والرتب.'),(5,'التجربة العامة سلسة.'),(5,'ميزة الرسائل الخاصة مفيدة.'),(4,'واجهة الجوال ممتازة.'),(5,'أقسام الموقع كثيرة ومترابطة.'),(5,'فكرة الألعاب داخل المجتمع ممتازة.'),(4,'الموقع مناسب للمجتمعات الكبيرة.'),(5,'التصميم جميل وسهل الاستخدام.')
+    ) AS r(rating,message)
+    WHERE NOT EXISTS (SELECT 1 FROM reviews WHERE is_demo=true);
     ALTER TABLE reviews ADD COLUMN IF NOT EXISTS message TEXT;
     ALTER TABLE reviews ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'visible';
     ALTER TABLE reviews ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
@@ -749,7 +757,7 @@ app.delete("/api/owner/group-requests/:id",requireOwner,async(req,res)=>{const i
 app.delete("/api/owner/reviews/:id",requireOwner,async(req,res)=>{const id=Number(req.params.id);const q=await pool.query("DELETE FROM reviews WHERE id=$1 RETURNING id",[id]);if(!q.rowCount)return res.status(404).json({error:"الرأي غير موجود"});await audit(req.session.user,"review_delete","#"+id);res.json({ok:true});});
 app.delete("/api/owner/games/:id",requireOwner,async(req,res)=>{const id=Number(req.params.id);const q=await pool.query("DELETE FROM game_lobbies WHERE id=$1 RETURNING id",[id]);if(!q.rowCount)return res.status(404).json({error:"جلسة اللعبة غير موجودة"});await audit(req.session.user,"game_delete","#"+id);res.json({ok:true});});
 app.post("/api/owner/games/:id/finish",requireOwner,async(req,res)=>{const id=Number(req.params.id);const q=await pool.query("UPDATE game_lobbies SET status='finished',state=COALESCE(state,'{}'::jsonb)||jsonb_build_object('finishedAt',NOW()::text,'ownerFinished',true) WHERE id=$1 RETURNING id,status",[id]);if(!q.rowCount)return res.status(404).json({error:"جلسة اللعبة غير موجودة"});await audit(req.session.user,"game_finish_owner","#"+id);res.json({ok:true,game:q.rows[0]});});
-app.get("/api/reviews",async(req,res)=>{const q=await pool.query("SELECT id,username,rating,message,created_at FROM reviews WHERE status='visible' ORDER BY id DESC LIMIT 30");res.json({reviews:q.rows});});
+app.get("/api/reviews",async(req,res)=>{const q=await pool.query("SELECT id,username,rating,message,created_at FROM reviews WHERE status='visible' ORDER BY id DESC LIMIT 100");res.set("Cache-Control","no-store");res.json({reviews:q.rows});});
 app.post("/api/reviews",async(req,res)=>{const u=req.session.user||null,message=String(req.body?.message||"").trim(),rating=Math.max(1,Math.min(5,Number(req.body?.rating)||5));if(message.length<3||message.length>1000)return res.status(400).json({error:"الرأي يجب أن يكون بين 3 و1000 حرف"});const username=u?.username||"زائر",discordUsername=u?.discordUsername||"غير مسجل";const q=await pool.query("INSERT INTO reviews(username,discord_username,rating,message) VALUES($1,$2,$3,$4) RETURNING id",[username,discordUsername,rating,message]);if(u)await audit(u,"review_create",`#${q.rows[0].id}`);res.json({ok:true,id:q.rows[0].id});});
 app.get("/api/announcements",async(req,res)=>{const q=await pool.query("SELECT id,text,link FROM announcements WHERE active=true ORDER BY id DESC LIMIT 5");res.json({announcements:q.rows});});
 app.post("/api/owner/users/:id/ban",requireOwner,async(req,res)=>{const banned=!!req.body?.banned,id=Number(req.params.id);const q=await pool.query("UPDATE app_users SET banned=$1 WHERE id=$2 AND role<>$3 RETURNING id,username,banned",[banned,id,"owner"]);if(!q.rowCount)return res.status(404).json({error:"الحساب غير موجود أو لا يمكن حظر الأونر"});await audit(req.session.user,banned?"account_ban":"account_unban",q.rows[0].username);res.json({ok:true,user:q.rows[0]});});
@@ -894,6 +902,39 @@ function publicGameState(game,state,actor){
   return out;
 }
 function allPlayersSeated(players){return players.length>0&&players.every(p=>p.seat);}
+function fillMissingGameBots(game,players,minPlayers,maxPlayers){
+  const seats=seatOptions(game,maxPlayers);
+  const target=Math.min(Math.max(2,minPlayers),maxPlayers,seats.length);
+  let nextBot=1;
+  while(players.length<target){
+    const occupied=new Set(players.map(p=>p.seat).filter(Boolean));
+    const seat=seats.find(s=>!occupied.has(s));
+    if(!seat)break;
+    while(players.some(p=>p.bot&&p.username===("بوت "+nextBot)))nextBot++;
+    players.push({
+      username:"بوت "+nextBot,
+      discordUsername:"بوت "+nextBot,
+      guest:false,
+      bot:true,
+      host:false,
+      seat,
+      seatLabel:seat
+    });
+    nextBot++;
+  }
+  const occupied=new Set();
+  players.forEach(p=>{
+    if(p.seat)occupied.add(p.seat);
+  });
+  players.forEach(p=>{
+    if(!p.seat){
+      const seat=seats.find(s=>!occupied.has(s));
+      if(seat){p.seat=seat;p.seatLabel=seat;occupied.add(seat);}
+    }
+  });
+  return players;
+}
+function firstHumanPlayer(players){return players.find(p=>!p.bot)||players[0]||null;}
 async function activeGameFor(req){
   const u=currentUser(req),guestId=String(req.body?.guestId||req.query?.guestId||"").trim();
   const q=await pool.query("SELECT id,players,status FROM game_lobbies WHERE status IN ('waiting','ready','playing') ORDER BY id DESC LIMIT 100");
@@ -952,8 +993,8 @@ app.post("/api/games/:id/seat",async(req,res)=>{
   if(!actor)return res.status(403).json({error:"انضم للجلسة أولًا"});
   if(g.status!=="waiting"&&g.status!=="ready")return res.status(409).json({error:"لا يمكن تغيير المقعد بعد بدء اللعبة"});
   const seats=seatOptions(g.game,g.max_players);const requestedSeatIndex=/^\d+$/.test(seat)?Number(seat):-1;const normalizedSeat=requestedSeatIndex>=0?seats[requestedSeatIndex] : seat;if(!normalizedSeat||!seats.includes(normalizedSeat))return res.status(400).json({error:"المقعد غير موجود"});
-  if(players.some(p=>p.seat===seat&&playerKey(p)!==playerKey(actor)))return res.status(409).json({error:"هذا المكان محجوز"});
-  actor.seat=seat;actor.seatLabel=seat;
+  if(players.some(p=>p.seat===normalizedSeat&&playerKey(p)!==playerKey(actor)))return res.status(409).json({error:"هذا المكان محجوز"});
+  actor.seat=normalizedSeat;actor.seatLabel=normalizedSeat;
   const ready=allPlayersSeated(players)&&players.length>=(GAME_MIN_PLAYERS[g.game]||2);
   const updated=await pool.query("UPDATE game_lobbies SET players=$1,status=$2 WHERE id=$3 RETURNING *",[JSON.stringify(players),ready?"ready":"waiting",g.id]);
   res.json({ok:true,game:updated.rows[0],ready});
@@ -963,8 +1004,10 @@ app.post("/api/games/:id/start",async(req,res)=>{
   const g=q.rows[0],players=Array.isArray(g.players)?g.players:[],hostMatches=u?g.host_username===u.username:String(players[0]?.guestId||"")===guestId;
   if(!hostMatches)return res.status(403).json({error:"فقط صاحب الجلسة يقدر يبدأ"});
   if(g.status==="playing")return res.json({ok:true,game:g});
-  if(g.status!=="ready"||!allPlayersSeated(players))return res.status(409).json({error:"لا يمكن البدء حتى يجلس كل لاعب في مكانه"});
-  if(players.length<(GAME_MIN_PLAYERS[g.game]||2))return res.status(409).json({error:"عدد اللاعبين غير كافٍ"});
+  if(g.status!=="waiting"&&g.status!=="ready")return res.status(409).json({error:"لا يمكن بدء هذه الجلسة الآن"});
+  const minPlayers=GAME_MIN_PLAYERS[g.game]||2;
+  fillMissingGameBots(g.game,players,minPlayers,g.max_players);
+  if(players.length<minPlayers||!allPlayersSeated(players))return res.status(409).json({error:"تعذر تجهيز المقاعد تلقائيًا"});
   const state=g.state&&Object.keys(g.state).length?g.state:makeGameState(g.game);
   state.startedAt=new Date().toISOString();
   if(g.game==="BALOOT"||g.game==="UNO"){
@@ -984,8 +1027,11 @@ app.post("/api/games/:id/start",async(req,res)=>{
     state.playerSecrets[key]={prompt:engine.prompt||state.prompt||"ابدأ الجولة.",privateInfo:state.playerRoles[key]};
   });
   if(g.game==="CODENAMES")state.turn="red";
-  else if(g.game==="BALOOT"||g.game==="UNO"){state.turnPlayerIndex=0;state.playerKeys=players.map(playerKey);}
-  else state.turnPlayerKey=playerKey(players[0]);
+  else if(g.game==="BALOOT"||g.game==="UNO"){
+    const firstHumanIndex=Math.max(0,players.findIndex(p=>!p.bot));
+    state.turnPlayerIndex=firstHumanIndex;
+    state.playerKeys=players.map(playerKey);
+  }else state.turnPlayerKey=playerKey(firstHumanPlayer(players));
   const updated=await pool.query("UPDATE game_lobbies SET status='playing',state=$1 WHERE id=$2 RETURNING id,game,host_username,host_discord_username,max_players,players,status,created_at",[JSON.stringify(state),g.id]);
   if(u)await audit(u,"game_start","session "+g.id+" "+g.game+" players="+players.length);
   res.json({ok:true,game:updated.rows[0],state:publicGameState(g.game,state,actorFromRequest(players,u,guestId))});
