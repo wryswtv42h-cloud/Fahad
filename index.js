@@ -81,7 +81,7 @@ const authLimiter=rateLimit(10*60*1000,30,req=>"auth:"+req.ip);
 const resetLimiter=rateLimit(15*60*1000,5,req=>"reset:"+req.ip);
 const writeLimiter=rateLimit(60*1000,90,req=>"write:"+((req.session&&req.session.user?.username)||req.ip));
 
-app.get("/health",(req,res)=>res.status(200).json({ok:true,service:"mld",version:"hardening-3",botReady:client.isReady(),membersCached:Boolean(memberSnapshot)}));
+app.get("/health",(req,res)=>res.status(200).json({ok:true,service:"mld",version:"hardening-4",botReady:client.isReady(),membersCached:Boolean(memberSnapshot)}));
 app.use(express.static(path.join(__dirname, "public"),{maxAge:"1h",etag:true}));
 
 const leadershipRoleIds = [
@@ -1174,7 +1174,16 @@ app.get("*", (req, res) => {
 });
 
 app.listen(port, async () => { console.log(`MLD listening on port ${port}`); try { await initAppDatabase(); await ensureOwner(); await ensureChatDatabase(); console.log("App database ready"); } catch (error) { console.error("Database init failed:", error.message); } });
-client.once("clientReady", () => console.log(`Logged in as ${client.user.tag}`));
+client.once("clientReady", async () => {
+  console.log(`Logged in as ${client.user.tag}`);
+  try {
+    const guild = await getGuild();
+    await getAllMembers(guild);
+    console.log(`Member snapshot warmed: ${memberSnapshot?.length || 0}`);
+  } catch (e) {
+    console.error("Member snapshot warmup:", e.message);
+  }
+});
 client.login(token).catch((error) => {
   console.error("Discord login failed:", error.message);
   process.exit(1);
