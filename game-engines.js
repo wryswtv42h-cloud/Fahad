@@ -26,7 +26,7 @@ function create(game,p){if(game==="UNO")return uno(p);if(game==="LUDO")return lu
   {suit:"joker",rank:"JOKER"}
  ]);
  const hands=p.map(()=>deck.splice(0,4));
- const revealed=p.map(()=>[false,false,false,false]);
+ const revealed=p.map(()=>[true,true,false,false]);
  const discarded=deck.pop();
  Object.assign(s,{
    kind:"qawsar",prompt:"اسحب ورقة ثم بدّل أو وطّها بالنص",
@@ -143,7 +143,26 @@ if(game==="QAWSAR"){
  const h=s.hands[i], n=Number(x.index);
  const valueOf=c=>c.rank==="JOKER"?20:(c.rank==="A"?1:c.rank==="K"?0:c.rank==="Q"?12:c.rank==="J"?11:Number(c.rank));
  const reveal=(pi,idx)=>{if(!s.hands[pi]?.[idx])throw Error("ورقة غير صالحة");s.revealed[pi][idx]=true};
- const nextTurn=()=>{let n=(i+1)%p.length;while(s.qawsarOut[n]){n=(n+1)%p.length;if(n===i)break}s.qawsarTurn=n;s.qawsarPhase="draw"};
+ const nextTurn=()=>{
+   if(s.hands[i]?.length===0 || (s.qawsarCalledBy!=null && s.hands.every(x=>x?.length>0))){
+     const totals=s.hands.map(hand=>hand.reduce((z,c)=>z+valueOf(c),0));
+     const active=totals.map((v,n)=>({v,n})).filter(x=>!s.qawsarOut[x.n]);
+     const low=Math.min(...active.map(x=>x.v));
+     const roundScores=totals.map((v,n)=>s.qawsarOut[n]?null:(v===low?0:v));
+     s.qawsarScores=s.qawsarScores.map((v,n)=>s.qawsarOut[n]?v:v+(roundScores[n]||0));
+     s.qawsarScores.forEach((v,n)=>{
+       if(s.qawsarOut[n])return;
+       if(v>=50){s.qawsarScores[n]=0;s.qawsarZeros[n]++;if(s.qawsarZeros[n]>=3)s.qawsarOut[n]=true;}
+     });
+     const left=s.qawsarOut.map((v,n)=>!v?n:-1).filter(n=>n>=0);
+     s.lastAction={type:"roundEnd",totals,roundScores,lowest:active.filter(x=>x.v===low).map(x=>x.n),calledBy:s.qawsarCalledBy};
+     if(left.length<=1){s.winner=left.length? p[left[0]].username : p[active.find(x=>x.v===low)?.n]?.username;s.phase="finished";return;}
+     const d=sh([...S.flatMap(su=>R.map(r=>({suit:su,rank:r}))),{suit:"joker",rank:"JOKER"}]);
+     s.hands=p.map(()=>d.splice(0,4));s.revealed=p.map(()=>[true,true,false,false]);
+     s.deck=d;s.discarded=d.pop();s.drawn=null;s.qawsarCalledBy=null;s.qawsarRound++;s.qawsarTurn=left.includes((s.qawsarTurn+1)%p.length)?(s.qawsarTurn+1)%p.length:left[0];s.qawsarPhase="draw";return;
+   }
+   let n=(i+1)%p.length;while(s.qawsarOut[n]){n=(n+1)%p.length;if(n===i)break}s.qawsarTurn=n;s.qawsarPhase="draw";
+ };
  if(act==="draw"){
    if(s.qawsarPhase!=="draw")throw Error("لا يمكنك السحب الآن");
    if(!s.deck.length){s.deck=sh(s.hands.flat().filter(Boolean));}
@@ -165,7 +184,7 @@ if(game==="QAWSAR"){
    }
    if(mode==="swapAny"){
      if(!h[n])throw Error("ورقة غير صالحة");
-     h[n]=s.drawn;s.drawn=null;nextTurn();return s;
+     const old=h[n];h[n]=s.drawn;s.drawn=null;s.discarded=old;nextTurn();return s;
    }
    s.discarded=s.drawn;s.drawn=null;nextTurn();return s;
  }
