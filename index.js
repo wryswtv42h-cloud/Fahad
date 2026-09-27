@@ -282,6 +282,8 @@ async function initAppDatabase() {
     ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS discord_username VARCHAR(100);
     ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS details TEXT;
 
+    CREATE TABLE IF NOT EXISTS group_members (id SERIAL PRIMARY KEY, group_id INTEGER NOT NULL REFERENCES community_groups(id) ON DELETE CASCADE, username VARCHAR(32), discord_username VARCHAR(100), joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE(group_id, username));
+    CREATE TABLE IF NOT EXISTS group_join_requests (id SERIAL PRIMARY KEY, group_id INTEGER NOT NULL REFERENCES community_groups(id) ON DELETE CASCADE, username VARCHAR(32), discord_username VARCHAR(100), status VARCHAR(20) NOT NULL DEFAULT 'pending', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE(group_id, username));
     ALTER TABLE group_members ADD COLUMN IF NOT EXISTS username VARCHAR(32);
     ALTER TABLE group_members ADD COLUMN IF NOT EXISTS discord_username VARCHAR(100);
     ALTER TABLE group_members ADD COLUMN IF NOT EXISTS joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
@@ -289,8 +291,6 @@ async function initAppDatabase() {
     ALTER TABLE group_join_requests ADD COLUMN IF NOT EXISTS discord_username VARCHAR(100);
     ALTER TABLE group_join_requests ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'pending';
     ALTER TABLE group_join_requests ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
-    CREATE TABLE IF NOT EXISTS group_members (id SERIAL PRIMARY KEY, group_id INTEGER NOT NULL REFERENCES community_groups(id) ON DELETE CASCADE, username VARCHAR(32) NOT NULL, discord_username VARCHAR(100) NOT NULL, joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE(group_id, username));
-    CREATE TABLE IF NOT EXISTS group_join_requests (id SERIAL PRIMARY KEY, group_id INTEGER NOT NULL REFERENCES community_groups(id) ON DELETE CASCADE, username VARCHAR(32) NOT NULL, discord_username VARCHAR(100) NOT NULL, status VARCHAR(20) NOT NULL DEFAULT 'pending', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE(group_id, username));
     CREATE TABLE IF NOT EXISTS game_scores (id SERIAL PRIMARY KEY, username VARCHAR(32) UNIQUE NOT NULL, discord_username VARCHAR(100) NOT NULL, wins INTEGER NOT NULL DEFAULT 0, points INTEGER NOT NULL DEFAULT 0, guest BOOLEAN NOT NULL DEFAULT false, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
     CREATE TABLE IF NOT EXISTS game_lobbies (id SERIAL PRIMARY KEY, game VARCHAR(30) NOT NULL, host_username VARCHAR(32) NOT NULL, host_discord_username VARCHAR(100) NOT NULL, max_players INTEGER NOT NULL DEFAULT 4, players JSONB NOT NULL DEFAULT '[]'::jsonb, status VARCHAR(20) NOT NULL DEFAULT 'waiting', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
     ALTER TABLE game_lobbies ADD COLUMN IF NOT EXISTS state JSONB NOT NULL DEFAULT '{}'::jsonb;
@@ -309,7 +309,8 @@ async function initAppDatabase() {
       ('siteName','MLD'),('creatorName','فهد المطيري'),
       ('heroTitle','مجتمع MLD بشكل مختلف.'),('heroSubtitle','أعضاء، رتب، توب، ورسائل خاصة في لوحة فخمة وسريعة تتحدث تلقائيًا.')
       ON CONFLICT (key) DO NOTHING;
-    ALTER TABLE app_users ADD COLUMN IF NOT EXISTS discord_user_id VARCHAR(32);\n    CREATE TABLE IF NOT EXISTS ticket_close_logs (id BIGSERIAL PRIMARY KEY, ticket_id INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE, closed_by VARCHAR(32), transcript JSONB NOT NULL DEFAULT '[]'::jsonb, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());\n    CREATE INDEX IF NOT EXISTS tickets_username_idx ON tickets(username,id DESC);
+    ALTER TABLE app_users ADD COLUMN IF NOT EXISTS discord_user_id VARCHAR(32);
+    CREATE TABLE IF NOT EXISTS ticket_close_logs (id BIGSERIAL PRIMARY KEY, ticket_id INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE, closed_by VARCHAR(32), transcript JSONB NOT NULL DEFAULT '[]'::jsonb, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());\n    CREATE INDEX IF NOT EXISTS tickets_username_idx ON tickets(username,id DESC);
     CREATE INDEX IF NOT EXISTS ticket_messages_ticket_idx ON ticket_messages(ticket_id,id ASC);
     CREATE INDEX IF NOT EXISTS applications_username_idx ON applications(username,id DESC);
     CREATE INDEX IF NOT EXISTS applications_status_idx ON applications(status,id DESC);
