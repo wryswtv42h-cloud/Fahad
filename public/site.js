@@ -427,7 +427,7 @@ window.updateAuthBar=function(){
   const isOwner=role==="owner";
   document.querySelectorAll('[data-view="login"]').forEach(x=>x.style.display=mldUser?"none":"");
   document.querySelectorAll('[data-view="tickets"]').forEach(x=>x.style.display=isAdmin?"":"none");
-  document.querySelectorAll("#logs-nav,#logs-nav-mobile").forEach(x=>x.style.display=isOwner?"":"none");
+  document.querySelectorAll("#logs-nav,#logs-nav-mobile").forEach(x=>x.remove());
   el.innerHTML=mldUser
     ? '<div class="auth-chip">مرحبًا <b>'+esc(mldUser.username)+'</b> · Discord: <b>'+esc(mldUser.discordUsername)+'</b> · '+(isOwner?"👑 أونر":isAdmin?"🛡️ إدارة":"👤 عضو")+' <button id="logout-btn" type="button">خروج</button></div>'
     : '<div class="auth-chip">غير مسجل · <button data-view="login" type="button">تسجيل الدخول</button></div>';
