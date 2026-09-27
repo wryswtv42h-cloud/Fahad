@@ -192,6 +192,43 @@ ticketView=enhancedTicketView;
 var groupsReal=enhancedGroupsReal;async function loadOwnerPrivateChats(){const el=$("#owner-private-chats");if(!el)return;const d=await fetch("/api/owner/chat/conversations").then(r=>r.json()).catch(()=>({conversations:[]}));el.innerHTML=(d.conversations||[]).map(x=>`<button class="group-item" data-owner-chat="${x.id}"><span><b>${esc(x.title||"محادثة خاصة")}</b><small>${esc(x.owner_username)} · ${x.participants} أعضاء · ${esc(x.last_message||"لا رسائل")}</small></span><span>فتح ↗</span></button>`).join("")||"<p class='muted'>لا توجد محادثات خاصة.</p>";document.querySelectorAll("[data-owner-chat]").forEach(b=>b.onclick=async()=>{const d=await fetch("/api/owner/chat/conversations/"+b.dataset.ownerChat).then(r=>r.json());openModal();box.innerHTML="<div class='message-box'><p class='eyebrow'>مراجعة المحادثة #"+b.dataset.ownerChat+"</p><div class='log-list'>"+(d.messages||[]).map(m=>"<div class='log-item'><b>"+esc(m.display_name)+" · @"+esc(m.sender_username)+"</b><small>"+new Date(m.created_at).toLocaleString("ar-SA")+"</small><p>"+esc(m.body)+"</p></div>").join("")+"</div></div>"})}
 
 
+/* MLD Admin Control Center */
+window.adminPanel=async function(){
+  await mldMe();
+  if(!mldUser||!["admin","owner"].includes(mldUser.role))return authView();
+  if(mldUser.role==="owner")return ownerPanel();
+  searchWrap.style.display="none";
+  title.textContent="لوحة الإدارة";
+  subtitle.textContent="إدارة التقديمات والتذاكر ومتابعة الطلبات.";
+  content.className="feature-grid";
+  content.innerHTML="<article class='feature-card'><div class='feature-icon'>🛡️</div><h3>لوحة الإدارة</h3><p class='muted'>هذه اللوحة للإدارة فقط. لوحة الأونر منفصلة ولا تظهر للحسابات الإدارية.</p><div class='game-lobby-actions'><button class='primary' data-admin-tab='apps'>📝 التقديمات</button><button data-admin-tab='tickets'>🎫 التذاكر</button></div></article><div id='admin-panel-body' class='feature-grid'></div>";
+  const body=$("#admin-panel-body");
+  async function loadApps(){
+    const r=await fetch("/api/owner/applications"),d=await r.json();
+    if(!r.ok)return body.innerHTML="<article class='feature-card'><p class='muted'>"+esc(d.error||"تعذر تحميل التقديمات")+"</p></article>";
+    body.innerHTML="<article class='feature-card'><h3>التقديمات</h3><div class='log-list'>"+(d.applications||[]).map(a=>"<div class='log-item'><b>#"+a.id+" · "+esc(a.type)+"</b><span>الحساب: "+esc(a.username)+" · Discord: "+esc(a.discord_username)+"</span><small>"+new Date(a.created_at).toLocaleString("ar-SA")+" · "+esc(a.status)+"</small><p>"+esc(JSON.stringify(a.answers||{},null,2))+"</p><div class='game-lobby-actions'>"+(a.status==="pending"?"<button class='primary' data-admin-app-ok='"+a.id+"'>قبول</button><button data-admin-app-no='"+a.id+"'>رفض</button>":"<b>"+(a.status==="approved"?"✅ مقبول":"❌ مرفوض")+"</b>")+"</div></div>").join("")||"<p class='muted'>لا توجد تقديمات.</p>"+"</div></article>";
+    document.querySelectorAll("[data-admin-app-ok]").forEach(b=>b.onclick=async()=>{const rr=await fetch("/api/owner/applications/"+b.dataset.adminAppOk+"/status",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({status:"approved"})}),x=await rr.json();if(!rr.ok)return alert(x.error||"تعذر القبول");loadApps()});
+    document.querySelectorAll("[data-admin-app-no]").forEach(b=>b.onclick=async()=>{const rr=await fetch("/api/owner/applications/"+b.dataset.adminAppNo+"/status",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({status:"rejected"})}),x=await rr.json();if(!rr.ok)return alert(x.error||"تعذر الرفض");loadApps()});
+  }
+  async function loadTickets(){
+    const r=await fetch("/api/owner/tickets"),d=await r.json();
+    if(!r.ok)return body.innerHTML="<article class='feature-card'><p class='muted'>"+esc(d.error||"تعذر تحميل التذاكر")+"</p></article>";
+    body.innerHTML="<article class='feature-card'><h3>التذاكر</h3><div class='log-list'>"+(d.tickets||[]).map(t=>"<button class='group-item' data-admin-ticket='"+t.id+"'><span><b>#"+t.id+" · "+esc(t.subject)+"</b><small>"+esc(t.username)+" · Discord: "+esc(t.discord_username)+" · "+esc(t.status)+"</small></span><span>فتح ↗</span></button>").join("")||"<p class='muted'>لا توجد تذاكر.</p>"+"</div></article>";
+    document.querySelectorAll("[data-admin-ticket]").forEach(b=>b.onclick=()=>openAdminTicket(Number(b.dataset.adminTicket)));
+  }
+  async function openAdminTicket(id){
+    const r=await fetch("/api/tickets/"+id+"/messages"),d=await r.json();
+    if(!r.ok)return alert(d.error||"تعذر فتح التيكت");
+    body.innerHTML="<article class='feature-card'><button id='admin-ticket-back'>رجوع</button><h3>🎫 تيكت #"+id+"</h3><div class='log-list'>"+(d.messages||[]).map(m=>"<div class='log-item'><b>"+esc(m.username)+" · Discord: "+esc(m.discord_username)+"</b><small>"+new Date(m.created_at).toLocaleString("ar-SA")+"</small><p>"+esc(m.message)+"</p></div>").join("")||"<p class='muted'>لا توجد رسائل.</p>"+"</div><div class='game-lobby-actions'><button class='primary' id='admin-ticket-close'>إغلاق وحفظ المحادثة</button><button id='admin-ticket-open'>فتح</button></div></article>";
+    $("#admin-ticket-back").onclick=loadTickets;
+    $("#admin-ticket-close").onclick=async()=>{const rr=await fetch("/api/owner/tickets/"+id+"/status",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({status:"closed"})}),x=await rr.json();if(!rr.ok)return alert(x.error||"تعذر الإغلاق");openAdminTicket(id)};
+    $("#admin-ticket-open").onclick=async()=>{const rr=await fetch("/api/owner/tickets/"+id+"/status",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({status:"open"}));if(!rr.ok)return alert((await rr.json()).error||"تعذر الفتح");openAdminTicket(id)};
+  }
+  document.querySelectorAll("[data-admin-tab]").forEach(b=>b.onclick=()=>b.dataset.adminTab==="apps"?loadApps():loadTickets());
+  await loadApps();
+  setStatus("لوحة الإدارة جاهزة");
+};
+
 /* MLD Owner Control Center */
 ownerPanel=async function(){
   await mldMe();
@@ -371,7 +408,7 @@ window.change=async function(v){
     if(v==="logout"){await fetch("/api/auth/logout",{method:"POST"});mldUser=null;updateAuthBar();await homeView();return}
     if(v==="reviews"){await reviewsView();return}
     if(v==="logs"){await ownerLogs();return}
-    if(v==="admin"){await mldMe();if(mldUser?.role==="owner")await ownerPanel();else if(mldUser?.role==="admin")await adminPanel();else authView();return}
+    if(v==="admin"){await mldMe();if(mldUser?.role==="owner")return ownerPanel();if(mldUser?.role==="admin")return window.adminPanel();return authView()}
     if(v==="owner"){await ownerPanel();return}
     if(v==="blocks"){await mldChatBlocks();return}
     await homeView();
