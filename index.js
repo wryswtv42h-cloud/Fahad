@@ -588,7 +588,7 @@ async function handleGroupDMApproval(message){
 }
 app.get("/api/groups",async(req,res)=>{
   const q=await pool.query(`
-    SELECT g.id,g.name,g.description,g.username AS owner_username,g.discord_username AS owner_discord_username,g.created_at,
+    SELECT g.id,g.name,g.description,g.username AS owner_username,g.discord_username AS owner_discord_username,g.status,g.discord_role_id,g.discord_channel_id,g.group_conversation_id,g.created_at,
            COALESCE((SELECT COUNT(*) FROM group_members gm WHERE gm.group_id=g.id),0) AS member_count,
            COALESCE((SELECT json_agg(json_build_object('username',gm.username,'discordUsername',gm.discord_username) ORDER BY gm.joined_at) FROM group_members gm WHERE gm.group_id=g.id),'[]'::json) AS members
     FROM community_groups g ORDER BY g.id DESC
