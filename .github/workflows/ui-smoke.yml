@@ -24,6 +24,7 @@ jobs:
             sleep 5
           done
           echo "Timed out waiting for the new Railway deployment"
-          exit 1\n      - run: npx playwright test tests/site.spec.js
+          exit 1
+      - run: npx playwright test tests/site.spec.js
         env:
           BASE_URL: https://discord-community-platform-production-9348.up.railway.app
