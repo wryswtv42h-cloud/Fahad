@@ -12,7 +12,7 @@ async function searchMembers(){clearTimeout(timer);const q=search.value.trim();i
 
 search.oninput=()=>{if(view!=="members")window.change("members");searchMembers()};
 function toggleMobileMenu(e){if(e){e.preventDefault();e.stopPropagation()}if(!mobile||!menuButton)return;const open=mobile.classList.toggle("open");menuButton.setAttribute("aria-expanded",String(open));menuButton.textContent=open?"×":"☰";document.body.classList.toggle("mobile-nav-open",open)}
-if(menuButton){menuButton.setAttribute("aria-expanded","false");menuButton.addEventListener("click",toggleMobileMenu,{capture:false});menuButton.addEventListener("pointerup",e=>{if(e.pointerType==="touch"&&e.currentTarget===menuButton)toggleMobileMenu(e)},{passive:false});document.querySelectorAll("#mobile-menu [data-view]").forEach(x=>x.addEventListener("click",()=>{if(mobile.classList.contains("open"))toggleMobileMenu()}));}
+if(menuButton){menuButton.setAttribute("aria-expanded","false");menuButton.addEventListener("click",toggleMobileMenu);}
 $("#close").onclick=closeModal;modal.onclick=e=>{if(e.target===modal)closeModal()};document.onkeydown=e=>{if(e.key==="Escape")closeModal()};const yearEl=$("#year");if(yearEl)yearEl.textContent=new Date().getFullYear();
 const welcome=document.getElementById("mld-welcome");if(welcome){const hideWelcome=()=>{if(welcome.classList.contains("hide"))return;welcome.classList.add("hide");setTimeout(()=>welcome.remove(),220)};welcome.classList.remove("hide");welcome.addEventListener("click",hideWelcome);setTimeout(hideWelcome,1200);}
 refreshTimer=setInterval(()=>{if(!modal.classList.contains("hidden")||view==="message")return;refresh()},15000);
