@@ -193,27 +193,31 @@ function invalidateMemberSnapshot() {
   publicRolesCacheAt = 0;
 }
 
+let memberFetchFailedAt=0;
 async function getAllMembers(guild) {
   const fresh = memberSnapshot && Date.now() - memberSnapshotAt < MEMBER_CACHE_TTL;
   if (fresh) return memberSnapshot;
   if (memberFetchPromise) return memberFetchPromise;
 
+  const cached=[...guild.members.cache.values()];
+  if(Date.now()-memberFetchFailedAt<30000 && cached.length) return cached;
   memberFetchPromise = guild.members.fetch()
     .then((collection) => {
-      // لا نستبعد البوتات: هذه القائمة تمثل كل أعضاء السيرفر فعلًا.
       memberSnapshot = [...collection.values()];
       memberSnapshotAt = Date.now();
+      memberFetchFailedAt = 0;
       return memberSnapshot;
     })
     .catch((error) => {
-      // عند حدوث Rate Limit أو فشل مؤقت، نستخدم آخر لقطة صحيحة بدل قائمة فارغة.
-      if (memberSnapshot?.length) return memberSnapshot;
-      throw error;
+      memberFetchFailedAt=Date.now();
+      const fallback=memberSnapshot?.length?memberSnapshot:cached;
+      if(fallback.length) return fallback;
+      console.error("member fetch unavailable:",String(error?.message||error));
+      return [];
     })
     .finally(() => {
       memberFetchPromise = null;
     });
-
   return memberFetchPromise;
 }
 
