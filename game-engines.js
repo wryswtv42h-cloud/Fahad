@@ -20,8 +20,29 @@ function baloot(p){
 }
 function spy(p){let x=SPY[Math.floor(Math.random()*SPY.length)],roles=p.map((_,i)=>({role:x[1][i%x[1].length],spy:false}));roles[Math.floor(Math.random()*p.length)].spy=true;let s=base("SPYFALL",p);return Object.assign(s,{location:x[0],roles,deadline:Date.now()+480000,questioner:0,lastQuestion:null})}
 function code(p){let s=base("CODENAMES",p),rs=sh([..."rrrrrrrrrbbbbbbbbnnnnnnna"]),ws=sh(WORDS).slice(0,25);return Object.assign(s,{words:ws.map((word,i)=>({word,role:{r:"red",b:"blue",n:"neutral",a:"assassin"}[rs[i]],revealed:false})),team:"red",clue:null,guesses:0,teamScores:{red:0,blue:0},playerRoles:Object.fromEntries(p.map((x,i)=>[k(x),i===0?"red_spymaster":i===1?"red_agent":i===2?"blue_spymaster":"blue_agent"]))})}
-function create(game,p){if(game==="UNO")return uno(p);if(game==="LUDO")return ludo(p);if(game==="BALOOT")return baloot(p);if(game==="SPYFALL")return spy(p);if(game==="CODENAMES")return code(p);let s=base(game,p);s.kind="text";s.choices=[];s.prompt="ابدأ الجولة";if(game==="TRIVIA"){let q=TRIVIA[Math.floor(Math.random()*TRIVIA.length)];Object.assign(s,{kind:"choice",prompt:q[0],choices:q[1],answer:q[2]})}else if(game==="EMOJI_GUESS"){let q=EMO[Math.floor(Math.random()*EMO.length)];Object.assign(s,{kind:"choice",prompt:q[0],choices:sh(EMO.map(x=>x[1])),answer:q[1]})}else if(game==="TABOO"){let q=TAB[Math.floor(Math.random()*TAB.length)];Object.assign(s,{prompt:"اشرح الكلمة دون الكلمات الممنوعة",secret:q[0],taboo:q[1],kind:"taboo"})}else if(game==="RIDDLE_RUSH"){let q=RIDDLE[Math.floor(Math.random()*RIDDLE.length)];Object.assign(s,{prompt:q[0],answer:q[1]})}else if(game==="FASTEST")Object.assign(s,{prompt:"ما ناتج 7 × 8؟",answer:"56"});else if(game==="WORD_BOMB")Object.assign(s,{letter:LET[Math.floor(Math.random()*LET.length)],prompt:"اكتب كلمة تبدأ بالحرف"});else if(game==="CATEGORIES")Object.assign(s,{category:CAT[Math.floor(Math.random()*CAT.length)],letter:LET[Math.floor(Math.random()*LET.length)],prompt:"اكتب إجابة من التصنيف بالحرف"});else if(game==="SECRET_WORD"||game==="WHOAMI")Object.assign(s,{secret:WORDS[Math.floor(Math.random()*WORDS.length)],prompt:"خمن الكلمة السرية"});else if(game==="PICTIONARY"||game==="DRAW_GUESS")Object.assign(s,{secret:WORDS[Math.floor(Math.random()*WORDS.length)],role:"drawer",prompt:"الرسام يرى الكلمة، والباقون يخمنون"});else if(game==="CHARADES"||game==="MIMIC")Object.assign(s,{secret:WORDS[Math.floor(Math.random()*WORDS.length)],role:"actor",prompt:"مثّل الكلمة بلا كلام"});else if(game==="DAQSH")Object.assign(s,{kind:"reaction",prompt:"انتظر الإشارة ثم اضغط فورًا",readyAt:Date.now()+2000+Math.random()*3000,signal:false});else if(game==="QAWSAR")Object.assign(s,{kind:"cards",hand:sh(["A","K","Q","J","10","9","8","7"]).slice(0,5),prompt:"اختر ورقة"});else if(game==="WOULD_YOU_RATHER"||game==="HOT_SEAT")Object.assign(s,{kind:"choice",prompt:"اختر",choices:["الخيار الأول","الخيار الثاني","الخيار الثالث"]});else if(game==="GUESS_PLAYER")Object.assign(s,{kind:"choice",prompt:"اختر اللاعب الغامض",choices:p.map(x=>x.username),target:Math.floor(Math.random()*p.length)});else if(game==="LIAR"||game==="TRUTH_LIE")Object.assign(s,{kind:"claim",prompt:"صاحب الدور يكتب ادعاء ثم يصوت الباقون",claimant:0,votes:0});return s}
-function priv(s,p,a){let i=p.findIndex(x=>k(x)===k(a)),o={};if(s.game==="SPYFALL"){let r=s.roles[i];o.spy=r.spy;o.location=r.spy?null:s.location;o.role=r.role}if(s.game==="CODENAMES")o.role=s.playerRoles[k(a)];if(["UNO","LUDO","BALOOT"].includes(s.game)){if(s.game==="UNO")o.hand=s.hands[i]||[];if(s.game==="LUDO")o.tokens=s.tokens[i]||[-1,-1,-1,-1];if(s.game==="BALOOT")o.hand=s.hands[i]||[]}if(s.secret&&(s.turnIndex===i||["WHOAMI","SECRET_WORD"].includes(s.game)))o.secret=s.secret;if(s.taboo)o.taboo=s.taboo;return o}
+function create(game,p){if(game==="UNO")return uno(p);if(game==="LUDO")return ludo(p);if(game==="BALOOT")return baloot(p);if(game==="SPYFALL")return spy(p);if(game==="CODENAMES")return code(p);let s=base(game,p);s.kind="text";s.choices=[];s.prompt="ابدأ الجولة";if(game==="TRIVIA"){let q=TRIVIA[Math.floor(Math.random()*TRIVIA.length)];Object.assign(s,{kind:"choice",prompt:q[0],choices:q[1],answer:q[2]})}else if(game==="EMOJI_GUESS"){let q=EMO[Math.floor(Math.random()*EMO.length)];Object.assign(s,{kind:"choice",prompt:q[0],choices:sh(EMO.map(x=>x[1])),answer:q[1]})}else if(game==="TABOO"){let q=TAB[Math.floor(Math.random()*TAB.length)];Object.assign(s,{prompt:"اشرح الكلمة دون الكلمات الممنوعة",secret:q[0],taboo:q[1],kind:"taboo"})}else if(game==="RIDDLE_RUSH"){let q=RIDDLE[Math.floor(Math.random()*RIDDLE.length)];Object.assign(s,{prompt:q[0],answer:q[1]})}else if(game==="FASTEST")Object.assign(s,{prompt:"ما ناتج 7 × 8؟",answer:"56"});else if(game==="WORD_BOMB")Object.assign(s,{letter:LET[Math.floor(Math.random()*LET.length)],prompt:"اكتب كلمة تبدأ بالحرف"});else if(game==="CATEGORIES")Object.assign(s,{category:CAT[Math.floor(Math.random()*CAT.length)],letter:LET[Math.floor(Math.random()*LET.length)],prompt:"اكتب إجابة من التصنيف بالحرف"});else if(game==="SECRET_WORD"||game==="WHOAMI")Object.assign(s,{secret:WORDS[Math.floor(Math.random()*WORDS.length)],prompt:"خمن الكلمة السرية"});else if(game==="PICTIONARY"||game==="DRAW_GUESS")Object.assign(s,{secret:WORDS[Math.floor(Math.random()*WORDS.length)],role:"drawer",prompt:"الرسام يرى الكلمة، والباقون يخمنون"});else if(game==="CHARADES"||game==="MIMIC")Object.assign(s,{secret:WORDS[Math.floor(Math.random()*WORDS.length)],role:"actor",prompt:"مثّل الكلمة بلا كلام"});else if(game==="DAQSH")Object.assign(s,{kind:"reaction",prompt:"انتظر الإشارة ثم اضغط فورًا",readyAt:Date.now()+2000+Math.random()*3000,signal:false});else if(game==="QAWSAR"){
+ const deck=sh([
+  ...S.flatMap(s=>R.map(r=>({suit:s,rank:r}))),
+  {suit:"joker",rank:"JOKER"}
+ ]);
+ const hands=p.map(()=>deck.splice(0,4));
+ const revealed=p.map(()=>[false,false,false,false]);
+ const discarded=deck.pop();
+ Object.assign(s,{
+   kind:"qawsar",prompt:"اسحب ورقة ثم بدّل أو وطّها بالنص",
+   deck,hands,revealed,discarded,
+   qawsarTurn:0,qawsarPhase:"draw",
+   qawsarScores:p.map(()=>0),qawsarZeros:p.map(()=>0),qawsarOut:p.map(()=>false),
+   qawsarCalledBy:null,qawsarRound:1,lastAction:null
+ });
+}else if(game==="WOULD_YOU_RATHER"||game==="HOT_SEAT")Object.assign(s,{kind:"choice",prompt:"اختر",choices:["الخيار الأول","الخيار الثاني","الخيار الثالث"]});else if(game==="GUESS_PLAYER")Object.assign(s,{kind:"choice",prompt:"اختر اللاعب الغامض",choices:p.map(x=>x.username),target:Math.floor(Math.random()*p.length)});else if(game==="LIAR"||game==="TRUTH_LIE")Object.assign(s,{kind:"claim",prompt:"صاحب الدور يكتب ادعاء ثم يصوت الباقون",claimant:0,votes:0});return s}
+function priv(s,p,a){let i=p.findIndex(x=>k(x)===k(a)),o={};if(s.game==="SPYFALL"){let r=s.roles[i];o.spy=r.spy;o.location=r.spy?null:s.location;o.role=r.role}if(s.game==="CODENAMES")o.role=s.playerRoles[k(a)];if(["UNO","LUDO","BALOOT"].includes(s.game)){if(s.game==="UNO")o.hand=s.hands[i]||[];if(s.game==="LUDO")o.tokens=s.tokens[i]||[-1,-1,-1,-1];if(s.game==="BALOOT")o.hand=s.hands[i]||[];
+ if(s.game==="QAWSAR"){
+   o.hand=(s.hands[i]||[]).map((card,n)=>({card,revealed:!!s.revealed?.[i]?.[n]}));
+   o.discarded=s.discarded||null;o.qawsarTurn=s.qawsarTurn;o.qawsarPhase=s.qawsarPhase;
+   o.scores=s.qawsarScores;o.zeros=s.qawsarZeros;o.out=s.qawsarOut;
+ }
+ }if(s.secret&&(s.turnIndex===i||["WHOAMI","SECRET_WORD"].includes(s.game)))o.secret=s.secret;if(s.taboo)o.taboo=s.taboo;return o}
 function sanitizeAction(game,act,x,s,p,i){
  const allowed={
  CODENAMES:["clue","guess","endTurn"],SPYFALL:["question","answer","spyGuess","accuse"],
@@ -30,14 +51,16 @@ function sanitizeAction(game,act,x,s,p,i){
  LIAR:["claim","vote"],HOT_SEAT:["choose"],WOULD_YOU_RATHER:["choose"],DRAW_GUESS:["submit","guess"],
  FASTEST:["submit"],RIDDLE_RUSH:["submit"],SECRET_WORD:["submit","guess"],MIMIC:["submit","guess"],
  GUESS_PLAYER:["choose"],UNO:["draw","playCard","uno","challenge"],LUDO:["roll","moveToken"],
- BALOOT:["bid","playCard","declare"],DAQSH:["submit"],QAWSAR:["playCard"]
+ BALOOT:["bid","playCard","declare"],DAQSH:["submit"],QAWSAR:["draw","playCard","reveal","burn8","specialSwap","callQawsar"]
  };
  if(!allowed[game]?.includes(act))throw Error("حركة غير مسموحة لهذه اللعبة");
  if(!Number.isInteger(i)||!p[i])throw Error("لاعب غير صالح");
  if(s.phase==="finished")throw Error("الجلسة منتهية");
  return {act,x:x&&typeof x==="object"?x:{}};
 }
-function pub(s,p,a){let o={...s};for(const x of["answer","secret","location","roles","playerRoles","target","hands","drawPile","deck","taboo","__players"])delete o[x];o.private=priv(s,p,a);if(s.game==="CODENAMES"){let r=s.playerRoles[k(a)];o.words=s.words.map(c=>{let x={word:c.word,revealed:c.revealed};if(c.revealed||r?.includes("spymaster"))x.role=c.role;return x});o.playerRole=r||"spectator"}if(s.game==="UNO"){let i=p.findIndex(x=>k(x)===k(a));o.hand=s.hands[i]||[];o.handCount=s.hands.map(x=>x.length);o.drawCount=s.drawPile.length}if(s.game==="LUDO"){let i=p.findIndex(x=>k(x)===k(a));o.tokens=s.tokens[i]||[-1,-1,-1,-1];o.legalTokens=s.legalTokens||[]}if(s.game==="BALOOT"){let i=p.findIndex(x=>k(x)===k(a));o.hand=s.hands[i]||[];o.legalIndices=balootLegal(s,i)}return o}
+function pub(s,p,a){let o={...s};for(const x of["answer","secret","location","roles","playerRoles","target","hands","drawPile","deck","taboo","__players"])delete o[x];o.private=priv(s,p,a);if(s.game==="CODENAMES"){let r=s.playerRoles[k(a)];o.words=s.words.map(c=>{let x={word:c.word,revealed:c.revealed};if(c.revealed||r?.includes("spymaster"))x.role=c.role;return x});o.playerRole=r||"spectator"}if(s.game==="UNO"){let i=p.findIndex(x=>k(x)===k(a));o.hand=s.hands[i]||[];o.handCount=s.hands.map(x=>x.length);o.drawCount=s.drawPile.length}if(s.game==="LUDO"){let i=p.findIndex(x=>k(x)===k(a));o.tokens=s.tokens[i]||[-1,-1,-1,-1];o.legalTokens=s.legalTokens||[]}if(s.game==="BALOOT"){let i=p.findIndex(x=>k(x)===k(a));o.hand=s.hands[i]||[];o.legalIndices=balootLegal(s,i)}
+ if(s.game==="QAWSAR"){o.qawsar=s.private;o.qawsarTurn=s.qawsarTurn;o.qawsarPhase=s.qawsarPhase;o.lastAction=s.lastAction}
+ return o}
 function balootRank(c,t){let o=t&&c.suit===t?["7","8","Q","K","10","A","9","J"]:["7","8","9","J","Q","K","10","A"];return o.indexOf(c.rank)+(t&&c.suit===t?100:0)}
 function balootLegal(s,i){let h=s.hands[i]||[];if(!s.trick.length)return h.map((_,n)=>n);let led=s.trick[0].card.suit,a=h.map((c,n)=>c.suit===led?n:-1).filter(n=>n>=0);if(a.length)return a;return h.map((_,n)=>n)}
 function balootCardPoints(c,trump){
@@ -114,7 +137,67 @@ if(game==="CATEGORIES"){let t=String(x.text||"").trim();if(!t)throw Error("اك�
 if(game==="FASTEST"||game==="RIDDLE_RUSH"){let ok=String(x.text||"").trim().toLocaleLowerCase("ar")===String(s.answer).toLocaleLowerCase("ar");if(ok){s.scores[i]++;s.turnIndex=ni(s,p.length)}s.lastResult={correct:ok};return s}
 if(["PICTIONARY","DRAW_GUESS","CHARADES","MIMIC","SECRET_WORD","WHOAMI"].includes(game)){let t=String(x.text||"").trim(),ok=t&&s.secret&&t.toLocaleLowerCase("ar").includes(s.secret.toLocaleLowerCase("ar"));if(ok)s.scores[i]++;s.lastResult={correct:!!ok};s.turnIndex=ni(s,p.length);return s}
 if(game==="DAQSH"){if(!s.signal)throw Error("لم تظهر الإشارة");s.scores[i]++;s.signal=false;s.readyAt=Date.now()+1800+Math.random()*2800;s.turnIndex=ni(s,p.length);return s}
-if(game==="QAWSAR"){let n=Number(x.index);if(!s.hand?.[n])throw Error("ورقة غير صالحة");s.hand.splice(n,1);s.turnIndex=ni(s,p.length);if(!s.hand.length){s.winner=p[i].username;s.phase="finished"}return s}
+if(game==="QAWSAR"){
+ if(s.qawsarOut[i])throw Error("أنت خارج الجولة");
+ if(s.qawsarTurn!==i)throw Error("ليس دورك");
+ const h=s.hands[i], n=Number(x.index);
+ const valueOf=c=>c.rank==="JOKER"?20:(c.rank==="A"?1:c.rank==="K"?0:c.rank==="Q"?12:c.rank==="J"?11:Number(c.rank));
+ const reveal=(pi,idx)=>{if(!s.hands[pi]?.[idx])throw Error("ورقة غير صالحة");s.revealed[pi][idx]=true};
+ const nextTurn=()=>{let n=(i+1)%p.length;while(s.qawsarOut[n]){n=(n+1)%p.length;if(n===i)break}s.qawsarTurn=n;s.qawsarPhase="draw"};
+ if(act==="draw"){
+   if(s.qawsarPhase!=="draw")throw Error("لا يمكنك السحب الآن");
+   if(!s.deck.length){s.deck=sh(s.hands.flat().filter(Boolean));}
+   const card=s.deck.pop();if(!card)throw Error("لا توجد أوراق للسحب");
+   s.drawn=card;s.qawsarPhase="choice";s.lastAction={type:"draw",player:i};return s;
+ }
+ if(act==="playCard"){
+   if(s.qawsarPhase!=="choice"||!s.drawn)throw Error("اسحب ورقة أولًا");
+   const mode=String(x.mode||"discard");
+   if(mode==="swap"){
+     if(!h[n])throw Error("ورقة غير صالحة");
+     h[n]=s.drawn;s.drawn=null;s.discarded=x.keepDiscard?x.keepDiscard:h[n];nextTurn();return s;
+   }
+   if(mode==="swapOpponent"){
+     const oi=Number(x.player),on=Number(x.opponentIndex);
+     if(!s.hands[oi]||oi===i||!s.hands[oi][on])throw Error("خصم غير صالح");
+     const mine=h[n];if(!mine)throw Error("ورقة غير صالحة");
+     h[n]=s.hands[oi][on];s.hands[oi][on]=mine;s.drawn=null;nextTurn();return s;
+   }
+   if(mode==="swapAny"){
+     if(!h[n])throw Error("ورقة غير صالحة");
+     h[n]=s.drawn;s.drawn=null;nextTurn();return s;
+   }
+   s.discarded=s.drawn;s.drawn=null;nextTurn();return s;
+ }
+ if(act==="burn8"){
+   if(s.qawsarPhase!=="draw"||!h[n]||h[n].rank!=="8"||!s.discarded||s.discarded.rank!=="8")throw Error("الحرق متاح فقط بـ8 على 8");
+   h.splice(n,1);s.revealed[i].splice(n,1);s.lastAction={type:"burn8",player:i};nextTurn();return s;
+ }
+ if(act==="reveal"){
+   if(s.qawsarPhase!=="draw")throw Error("الكشف الآن غير متاح");
+   if(!h[n])throw Error("ورقة غير صالحة");
+   const r=h[n];
+   if(r.rank==="8") reveal(i,Number(x.targetIndex));
+   else if(r.rank==="9"&&r.suit==="♠") reveal(i,Number(x.targetIndex));
+   else if(r.rank==="9"&&r.suit==="♥") {
+     const pi=Number(x.player),idx=Number(x.targetIndex);
+     if(!s.hands[pi]||pi===i)throw Error("يمكن للـ9 الأحمر كشف ورقة من الخصم فقط");
+     reveal(pi,idx);
+   } else throw Error("هذه الورقة لا تسمح بالكشف");
+   s.lastAction={type:"reveal",player:i};nextTurn();return s;
+ }
+ if(act==="specialSwap"){
+   if(s.qawsarPhase!=="draw"||h[n]?.rank!=="J"||!["♥","♦"].includes(h[n].suit))throw Error("الولد الأحمر فقط يسمح بالتبديل الشامل");
+   const pi=Number(x.player),idx=Number(x.targetIndex);
+   if(!s.hands[pi]?.[idx])throw Error("هدف غير صالح");
+   [h[n],s.hands[pi][idx]]=[s.hands[pi][idx],h[n]];nextTurn();return s;
+ }
+ if(act==="callQawsar"){
+   if(s.qawsarPhase!=="draw")throw Error("لا يمكن طلب قوصر الآن");
+   s.qawsarCalledBy=i;s.lastAction={type:"qawsar",player:i};nextTurn();return s;
+ }
+ throw Error("حركة قوصر غير مدعومة");
+}
 if(game==="LIAR"||game==="TRUTH_LIE"){if(act==="claim"){s.claims=(s.claims||[]);s.claims.push({i,text:String(x.text||"").slice(0,180)});s.turnIndex=ni(s,p.length);return s}if(act==="vote"){s.votes=(s.votes||0)+1;if(Number(x.target)===s.claimant)s.scores[i]++;if(s.votes>=p.length-1){s.winner=p[s.claimant]?.username;s.phase="finished"}return s}}
 throw Error("الحركة غير مدعومة")}
 function bot(game,s,p){
@@ -139,7 +222,12 @@ function bot(game,s,p){
  if(game==="FASTEST"||game==="RIDDLE_RUSH")return apply(game,s,p,a,"submit",{text:s.answer});
  if(["PICTIONARY","DRAW_GUESS","CHARADES","MIMIC","SECRET_WORD","WHOAMI"].includes(game))return apply(game,s,p,a,"submit",{text:s.secret});
  if(game==="DAQSH"){if(s.signal)return apply(game,s,p,a,"submit",{text:"ضغط"});return s}
- if(game==="QAWSAR")return apply(game,s,p,a,"playCard",{index:0});
+ if(game==="QAWSAR"){
+ if(s.qawsarPhase==="draw")return apply(game,s,p,a,"draw",{});
+ const h=s.hands[s.qawsarTurn]||[],d=s.drawn;
+ if(d?.rank==="8")return apply(game,s,p,a,"playCard",{index:h.findIndex(x=>x.rank==="8")>=0?h.findIndex(x=>x.rank==="8"):0,mode:"swap"});
+ return apply(game,s,p,a,"playCard",{index:0,mode:"swap"});
+}
  if(game==="LIAR"||game==="TRUTH_LIE"){if(!s.claims?.length)return apply(game,s,p,a,"claim",{text:"أعتقد أن هذه الجملة صحيحة"});return apply(game,s,p,a,"vote",{target:s.claimant})}
  return s
 }
