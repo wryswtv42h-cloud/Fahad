@@ -417,15 +417,27 @@ window.updateAuthBar=function(){
   if(mldUser?.mustChangePassword) setTimeout(()=>window.change("password"),0);
 };
 
-// GLOBAL NAV DELEGATION — keeps every data-view button working even after dynamic rerenders
+// GLOBAL NAV DELEGATION — one navigation path for desktop + mobile
 document.addEventListener("click",e=>{
   const b=e.target.closest("[data-view],[data-home-go]");
   if(!b)return;
   const target=b.dataset.view||b.dataset.homeGo;
   if(!target)return;
   e.preventDefault();
+  e.stopPropagation();
+  if(mobile)mobile.classList.remove("open");
   window.change(target);
 },true);
+document.addEventListener("keydown",e=>{
+  if(e.key==="Escape"&&mobile)mobile.classList.remove("open");
+});
+if(mobile){
+  mobile.addEventListener("click",e=>{
+    const b=e.target.closest("[data-view]");
+    if(!b)return;
+    mobile.classList.remove("open");
+  });
+}
 
 // INITIAL BOOT: never show the old static homepage before the new one is ready
 document.body.classList.add("mld-booting");
