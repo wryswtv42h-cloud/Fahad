@@ -501,7 +501,7 @@ app.get("/api/tickets",async(req,res)=>{
     return res.json({tickets:q.rows,public:true,canOpen:true,admin:true});
   }
   if(!u) {
-    const q=await pool.query("SELECT id,username,subject,status,created_at FROM tickets ORDER BY id DESC LIMIT 30");
+    const q=await pool.query("SELECT id,username,subject,status,created_at FROM tickets ORDER BY id DESC LIMIT 100");
     return res.json({tickets:q.rows,public:true,canOpen:false});
   }
   const q=await pool.query("SELECT id,username,discord_username,subject,message,status,created_at FROM tickets WHERE username=$1 ORDER BY id DESC",[u.username]);
