@@ -204,7 +204,7 @@ if(game==="QAWSAR"){
    if(!h[n])throw Error("ورقة غير صالحة");
    const r=h[n];
    if(r.rank==="8") reveal(i,Number(x.targetIndex));
-   else if(r.rank==="9"&&r.suit==="♠") reveal(i,Number(x.targetIndex));
+   else if(r.rank==="9"&&["♠","♣"].includes(r.suit)) reveal(i,Number(x.targetIndex));
    else if(r.rank==="9"&&r.suit==="♥") {
      const pi=Number(x.player),idx=Number(x.targetIndex);
      if(!s.hands[pi]||pi===i)throw Error("يمكن للـ9 الأحمر كشف ورقة من الخصم فقط");
