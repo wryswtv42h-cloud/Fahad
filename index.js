@@ -439,12 +439,12 @@ app.post("/api/owner/settings",requireOwner,async(req,res)=>{try{const allowed=[
 app.get("/api/auth/me",async(req,res)=>{const u=currentUser(req); if(!u) return res.json({authenticated:false,user:null}); const member=await findGuildMemberByUsername(u.discordUsername); if(!member){try{await audit(u,"guild_membership_logout","انتهت عضوية Discord وتم إنهاء الجلسة");}catch{} return req.session.destroy(()=>res.json({authenticated:false,user:null,reason:"guild_membership_required"}));} res.json({authenticated:true,user:{username:u.username,discordUsername:u.discordUsername,role:u.role,isOwner:u.role==="owner",mustChangePassword:!!u.mustChangePassword}});});
 app.post("/api/auth/register",authLimiter,async(req,res)=>{
   try{
-    const username=String(req.body?.username||"").trim().toLowerCase(), password=String(req.body?.password||""), discordUsername=String(req.body?.discordUsername||"").trim();
+    const username=String(req.body?.username||"").trim().toLowerCase(), password=String(req.body?.password||""), discordUsername=String(req.body?.discordUsername||"").trim(), discordUserId=String(req.body?.discordUserId||"").trim();
     if(!/^[a-z0-9_.-]{3,32}$/.test(username)) return res.status(400).json({error:"اليوزر يجب أن يكون 3-32 حرفًا إنجليزيًا أو أرقامًا"});
     if(password.length<6||password.length>100) return res.status(400).json({error:"كلمة المرور يجب أن تكون 6 أحرف على الأقل"});
     if(discordUsername.length<2||discordUsername.length>100) return res.status(400).json({error:"أدخل يوزرك في Discord"});
-    const member=await findGuildMemberByUsername(discordUsername);
-    if(!member) return res.status(403).json({error:"لازم تكون داخل سيرفر MLD في Discord قبل إنشاء الحساب"});
+    const member=discordUserId ? (await getAllMembers(await getGuild())).find(m=>m.user?.id===discordUserId)||null : await findGuildMemberByUsername(discordUsername);
+    if(!member) return res.status(403).json({error:"لازم تكون داخل سيرفر MLD في Discord قبل إنشاء الحساب"});\n    if(discordUserId && member.user.id!==discordUserId) return res.status(400).json({error:"اختيار Discord غير صالح، اختر حسابك من الاقتراحات."});
     if((await pool.query("SELECT id FROM app_users WHERE username=$1",[username])).rowCount) return res.status(409).json({error:"اسم المستخدم مستخدم مسبقًا"});
     if((await pool.query("SELECT id FROM app_users WHERE lower(trim(discord_username))=lower(trim($1))",[member.user.username])).rowCount) return res.status(409).json({error:"حساب موقع موجود مسبقًا لهذا Discord"});
     const hash=await bcrypt.hash(password,12);
