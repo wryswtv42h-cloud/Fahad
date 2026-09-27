@@ -512,7 +512,7 @@ app.get("/api/tickets/:id/messages",requireAuth,async(req,res)=>{
   const t=await pool.query("SELECT id,username,status,subject FROM tickets WHERE id=$1",[id]);
   if(!t.rowCount)return res.status(404).json({error:"التيكت غير موجود"});
   if(t.rows[0].username!==u.username&&!["owner","admin"].includes(u.role))return res.status(403).json({error:"لا تملك صلاحية مشاهدة محادثة التيكت"});
-  const q=await pool.query("SELECT id,username,discord_username,message,created_at FROM ticket_messages WHERE ticket_id=$1 ORDER BY id ASC",[id]);
+  const q=await pool.query("SELECT tm.id,tm.username,tm.discord_username,tm.message,tm.created_at,COALESCE(u.role,'user') AS role FROM ticket_messages tm LEFT JOIN app_users u ON u.username=tm.username WHERE tm.ticket_id=$1 ORDER BY tm.id ASC",[id]);
   res.json({ticket:t.rows[0],messages:q.rows});
 });
 app.post("/api/tickets",requireAuth,writeLimiter,async(req,res)=>{
