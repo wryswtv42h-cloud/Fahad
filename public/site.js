@@ -342,8 +342,8 @@ async function renderGames(){
       try{
         const d=await api("/api/games/"+id+"/state?guestId="+encodeURIComponent(guestId));
         const g=d.game,s=d.state||{},players=g.players||[];
-        const active=players.find(p=>p.guestId===guestId);
-        const activeIndex=players.findIndex(p=>p.guestId===guestId);
+        const active=players.find(p=>mldUser ? p.username===mldUser.username : p.guestId===guestId);
+        const activeIndex=players.findIndex(p=>mldUser ? p.username===mldUser.username : p.guestId===guestId);
         const seats=(players.map(p=>"<div class='log-item'><b>"+escGame(p.seatLabel||p.username)+"</b><small>"+(p.host?"👑 صاحب الجلسة · ":"")+((p.guest)?"زائر":"عضو")+"</small></div>").join("")||"<p class='muted'>لاعبون سيظهرون هنا.</p>");
         let action="";
         if(spectator) action="<p class='muted'>وضع مشاهدة — لا يمكنك تنفيذ حركات.</p>";
