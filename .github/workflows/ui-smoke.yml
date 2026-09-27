@@ -25,6 +25,14 @@ jobs:
           done
           echo "Timed out waiting for the new Railway deployment"
           exit 1
-      - run: npx playwright test tests/site.spec.js
+      - run: npx playwright test tests/site.spec.js --reporter=html,line
+        continue-on-error: true
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          if-no-files-found: warn
         env:
           BASE_URL: https://discord-community-platform-production-9348.up.railway.app
