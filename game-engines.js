@@ -51,7 +51,7 @@ function sanitizeAction(game,act,x,s,p,i){
  LIAR:["claim","vote"],HOT_SEAT:["choose"],WOULD_YOU_RATHER:["choose"],DRAW_GUESS:["submit","guess"],
  FASTEST:["submit"],RIDDLE_RUSH:["submit"],SECRET_WORD:["submit","guess"],MIMIC:["submit","guess"],
  GUESS_PLAYER:["choose"],UNO:["draw","playCard","uno","challenge"],LUDO:["roll","moveToken"],
- BALOOT:["bid","playCard","declare"],DAQSH:["submit"],QAWSAR:["draw","playCard","reveal","burn8","specialSwap","callQawsar"]
+ BALOOT:["bid","playCard","declare"],DAQSH:["submit"],QAWSAR:["draw","takeDiscard","playCard","reveal","burn8","specialSwap","callQawsar"]
  };
  if(!allowed[game]?.includes(act))throw Error("حركة غير مسموحة لهذه اللعبة");
  if(!Number.isInteger(i)||!p[i])throw Error("لاعب غير صالح");
@@ -144,7 +144,8 @@ if(game==="QAWSAR"){
  const valueOf=c=>c.rank==="JOKER"?20:(c.rank==="A"?1:c.rank==="K"?0:c.rank==="Q"?12:c.rank==="J"?11:Number(c.rank));
  const reveal=(pi,idx)=>{if(!s.hands[pi]?.[idx])throw Error("ورقة غير صالحة");s.revealed[pi][idx]=true};
  const nextTurn=()=>{
-   if(s.hands[i]?.length===0 || (s.qawsarCalledBy!=null && s.hands.every(x=>x?.length>0))){
+   let next=(i+1)%p.length;while(s.qawsarOut[next]){next=(next+1)%p.length;if(next===i)break}
+   if(s.hands[i]?.length===0 || (s.qawsarCalledBy!=null && next===s.qawsarCalledBy)){
      const totals=s.hands.map(hand=>hand.reduce((z,c)=>z+valueOf(c),0));
      const active=totals.map((v,n)=>({v,n})).filter(x=>!s.qawsarOut[x.n]);
      const low=Math.min(...active.map(x=>x.v));
@@ -163,6 +164,12 @@ if(game==="QAWSAR"){
    }
    let n=(i+1)%p.length;while(s.qawsarOut[n]){n=(n+1)%p.length;if(n===i)break}s.qawsarTurn=n;s.qawsarPhase="draw";
  };
+ if(act==="takeDiscard"){
+   if(s.qawsarPhase!=="draw"||!s.discarded)throw Error("لا توجد ورقة مطروحة");
+   const target=Number(x.index);
+   if(!h[target])throw Error("ورقة غير صالحة");
+   const old=h[target];h[target]=s.discarded;s.discarded=old;s.lastAction={type:"takeDiscard",player:i};nextTurn();return s;
+ }
  if(act==="draw"){
    if(s.qawsarPhase!=="draw")throw Error("لا يمكنك السحب الآن");
    if(!s.deck.length){s.deck=sh(s.hands.flat().filter(Boolean));}
