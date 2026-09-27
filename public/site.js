@@ -256,6 +256,34 @@ applyView=async function(){
   $("#app-send").onclick=async()=>{const answers={};document.querySelectorAll(".app-q").forEach(x=>answers[x.dataset.q]=x.value.trim());const rr=await fetch("/api/applications",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({type:"إدارة",answers})}),dd=await rr.json();$("#app-status").textContent=rr.ok?"تم إرسال التقديم ✓":(dd.error||"تعذر الإرسال");if(rr.ok)applyView()};
 };
 
+
+// MLD GAMES — stable, self-contained
+async function renderGames(){
+  searchWrap.style.display="none";
+  title.textContent="مركز الألعاب";
+  subtitle.textContent="ألعاب خفيفة تعمل مباشرة من الموقع.";
+  content.className="feature-grid";
+  content.innerHTML=`
+    <article class="feature-card"><div class="feature-icon">🎯</div><h3>اضغط بسرعة</h3><p class="muted">اجمع أكبر عدد خلال 10 ثوانٍ.</p><div class="game-score" id="click-score">0</div><button class="primary wide" id="click-start">ابدأ الجولة</button></article>
+    <article class="feature-card"><div class="feature-icon">🎲</div><h3>رمي النرد</h3><div class="dice-result" id="dice-result">🎲 🎲</div><button class="primary wide" id="dice-roll">ارمِ النرد</button></article>
+    <article class="feature-card"><div class="feature-icon">🪙</div><h3>عملة الحظ</h3><div class="dice-result" id="coin-result">—</div><button class="primary wide" id="coin-flip">اقلب العملة</button></article>`;
+  let score=0,end=0,timer=null;
+  $("#click-start").onclick=()=>{
+    if(end>Date.now()) return;
+    score=0; end=Date.now()+10000; $("#click-score").textContent="0"; $("#click-start").textContent="اضغط الآن!";
+    clearInterval(timer); timer=setInterval(()=>{
+      if(Date.now()>=end){clearInterval(timer);timer=null;$("#click-start").textContent="انتهت الجولة — "+score;setTimeout(()=>{if(view==="games")$("#click-start").textContent="ابدأ الجولة"},1200)}
+    },100);
+  };
+  content.onclick=e=>{
+    if(e.target.id==="click-start" && end>Date.now()){score++;$("#click-score").textContent=String(score)}
+    if(e.target.id==="dice-roll"){const a=1+Math.floor(Math.random()*6),b=1+Math.floor(Math.random()*6);$("#dice-result").textContent=a+" + "+b+" = "+(a+b)}
+    if(e.target.id==="coin-flip")$("#coin-result").textContent=Math.random()<.5?"وجه 🪙":"كتابة ✨";
+  };
+  setStatus("الألعاب جاهزة");
+}
+function renderGroups(){ return groupsReal(); }
+
 // FINAL MLD ROUTER — single source of truth
 window.change=async function(v){
   view=v;
