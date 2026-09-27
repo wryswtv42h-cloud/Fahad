@@ -535,6 +535,22 @@ app.get("/api/announcements",async(req,res)=>{const q=await pool.query("SELECT i
 app.post("/api/owner/users/:id/ban",requireOwner,async(req,res)=>{const banned=!!req.body?.banned,id=Number(req.params.id);const q=await pool.query("UPDATE app_users SET banned=$1 WHERE id=$2 AND role<>$3 RETURNING id,username,banned",[banned,id,"owner"]);if(!q.rowCount)return res.status(404).json({error:"الحساب غير موجود أو لا يمكن حظر الأونر"});await audit(req.session.user,banned?"account_ban":"account_unban",q.rows[0].username);res.json({ok:true,user:q.rows[0]});});
 app.delete("/api/owner/users/:id",requireOwner,async(req,res)=>{const id=Number(req.params.id);const q=await pool.query("DELETE FROM app_users WHERE id=$1 AND role<>$2 RETURNING username",[id,"owner"]);if(!q.rowCount)return res.status(404).json({error:"الحساب غير موجود أو لا يمكن حذف الأونر"});await audit(req.session.user,"account_delete",q.rows[0].username);res.json({ok:true});});
 app.get("/api/owner/users",requireOwner,async(req,res)=>{const q=await pool.query("SELECT id,username,discord_username,role,created_at,last_login_at FROM app_users ORDER BY id DESC LIMIT 300");res.json({users:q.rows});});
+app.get("/api/owner/users/:username/messages",requireOwner,async(req,res)=>{
+  const username=String(req.params.username||"").trim().toLowerCase();
+  if(!username)return res.status(400).json({error:"الحساب غير صحيح"});
+  const q=await pool.query(`
+    SELECT m.id,m.sender_username,m.body,m.created_at,c.id AS conversation_id,
+           COALESCE(p.display_name,m.sender_username) AS display_name
+    FROM chat_messages m
+    JOIN chat_conversations c ON c.id=m.conversation_id
+    JOIN chat_participants cp ON cp.conversation_id=c.id AND cp.username=$1
+    LEFT JOIN chat_profiles p ON p.username=m.sender_username
+    WHERE c.kind='dm'
+    ORDER BY m.id DESC
+    LIMIT 500
+  `,[username]);
+  res.json({messages:q.rows});
+});
 app.post("/api/owner/users/:id/role",requireOwner,async(req,res)=>{const role=String(req.body?.role||"user");if(!["user","admin","owner"].includes(role))return res.status(400).json({error:"صلاحية غير صحيحة"});const q=await pool.query("UPDATE app_users SET role=$1 WHERE id=$2 RETURNING username,role",[role,req.params.id]);if(!q.rowCount)return res.status(404).json({error:"الحساب غير موجود"});await audit(req.session.user,"user_role_change",`${q.rows[0].username} => ${role}`);res.json({ok:true,user:q.rows[0]});});
 app.get("/api/owner/application-questions",requireOwner,async(req,res)=>{const q=await pool.query("SELECT id,label,key,type,required,position,active FROM application_questions WHERE active=true ORDER BY position,id");res.json({questions:q.rows});});
 app.post("/api/owner/application-questions",requireOwner,async(req,res)=>{const label=String(req.body?.label||"").trim();if(label.length<2||label.length>180)return res.status(400).json({error:"السؤال غير صحيح"});const key="q_"+Date.now()+"_"+Math.random().toString(36).slice(2,7);const p=await pool.query("SELECT COALESCE(MAX(position),0)+1 AS n FROM application_questions");const q=await pool.query("INSERT INTO application_questions(label,key,position) VALUES($1,$2,$3) RETURNING *",[label,key,p.rows[0].n]);await audit(req.session.user,"application_question_create",label);res.json({ok:true,question:q.rows[0]});});
