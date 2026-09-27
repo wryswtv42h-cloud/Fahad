@@ -1094,22 +1094,22 @@ app.get("/api/public/members", async (req, res) => {
 
     const filtered = cleanQuery
       ? allMembers.filter((member) => {
-          const searchable = [
-            member.displayName,
-            member.user.username,
-            member.user.globalName,
-            member.user.tag,
-            member.id
-          ]
-            .filter(Boolean)
-            .join(" ")
-            .toLocaleLowerCase("ar");
-          return searchable.includes(cleanQuery);
+          const username=String(member.user.username||"").toLocaleLowerCase("ar");
+          const globalName=String(member.user.globalName||"").toLocaleLowerCase("ar");
+          const displayName=String(member.displayName||"").toLocaleLowerCase("ar");
+          const tag=String(member.user.tag||"").toLocaleLowerCase("ar");
+          const id=String(member.id||"");
+          return username.includes(cleanQuery)||globalName.includes(cleanQuery)||displayName.includes(cleanQuery)||tag.includes(cleanQuery)||id===cleanQuery;
         })
       : allMembers;
 
     const resultLimit=Math.min(Number(req.query.limit) || (cleanQuery ? 8 : 5), 8);
-    const ranked = sortedMemberJson(filtered,resultLimit);
+    const ranked=[...filtered].sort((a,b)=>{
+      const aq=String(a.user.username||"").toLocaleLowerCase("ar"), bq=String(b.user.username||"").toLocaleLowerCase("ar");
+      const as=aq===cleanQuery?0:aq.startsWith(cleanQuery)?1:2, bs=bq===cleanQuery?0:bq.startsWith(cleanQuery)?1:2;
+      if(as!==bs)return as-bs;
+      return (b.roles.cache.filter(r=>leadershipRoleSet.has(r.id)).sort((x,y)=>y.position-x.position).first()?.position||0)-(a.roles.cache.filter(r=>leadershipRoleSet.has(r.id)).sort((x,y)=>y.position-x.position).first()?.position||0);
+    }).slice(0,resultLimit).map(memberJson);
     res.json({
       members: ranked,
       total: filtered.length,
