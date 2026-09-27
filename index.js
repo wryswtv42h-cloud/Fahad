@@ -329,6 +329,25 @@ async function initAppDatabase() {
     ALTER TABLE game_scores ADD COLUMN IF NOT EXISTS discord_username VARCHAR(100);
     ALTER TABLE reviews ADD COLUMN IF NOT EXISTS username VARCHAR(32);
     ALTER TABLE reviews ADD COLUMN IF NOT EXISTS discord_username VARCHAR(100);
+    -- Legacy-schema compatibility: older deployments used user_id and omitted newer fields.
+    ALTER TABLE applications ADD COLUMN IF NOT EXISTS type VARCHAR(60) DEFAULT 'تقديم';
+    ALTER TABLE applications ADD COLUMN IF NOT EXISTS answers JSONB NOT NULL DEFAULT '{}'::jsonb;
+    ALTER TABLE applications ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'pending';
+    ALTER TABLE applications ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+    ALTER TABLE tickets ADD COLUMN IF NOT EXISTS subject VARCHAR(120) DEFAULT 'دعم';
+    ALTER TABLE tickets ADD COLUMN IF NOT EXISTS message TEXT DEFAULT '';
+    ALTER TABLE tickets ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'open';
+    ALTER TABLE tickets ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+    ALTER TABLE community_groups ADD COLUMN IF NOT EXISTS name VARCHAR(60) DEFAULT 'قروب';
+    ALTER TABLE community_groups ADD COLUMN IF NOT EXISTS description VARCHAR(240) NOT NULL DEFAULT '';
+    ALTER TABLE community_groups ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'pending';
+    DO $ DECLARE t text; BEGIN
+      FOREACH t IN ARRAY ARRAY['group_members','group_join_requests','community_groups','applications','tickets','reviews'] LOOP
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name=t AND column_name='user_id') THEN
+          EXECUTE format('ALTER TABLE %I ALTER COLUMN user_id DROP NOT NULL', t);
+        END IF;
+      END LOOP;
+    END $;
     CREATE INDEX IF NOT EXISTS tickets_username_idx ON tickets(username,id DESC);
     CREATE INDEX IF NOT EXISTS ticket_messages_ticket_idx ON ticket_messages(ticket_id,id ASC);
     CREATE INDEX IF NOT EXISTS applications_username_idx ON applications(username,id DESC);
