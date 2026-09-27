@@ -68,7 +68,7 @@ if(game==="BALOOT"){
    else if(b==="hokum"){const tr=S.includes(x.suit)?x.suit:s.turnCard?.suit;if(!tr)throw Error("حكم غير صالح");s.contract="hokum";s.trump=tr;s.buyer=i}
    else throw Error("طلب غير صالح");
    if(s.contract){
-     if(!s.turnCardTaken){s.hands[i].push(s.turnCard);s.turnCardTaken=true}
+     if(s.turnCard&&!s.turnCardTaken){s.hands[i].push(s.turnCard);s.turnCardTaken=true}
      while(s.hands[i].length<8)s.hands[i].push(s.deck.pop());
      for(let z=0;z<4;z++)while(s.hands[z].length<8)s.hands[z].push(s.deck.pop());
      s.phase="playing";s.turnIndex=(s.dealerIndex+1)%4;
