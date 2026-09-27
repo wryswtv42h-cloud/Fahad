@@ -266,3 +266,5 @@ body.mld-booting #mld-welcome{opacity:1;visibility:visible}
 @media (min-width:821px) and (max-width:1200px){
   .mobile-menu.open{grid-template-columns:repeat(3,minmax(0,1fr));padding:14px 24px 20px}
 }
+
+.review-author{display:flex;align-items:center;gap:8px}.review-demo-badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;border:1px solid rgba(255,255,255,.12);font-size:11px;opacity:.7}.review-add-card{scroll-margin-top:90px}
