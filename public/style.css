@@ -92,3 +92,11 @@ button:active,.group-item:active{transform:scale(.97)}
 input,textarea{transition:border-color .18s ease,box-shadow .18s ease}
 input:focus,textarea:focus{box-shadow:0 0 0 3px rgba(139,92,246,.13);outline:none}
 .group-item{cursor:pointer}
+
+/* Prevent the old static homepage from flashing before the SPA is ready */
+body.mld-booting{overflow:hidden}
+body.mld-booting .topbar,
+body.mld-booting main,
+body.mld-booting footer,
+body.mld-booting .mld-support-fab{opacity:0;visibility:hidden}
+body.mld-booting #mld-welcome{opacity:1;visibility:visible}
