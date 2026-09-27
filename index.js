@@ -807,7 +807,7 @@ const GAME_SEATS={
   QAWSAR:["مقعد 1","مقعد 2","مقعد 3","مقعد 4"]
 };
 const GAME_MIN_PLAYERS={CODENAMES:4,SPYFALL:3,PICTIONARY:2,CHARADES:2,WHOAMI:2,TABOO:2,WORD_BOMB:2,TRUTH_LIE:2,EMOJI_GUESS:2,TRIVIA:2,CATEGORIES:2,LIAR:3,HOT_SEAT:2,WOULD_YOU_RATHER:2,DRAW_GUESS:2,FASTEST:2,RIDDLE_RUSH:2,SECRET_WORD:2,MIMIC:2,GUESS_PLAYER:3,UNO:2,LUDO:2,BALOOT:4,DAQSH:2,QAWSAR:2};
-function makeDeck32(){const suits=["♠","♥","♦","♣"];const ranks=["7","8","9","10","J","Q","K","A"];return shuffle(suits.flatMap(s=>ranks.map(r=>({id:"baloot-"+s+"-"+r,color:s,suit:s,value:r,rank:r}))));}
+function makeDeck32(){const suits=["♠","♥","♦","♣"];const ranks=["7","8","9","10","J","Q","K","A"];const deck=suits.flatMap(s=>ranks.map(r=>({id:"baloot-"+s+"-"+r,color:s,suit:s,value:r,rank:r})));for(let i=deck.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[deck[i],deck[j]]=[deck[j],deck[i]];}return deck;}
 function playerKey(p){return p?.guestId?("g:"+p.guestId):("u:"+String(p?.username||"").toLowerCase());}
 function actorFromRequest(players,u,guestId){return u?players.find(p=>!p.bot&&p.username===u.username):players.find(p=>!p.bot&&p.guestId===guestId);}
 function seatOptions(game,max){return (GAME_SEATS[game]||[]).slice(0,Math.max(2,Math.min(max,8)));}
