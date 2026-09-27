@@ -214,7 +214,7 @@ ownerPanel=async function(){
     body.innerHTML="<article class='feature-card'><button id='owner-ticket-back'>رجوع</button><h3>🎫 تيكت #"+id+"</h3><div class='log-list'>"+(d.messages||[]).map(m=>"<div class='log-item'><b>"+esc(m.username)+" · Discord: "+esc(m.discord_username)+"</b><small>"+new Date(m.created_at).toLocaleString("ar-SA")+"</small><p>"+esc(m.message)+"</p></div>").join("")+"</div><div class='game-lobby-actions'><button class='primary' id='close-owner-ticket'>إغلاق وحفظ المحادثة</button><button id='owner-ticket-open'>فتح</button></div><h4>سجل الإغلاق</h4><div class='log-list'>"+(lg.log?(lg.log.transcript||[]).map(m=>"<div class='log-item'><b>"+esc(m.username)+" · Discord: "+esc(m.discord_username)+"</b><small>"+new Date(m.created_at).toLocaleString("ar-SA")+"</small><p>"+esc(m.message)+"</p></div>").join(""):"<p class='muted'>لم يتم إغلاقه بعد.</p>")+"</div></article>";
     $("#owner-ticket-back").onclick=loadTickets;
     $("#close-owner-ticket").onclick=async()=>{const rr=await fetch("/api/owner/tickets/"+id+"/status",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({status:"closed"})}),x=await rr.json();if(!rr.ok)return alert(x.error||"تعذر الإغلاق");openOwnerTicket(id)};
-    $("#owner-ticket-open").onclick=async()=>{await fetch("/api/owner/tickets/"+id+"/status",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({status:"open"}));openOwnerTicket(id)};
+    $("#owner-ticket-open").onclick=async()=>{await fetch("/api/owner/tickets/"+id+"/status",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({status:"open"})});openOwnerTicket(id)};
   }
   async function loadLogs(){
     const r=await fetch("/api/owner/logs"),d=await r.json();
