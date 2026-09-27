@@ -1176,7 +1176,23 @@ app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-app.listen(port, async () => { console.log(`MLD listening on port ${port}`); try { await initAppDatabase(); await ensureOwner(); await ensureChatDatabase(); console.log("App database ready"); } catch (error) { console.error("Database init failed:", error.message); } });
+const server = app.listen(port, async () => {
+  server.keepAliveTimeout = 65_000;
+  server.headersTimeout = 70_000;
+  server.requestTimeout = 30_000;
+  console.log(`MLD listening on port ${port}`);
+  try { await initAppDatabase(); await ensureOwner(); await ensureChatDatabase(); console.log("App database ready"); }
+  catch (error) { console.error("Database init failed:", error.message); }
+});
+async function gracefulShutdown(signal){
+  console.log(`Shutting down: ${signal}`);
+  server.close(()=>{});
+  try { await pool.end(); } catch {}
+  try { await client.destroy(); } catch {}
+  setTimeout(()=>process.exit(0),5000).unref();
+}
+process.once("SIGTERM",()=>gracefulShutdown("SIGTERM"));
+process.once("SIGINT",()=>gracefulShutdown("SIGINT"));
 client.once("clientReady", async () => {
   console.log(`Logged in as ${client.user.tag}`);
   try {
