@@ -1175,6 +1175,8 @@ app.post("/api/chat/conversations/:id/messages",requireAuth,writeLimiter,async(r
 app.post("/api/chat/conversations/:id/read",requireAuth,async(req,res)=>{const id=Number(req.params.id),u=req.session.user.username;await pool.query("UPDATE chat_participants SET last_read_message_id=COALESCE((SELECT MAX(id) FROM chat_messages WHERE conversation_id=$1),0) WHERE conversation_id=$1 AND username=$2",[id,u]);res.json({ok:true})});
 app.post("/api/chat/conversations/:id/leave",requireAuth,async(req,res)=>{const id=Number(req.params.id),u=req.session.user.username,c=await pool.query("SELECT owner_username,kind FROM chat_conversations WHERE id=$1",[id]);if(!c.rowCount)return res.status(404).json({error:"غير موجود"});if(c.rows[0].owner_username===u&&c.rows[0].kind==="private_group")return res.status(400).json({error:"مالك المحادثة لا يمكنه الخروج"});await pool.query("DELETE FROM chat_participants WHERE conversation_id=$1 AND username=$2",[id,u]);res.json({ok:true})});
 
+app.use("/api", (req,res) => res.status(404).json({error:"API route not found"}));
+
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
