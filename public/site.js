@@ -8,8 +8,8 @@ async function messageView(){await mldMe();if(!mldUser){title.textContent="رس�
 async function openRole(id){openModal();box.innerHTML="<div class='loading'>جاري تحميل الرتبة...</div>";const d=await fetch(`/api/public/roles/${id}/members`).then(r=>r.json());box.innerHTML=`<p class="eyebrow">دليل الرتبة</p><h2>${esc(d.role.name)}</h2><div class="role-meta"><b>${num(d.role.membersCount)} عضو فعلي</b></div><div class="permission-box">${perms(d.role.permissions)}</div><h3>الأعضاء</h3><div class="grid compact">${(d.members||[]).map(card).join("")||`<p class="muted">لا يوجد أعضاء بهذه الرتبة.</p>`}</div>`;bind()}
 async function refresh(){try{const [sr,rr,ss]=await Promise.all([fetch("/api/public/server"),fetch("/api/public/roles"),siteStats()]);const s=await sr.json(),rd=await rr.json();$("#server-name").textContent=s.name||"MLD";$("#server-founder").textContent=s.ownerName||"فهد المطيري";$("#server-count").textContent=num(s.memberCount);$("#server-online").textContent=num(ss.online);$("#server-visits").textContent=num(ss.visits);$("#server-status").textContent="● متصل";roles=rd.roles||[];if(s.invite){$("#invite").href=s.invite;$("#invite-mobile").href=s.invite}else{$("#invite").style.display="none";$("#invite-mobile").style.display="none"}if(view==="members"&&!search.value){const d=await fetch("/api/public/members").then(r=>r.json());all=d.members||[];renderMembers(all);setStatus(num(all.length)+" عضو متصل")}else if(view==="roles")renderRoles();else if(view==="top")renderTop(await fetch("/api/public/top").then(r=>r.json()))}catch(e){console.error(e);setStatus("تعذر تحديث البيانات مؤقتًا")}}
 async function searchMembers(){clearTimeout(timer);const q=search.value.trim();if(!q){renderMembers(all);setStatus(`${num(all.length)} عضو`);return}setStatus("جاري البحث...");timer=setTimeout(async()=>{const d=await fetch(`/api/public/members?q=${encodeURIComponent(q)}`).then(r=>r.json());renderMembers(d.members||[]);setStatus(`${num((d.members||[]).length)} نتيجة`)},250)}
-async function change(v){view=v;mobile.classList.remove("open");if(v==="message")return messageView();searchWrap.style.display=v==="members"?"flex":"none";title.textContent=v==="members"?"أعضاء المجتمع":v==="roles"?"الرتب القيادية":"لوحة TOP";if(v==="members")return refresh();if(v==="roles")return refresh();renderTop(await fetch("/api/public/top").then(r=>r.json()));setStatus("تحديث مباشر للنشاط")}
-document.querySelectorAll("[data-view]").forEach(b=>b.onclick=()=>change(b.dataset.view));search.oninput=()=>{if(view!=="members")change("members");searchMembers()};$("#menu").onclick=()=>mobile.classList.toggle("open");$("#close").onclick=closeModal;modal.onclick=e=>{if(e.target===modal)closeModal()};document.onkeydown=e=>{if(e.key==="Escape")closeModal()};const yearEl=$("#year");if(yearEl)yearEl.textContent=new Date().getFullYear();
+
+search.oninput=()=>{if(view!=="members")window.change("members");searchMembers()};$("#menu").onclick=()=>mobile.classList.toggle("open");$("#close").onclick=closeModal;modal.onclick=e=>{if(e.target===modal)closeModal()};document.onkeydown=e=>{if(e.key==="Escape")closeModal()};const yearEl=$("#year");if(yearEl)yearEl.textContent=new Date().getFullYear();
 const welcome=document.getElementById("mld-welcome");if(welcome){welcome.classList.remove("hide");}
 mldMe().then(()=>homeView());refreshTimer=setInterval(()=>{if(!modal.classList.contains("hidden")||view==="message")return;refresh()},15000);
 
@@ -302,7 +302,7 @@ function rebuildMobileMenu(){
   if(isAdmin) html+='<button type="button" data-view="admin">🛡️ الإدارة</button>';
   if(isOwner) html+='<button type="button" data-view="owner">👑 لوحة الأونر</button>';
   menu.innerHTML=html+'<a id="invite-mobile" class="invite" target="_blank">انضم للسيرفر</a>';
-  document.querySelectorAll("#mobile-menu [data-view]").forEach(b=>b.onclick=()=>change(b.dataset.view));
+  document.querySelectorAll("#mobile-menu [data-view]").forEach(b=>b.onclick=()=>window.change(b.dataset.view));
 }
 
 // FINAL MLD ROUTER — single source of truth
@@ -325,12 +325,13 @@ window.change=async function(v){
     if(v==="tickets"){await mldMe();await ticketView();return}
     if(v==="apply"){await applyView();return}
     if(v==="login"){authView();return}
+    if(v==="logout"){await fetch("/api/auth/logout",{method:"POST"});mldUser=null;updateAuthBar();await homeView();return}
     if(v==="reviews"){await reviewsView();return}
     if(v==="logs"){await ownerLogs();return}
     if(v==="admin"){await mldMe();if(mldUser?.role==="owner")await ownerPanel();else if(mldUser?.role==="admin")await adminPanel();else authView();return}
     if(v==="owner"){await ownerPanel();return}
     if(v==="blocks"){await mldChatBlocks();return}
-    await oldFinalChange(v);
+    await homeView();
   }catch(e){
     console.error("MLD route error:",v,e);
     setStatus("تعذر فتح القائمة حاليًا");
