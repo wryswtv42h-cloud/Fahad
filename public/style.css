@@ -268,3 +268,25 @@ body.mld-booting #mld-welcome{opacity:1;visibility:visible}
 }
 
 .review-author{display:flex;align-items:center;gap:8px}.review-demo-badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;border:1px solid rgba(255,255,255,.12);font-size:11px;opacity:.7}.review-add-card{scroll-margin-top:90px}
+
+/* Reviews: vertical directory on the reviews page */
+.reviews-page{overflow:hidden}
+.review-add-title{display:flex;align-items:center;justify-content:space-between;gap:18px}
+.review-add-icon{width:44px;height:44px;border-radius:15px;display:grid;place-items:center;background:#ff9cde14;border:1px solid #ff9cde33;color:var(--accent);font-size:22px}
+.reviews-list-section{margin-top:24px}
+.reviews-list-vertical{display:grid;gap:12px;margin-top:14px}
+.review-card-vertical{display:grid;gap:9px;width:100%;box-sizing:border-box;padding:18px 20px;border:1px solid var(--line);border-radius:18px;background:linear-gradient(145deg,#ffffff08,#ffffff03);box-shadow:0 10px 28px #0003;transition:transform .2s ease,border-color .2s ease,background .2s ease}
+.review-card-vertical:hover{transform:translateY(-2px);border-color:#ff9cde44;background:#ffffff0b}
+.review-card-top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.review-card-vertical p{margin:0;line-height:1.9;white-space:pre-wrap;word-break:break-word}
+.review-card-vertical small{color:var(--muted)}
+.review-stars{letter-spacing:2px;color:#ffd76a;font-size:14px}
+@keyframes reviewScroll{
+  from{transform:translateX(0)}
+  to{transform:translateX(calc(-50% - 7px))}
+}
+.review-track{animation:reviewScroll 75s linear infinite}
+@media(max-width:700px){
+  .review-card-vertical{padding:15px}
+  .review-card-top{align-items:flex-start}
+}
