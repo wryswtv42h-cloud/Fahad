@@ -3,12 +3,12 @@ require("dotenv").config();
 
 const path = require("path");
 const express = require("express");
-const cors = require("cors");
 const { Client, GatewayIntentBits, EmbedBuilder, ChannelType, PermissionFlagsBits } = require("discord.js");
 const bcrypt = require("bcryptjs");
 const session = require("express-session");
 const pgSession = require("connect-pg-simple")(session);
 const { Pool } = require("pg");
+const helmet = require("helmet");
 
 const token = process.env.DISCORD_BOT_TOKEN;
 const guildId = process.env.DISCORD_GUILD_ID;
@@ -33,11 +33,55 @@ const client = new Client({
 const app = express();
 app.set("trust proxy", 1);
 app.disable("x-powered-by");
-app.use(cors());
+app.use(helmet({contentSecurityPolicy:false,crossOriginEmbedderPolicy:false}));
 app.use(express.json({ limit: "20kb" }));
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-app.use(session({ secret: process.env.SESSION_SECRET || "mld-session-secret", resave: true, saveUninitialized: false, store: new pgSession({ pool, tableName: "user_sessions", createTableIfMissing: true }), cookie: { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", maxAge: 2592000000 } }));
-app.get("/health",(req,res)=>res.status(200).json({ok:true,service:"mld",timestamp:new Date().toISOString()}));
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  max: Number(process.env.DB_POOL_MAX || 20),
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 5000,
+  statement_timeout: 15000,
+  query_timeout: 20000,
+  keepAlive: true
+});
+const sessionSecret = process.env.SESSION_SECRET;
+if (!sessionSecret || (process.env.NODE_ENV === "production" && sessionSecret === "mld-session-secret")) {
+  console.error("A strong SESSION_SECRET is required");
+  process.exit(1);
+}
+app.use(session({
+  name: "mld.sid",
+  secret: sessionSecret,
+  resave: false,
+  rolling: true,
+  saveUninitialized: false,
+  store: new pgSession({ pool, tableName: "user_sessions", createTableIfMissing: true }),
+  cookie: { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", maxAge: 2592000000 }
+}));
+
+const limiterBuckets = new Map();
+function rateLimit(windowMs,max,keyFn){
+  return (req,res,next)=>{
+    const key=keyFn(req);
+    const now=Date.now();
+    let bucket=limiterBuckets.get(key);
+    if(!bucket || now-bucket.startedAt>=windowMs) bucket={startedAt:now,count:0};
+    bucket.count++;
+    limiterBuckets.set(key,bucket);
+    if(bucket.count>max) return res.status(429).json({error:"طلبات كثيرة، حاول بعد قليل"});
+    next();
+  };
+}
+setInterval(()=>{
+  const cutoff=Date.now()-15*60*1000;
+  for(const [k,v] of limiterBuckets) if(v.startedAt<cutoff) limiterBuckets.delete(k);
+},60000).unref();
+
+const authLimiter=rateLimit(10*60*1000,30,req=>"auth:"+req.ip);
+const resetLimiter=rateLimit(15*60*1000,5,req=>"reset:"+req.ip);
+const writeLimiter=rateLimit(60*1000,90,req=>"write:"+((req.session&&req.session.user?.username)||req.ip));
+
+app.get("/health",(req,res)=>res.status(200).json({ok:true,service:"mld",botReady:client.isReady(),membersCached:Boolean(memberSnapshot)}));
 app.use(express.static(path.join(__dirname, "public")));
 
 const leadershipRoleIds = [
@@ -253,7 +297,20 @@ async function initAppDatabase() {
       ('siteName','MLD'),('creatorName','فهد المطيري'),
       ('heroTitle','مجتمع MLD بشكل مختلف.'),('heroSubtitle','أعضاء، رتب، توب، ورسائل خاصة في لوحة فخمة وسريعة تتحدث تلقائيًا.')
       ON CONFLICT (key) DO NOTHING;
-    ALTER TABLE app_users ADD COLUMN IF NOT EXISTS discord_user_id VARCHAR(32);\n    CREATE TABLE IF NOT EXISTS ticket_close_logs (id BIGSERIAL PRIMARY KEY, ticket_id INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE, closed_by VARCHAR(32), transcript JSONB NOT NULL DEFAULT '[]'::jsonb, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());\n    INSERT INTO site_stats(id,visits) VALUES(1,0) ON CONFLICT (id) DO NOTHING;
+    ALTER TABLE app_users ADD COLUMN IF NOT EXISTS discord_user_id VARCHAR(32);\n    CREATE TABLE IF NOT EXISTS ticket_close_logs (id BIGSERIAL PRIMARY KEY, ticket_id INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE, closed_by VARCHAR(32), transcript JSONB NOT NULL DEFAULT '[]'::jsonb, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());\n    CREATE INDEX IF NOT EXISTS tickets_username_idx ON tickets(username,id DESC);
+    CREATE INDEX IF NOT EXISTS ticket_messages_ticket_idx ON ticket_messages(ticket_id,id ASC);
+    CREATE INDEX IF NOT EXISTS applications_username_idx ON applications(username,id DESC);
+    CREATE INDEX IF NOT EXISTS applications_status_idx ON applications(status,id DESC);
+    CREATE INDEX IF NOT EXISTS audit_logs_created_idx ON audit_logs(created_at DESC);
+    CREATE INDEX IF NOT EXISTS audit_logs_action_created_idx ON audit_logs(action,created_at DESC);
+    CREATE INDEX IF NOT EXISTS group_members_username_idx ON group_members(username,group_id);
+    CREATE INDEX IF NOT EXISTS group_join_requests_group_status_idx ON group_join_requests(group_id,status,created_at DESC);
+    CREATE INDEX IF NOT EXISTS community_groups_status_idx ON community_groups(status,id DESC);
+    CREATE INDEX IF NOT EXISTS game_lobbies_status_idx ON game_lobbies(status,created_at DESC);
+    CREATE INDEX IF NOT EXISTS game_scores_rank_idx ON game_scores(guest,wins DESC,points DESC);
+    CREATE INDEX IF NOT EXISTS chat_public_mutes_until_idx ON chat_public_mutes(muted_until);
+    CREATE INDEX IF NOT EXISTS password_resets_active_idx ON password_resets(username,expires_at DESC) WHERE used_at IS NULL;
+    INSERT INTO site_stats(id,visits) VALUES(1,0) ON CONFLICT (id) DO NOTHING;
   `);
 }
 function currentUser(req){ return req.session?.user || null; }
@@ -309,7 +366,7 @@ app.post("/api/site/visit",async(req,res)=>{try{await pool.query("UPDATE site_st
 app.get("/api/site/settings",async(req,res)=>{try{const q=await pool.query("SELECT key,value FROM site_settings");res.json({settings:Object.fromEntries(q.rows.map(x=>[x.key,x.value]))});}catch(e){res.status(500).json({settings:{}});}});
 app.post("/api/owner/settings",requireOwner,async(req,res)=>{try{const allowed=["siteName","heroTitle","heroSubtitle"];for(const key of allowed){const value=String(req.body?.[key]??"").trim();if(value.length>500)return res.status(400).json({error:"إعداد طويل جدًا"});await pool.query("INSERT INTO site_settings(key,value) VALUES($1,$2) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value",[key,value]);}await audit(req.session.user,"site_settings_update","تعديل إعدادات الموقع");res.json({ok:true});}catch(e){console.error("Site settings:",e);res.status(500).json({error:"تعذر حفظ الإعدادات"});}});
 app.get("/api/auth/me",async(req,res)=>{const u=currentUser(req); if(!u) return res.json({authenticated:false,user:null}); const member=await findGuildMemberByUsername(u.discordUsername); if(!member){try{await audit(u,"guild_membership_logout","انتهت عضوية Discord وتم إنهاء الجلسة");}catch{} return req.session.destroy(()=>res.json({authenticated:false,user:null,reason:"guild_membership_required"}));} res.json({authenticated:true,user:{username:u.username,discordUsername:u.discordUsername,role:u.role,isOwner:u.role==="owner",mustChangePassword:!!u.mustChangePassword}});});
-app.post("/api/auth/register",async(req,res)=>{
+app.post("/api/auth/register",authLimiter,async(req,res)=>{
   try{
     const username=String(req.body?.username||"").trim().toLowerCase(), password=String(req.body?.password||""), discordUsername=String(req.body?.discordUsername||"").trim();
     if(!/^[a-z0-9_.-]{3,32}$/.test(username)) return res.status(400).json({error:"اليوزر يجب أن يكون 3-32 حرفًا إنجليزيًا أو أرقامًا"});
@@ -323,7 +380,7 @@ app.post("/api/auth/register",async(req,res)=>{
     req.session.user={username,discordUsername:member.user.username,discordUserId:member.user.id,role:"user"}; await new Promise((resolve,reject)=>req.session.save(err=>err?reject(err):resolve())); await audit(req.session.user,"register","إنشاء حساب").catch(()=>{}); res.json({ok:true,user:req.session.user});
   }catch(e){console.error("Register:",e);res.status(500).json({error:"تعذر إنشاء الحساب"});}
 });
-app.post("/api/auth/login",async(req,res)=>{
+app.post("/api/auth/login",authLimiter,async(req,res)=>{
   try{
     const username=String(req.body?.username||"").trim().toLowerCase(),password=String(req.body?.password||"");
     const q=await pool.query("SELECT username,password_hash,discord_username,discord_user_id,role,banned FROM app_users WHERE username=$1",[username]);
@@ -335,7 +392,7 @@ app.post("/api/auth/login",async(req,res)=>{
     req.session.user={username:r.username,discordUsername:r.discord_username,discordUserId:r.discord_user_id||member.user.id,role:r.role,mustChangePassword:temp}; await pool.query("UPDATE app_users SET last_login_at=NOW(),discord_user_id=$2 WHERE username=$1",[username,r.discord_user_id||member.user.id]); await new Promise((resolve,reject)=>req.session.save(err=>err?reject(err):resolve())); await audit(req.session.user,"login","تسجيل دخول").catch(()=>{}); res.json({ok:true,user:req.session.user});
   }catch(e){console.error("Login:",e);res.status(500).json({error:"تعذر تسجيل الدخول"});}
 });
-app.post("/api/auth/forgot-password",async(req,res)=>{
+app.post("/api/auth/forgot-password",resetLimiter,async(req,res)=>{
   try{
     const username=String(req.body?.username||"").trim().toLowerCase(),discordUsername=String(req.body?.discordUsername||"").trim();
     if(!username||!discordUsername) return res.status(400).json({error:"أدخل اسم الحساب وDiscord username"});
@@ -349,7 +406,7 @@ app.post("/api/auth/forgot-password",async(req,res)=>{
     await audit({username,discordUsername:member.user.username},"password_reset_request","تم إرسال كلمة مرور مؤقتة عبر Discord DM").catch(()=>{}); res.json({ok:true,message:"أرسلنا كلمة مرور مؤقتة إلى الخاص في Discord"});
   }catch(e){ console.error("Forgot password:",e.message); res.status(500).json({error:"تعذر إرسال كلمة المرور المؤقتة؛ تأكد أن الخاص مفتوح"}); }
 });
-app.post("/api/auth/change-password",requireAuth,async(req,res)=>{
+app.post("/api/auth/change-password",requireAuth,writeLimiter,async(req,res)=>{
   try{ const u=req.session.user,newPassword=String(req.body?.newPassword||""); if(newPassword.length<6||newPassword.length>100) return res.status(400).json({error:"كلمة المرور الجديدة يجب أن تكون 6-100 أحرف"}); const hash=await bcrypt.hash(newPassword,12); await pool.query("UPDATE app_users SET password_hash=$2 WHERE username=$1",[u.username]); await pool.query("UPDATE password_resets SET used_at=COALESCE(used_at,NOW()) WHERE username=$1 AND used_at IS NULL",[u.username]); req.session.user.mustChangePassword=false; await new Promise((resolve,reject)=>req.session.save(err=>err?reject(err):resolve())); await audit(u,"password_change","تغيير كلمة المرور").catch(()=>{}); res.json({ok:true}); }
   catch(e){ console.error("Change password:",e.message); res.status(500).json({error:"تعذر تغيير كلمة المرور"}); }
 });
@@ -377,7 +434,7 @@ app.get("/api/tickets/:id/messages",requireAuth,async(req,res)=>{
   const q=await pool.query("SELECT id,username,discord_username,message,created_at FROM ticket_messages WHERE ticket_id=$1 ORDER BY id ASC",[id]);
   res.json({messages:q.rows});
 });
-app.post("/api/tickets",requireAuth,async(req,res)=>{
+app.post("/api/tickets",requireAuth,writeLimiter,async(req,res)=>{
   const subject=String(req.body?.subject||"").trim(),message=String(req.body?.message||"").trim(),u=req.session.user;
   if(subject.length<3||subject.length>120||message.length<3||message.length>3000)return res.status(400).json({error:"بيانات التيكت غير صحيحة"});
   const q=await pool.query("INSERT INTO tickets(username,discord_username,subject,message) VALUES($1,$2,$3,$4) RETURNING id",[u.username,u.discordUsername,subject,message]);
@@ -421,7 +478,7 @@ app.get("/api/owner/tickets/:id/log",requireAdmin,async(req,res)=>{
 app.get("/api/my/applications",requireAuth,async(req,res)=>{const q=await pool.query("SELECT id,type,status,answers,created_at FROM applications WHERE username=$1 ORDER BY id DESC LIMIT 100",[req.session.user.username]);res.json({applications:q.rows});});
 app.get("/api/applications",async(req,res)=>{const q=await pool.query("SELECT type,status,created_at FROM applications ORDER BY id DESC LIMIT 30");res.json({applications:q.rows,public:true,canSubmit:Boolean(currentUser(req))});});
 app.get("/api/application-questions",requireAuth,async(req,res)=>{const q=await pool.query("SELECT id,label,key,type,required,position FROM application_questions WHERE active=true ORDER BY position,id");res.json({questions:q.rows});});
-app.post("/api/applications",requireAuth,async(req,res)=>{const type=String(req.body?.type||"تقديم").trim(),answers=req.body?.answers||{},u=req.session.user;if(type.length>60||JSON.stringify(answers).length>8000)return res.status(400).json({error:"بيانات التقديم غير صحيحة"});const q=await pool.query("INSERT INTO applications(username,discord_username,type,answers) VALUES($1,$2,$3,$4) RETURNING id",[u.username,u.discordUsername,type,JSON.stringify(answers)]);await audit(u,"application_create",`#${q.rows[0].id} ${type}`);res.json({ok:true,id:q.rows[0].id});});
+app.post("/api/applications",requireAuth,writeLimiter,async(req,res)=>{const type=String(req.body?.type||"تقديم").trim(),answers=req.body?.answers||{},u=req.session.user;if(type.length>60||JSON.stringify(answers).length>8000)return res.status(400).json({error:"بيانات التقديم غير صحيحة"});const q=await pool.query("INSERT INTO applications(username,discord_username,type,answers) VALUES($1,$2,$3,$4) RETURNING id",[u.username,u.discordUsername,type,JSON.stringify(answers)]);await audit(u,"application_create",`#${q.rows[0].id} ${type}`);res.json({ok:true,id:q.rows[0].id});});
 async function findGuildMemberByDiscordUsername(value){
   const wanted=String(value||"").trim().toLowerCase(); if(!wanted)return null;
   const guild=await getGuild(),members=await getAllMembers(guild);
@@ -868,7 +925,6 @@ app.post("/api/games/:id/action",async(req,res)=>{
   res.json({ok:true,state:publicGameState(g.game,up.rows[0].state,actor),status:up.rows[0].status,players:up.rows[0].players.map(p=>({username:p.username,guest:!!p.guest,host:!!p.host,seat:p.seat||null,seatLabel:p.seatLabel||null}))});
 });
 app.get("/api/games/top",async(req,res)=>{try{const q=await pool.query("SELECT username,discord_username,wins,points FROM game_scores WHERE guest=false ORDER BY wins DESC,points DESC LIMIT 50");res.json({top:q.rows});}catch(e){res.json({top:[]});}});
-app.get("/api/games/top",async(req,res)=>{try{const q=await pool.query("SELECT username,discord_username,wins,points FROM game_scores WHERE guest=false ORDER BY wins DESC,points DESC LIMIT 50");res.json({top:q.rows});}catch(e){res.json({top:[]});}});
 app.post("/api/games/:id/score",requireAuth,async(req,res)=>{const points=Math.max(1,Math.min(100,Number(req.body?.points)||10)),u=req.session.user;await pool.query("INSERT INTO game_scores(username,discord_username,wins,points,guest) VALUES($1,$2,1,$3,false) ON CONFLICT(username) DO UPDATE SET wins=game_scores.wins+1,points=game_scores.points+$3,discord_username=EXCLUDED.discord_username",[u.username,u.discordUsername,points]);await audit(u,"game_win",`#${req.params.id} +${points}`);res.json({ok:true});});
 setInterval(async()=>{try{await pool.query("DELETE FROM game_lobbies WHERE status IN ('waiting','ready') AND created_at < NOW() - make_interval(mins => 5)")}catch(e){console.error("game cleanup:",e.message)}},30000);
 
@@ -1099,7 +1155,7 @@ app.get("/api/chat/blocks",requireAuth,async(req,res)=>{const u=req.session.user
 app.post("/api/chat/blocks/:username",requireAuth,async(req,res)=>{const u=req.session.user.username,t=String(req.params.username||"").trim().toLowerCase();if(!t||t===u)return res.status(400).json({error:"المستخدم غير صالح"});if(!(await chatUser(t)))return res.status(404).json({error:"المستخدم غير موجود"});await pool.query("INSERT INTO chat_blocks(blocker_username,blocked_username) VALUES($1,$2) ON CONFLICT DO NOTHING",[u,t]);res.json({ok:true});});
 app.delete("/api/chat/blocks/:username",requireAuth,async(req,res)=>{await pool.query("DELETE FROM chat_blocks WHERE blocker_username=$1 AND blocked_username=$2",[req.session.user.username,String(req.params.username).toLowerCase()]);res.json({ok:true});});
 app.get("/api/chat/public",requireAuth,async(req,res)=>{const l=Math.min(Math.max(Number(req.query.limit)||40,1),80),before=Number(req.query.before)||0,q=await pool.query("SELECT m.*,p.display_name,p.avatar_url,u.role FROM chat_messages m JOIN app_users u ON u.username=m.sender_username LEFT JOIN chat_profiles p ON p.username=m.sender_username WHERE m.scope='public'"+(before?" AND m.id < $2":"")+" ORDER BY m.id DESC LIMIT $1",before?[l,before]:[l]);res.json({messages:q.rows.reverse().map(chatMsg),nextBefore:q.rows.length?Number(q.rows[0].id):null})});
-app.post("/api/chat/public",requireAuth,async(req,res)=>{const u=req.session.user.username,b=chatClean(req.body?.body,2000);if(!b)return res.status(400).json({error:"اكتب رسالة أولًا"});if(!chatRate(u))return res.status(429).json({error:"أرسلت رسائل كثيرة، انتظر قليلًا"});const m=await pool.query("SELECT muted_until FROM chat_public_mutes WHERE username=$1",[u]);if(m.rowCount&&(!m.rows[0].muted_until||new Date(m.rows[0].muted_until)>new Date()))return res.status(403).json({error:"أنت مكتوم من الشات العام"});const q=await pool.query("INSERT INTO chat_messages(scope,sender_username,body) VALUES('public',$1,$2) RETURNING *",[u,b]);res.json({ok:true,message:chatMsg({...q.rows[0],...(await chatUser(u))})})});
+app.post("/api/chat/public",requireAuth,writeLimiter,async(req,res)=>{const u=req.session.user.username,b=chatClean(req.body?.body,2000);if(!b)return res.status(400).json({error:"اكتب رسالة أولًا"});if(!chatRate(u))return res.status(429).json({error:"أرسلت رسائل كثيرة، انتظر قليلًا"});const m=await pool.query("SELECT muted_until FROM chat_public_mutes WHERE username=$1",[u]);if(m.rowCount&&(!m.rows[0].muted_until||new Date(m.rows[0].muted_until)>new Date()))return res.status(403).json({error:"أنت مكتوم من الشات العام"});const q=await pool.query("INSERT INTO chat_messages(scope,sender_username,body) VALUES('public',$1,$2) RETURNING *",[u,b]);res.json({ok:true,message:chatMsg({...q.rows[0],...(await chatUser(u))})})});
 app.post("/api/chat/public/mute/:username",requireOwner,async(req,res)=>{const t=String(req.params.username||"").toLowerCase(),min=Math.min(Math.max(Number(req.body?.minutes)||0,0),10080),reason=chatClean(req.body?.reason,240),until=min?new Date(Date.now()+min*60000):null;if(!t||t===req.session.user.username)return res.status(400).json({error:"المستخدم غير صالح"});if(!(await chatUser(t)))return res.status(404).json({error:"المستخدم غير موجود"});await pool.query("INSERT INTO chat_public_mutes(username,muted_by,reason,muted_until) VALUES($1,$2,$3,$4) ON CONFLICT(username) DO UPDATE SET muted_by=EXCLUDED.muted_by,reason=EXCLUDED.reason,muted_until=EXCLUDED.muted_until",[t,req.session.user.username,reason,until]);await audit(req.session.user,"chat_mute",t);res.json({ok:true})});
 app.delete("/api/chat/public/mute/:username",requireOwner,async(req,res)=>{const t=String(req.params.username||"").toLowerCase();await pool.query("DELETE FROM chat_public_mutes WHERE username=$1",[t]);await audit(req.session.user,"chat_unmute",t);res.json({ok:true})});
 app.get("/api/chat/conversations",requireAuth,async(req,res)=>{const u=req.session.user.username,q=await pool.query("SELECT c.id,c.kind,c.owner_username,c.title,c.updated_at,(SELECT body FROM chat_messages m WHERE m.conversation_id=c.id AND m.deleted_at IS NULL ORDER BY m.id DESC LIMIT 1) last_message,(SELECT COUNT(*) FROM chat_messages m WHERE m.conversation_id=c.id AND m.id>p.last_read_message_id AND m.sender_username<>$1 AND m.deleted_at IS NULL) unread FROM chat_conversations c JOIN chat_participants p ON p.conversation_id=c.id AND p.username=$1 WHERE c.kind IN ('dm','private_group') ORDER BY c.updated_at DESC LIMIT 100",[u]);res.json({conversations:q.rows.map(x=>({...x,id:Number(x.id),unread:Number(x.unread)}))})});
@@ -1118,7 +1174,7 @@ const id=Number(req.params.id),u=req.session.user.username,t=String(req.params.u
 const r=await pool.query("DELETE FROM chat_participants WHERE conversation_id=$1 AND username=$2 RETURNING username",[id,t]); if(!r.rowCount)return res.status(404).json({error:"العضو غير موجود في المحادثة"}); await audit(req.session.user,"chat_participant_remove","conversation #"+id+" - "+t); res.json({ok:true});
 });
 app.get("/api/chat/conversations/:id/messages",requireAuth,async(req,res)=>{const id=Number(req.params.id),u=req.session.user.username,p=await pool.query("SELECT 1 FROM chat_participants WHERE conversation_id=$1 AND username=$2",[id,u]);if(!p.rowCount)return res.status(403).json({error:"لا تملك صلاحية هذه المحادثة"});const l=Math.min(Math.max(Number(req.query.limit)||50,1),100),before=Number(req.query.before)||0,q=await pool.query("SELECT m.*,p.display_name,p.avatar_url,u.role FROM chat_messages m JOIN app_users u ON u.username=m.sender_username LEFT JOIN chat_profiles p ON p.username=m.sender_username WHERE m.conversation_id=$1"+(before?" AND m.id < $3":"")+" ORDER BY m.id DESC LIMIT $2",before?[id,l,before]:[id,l]);await pool.query("UPDATE chat_participants SET last_read_message_id=COALESCE((SELECT MAX(id) FROM chat_messages WHERE conversation_id=$1),0) WHERE conversation_id=$1 AND username=$2",[id,u]);res.json({messages:q.rows.reverse().map(chatMsg),nextBefore:q.rows.length?Number(q.rows[0].id):null})});
-app.post("/api/chat/conversations/:id/messages",requireAuth,async(req,res)=>{const id=Number(req.params.id),u=req.session.user.username,b=chatClean(req.body?.body,2000),p=await pool.query("SELECT 1 FROM chat_participants WHERE conversation_id=$1 AND username=$2",[id,u]);if(!p.rowCount)return res.status(403).json({error:"لا تملك صلاحية هذه المحادثة"});const blocked=await pool.query("SELECT 1 FROM chat_participants a JOIN chat_participants b ON a.conversation_id=b.conversation_id JOIN chat_blocks bl ON ((bl.blocker_username=a.username AND bl.blocked_username=b.username) OR (bl.blocker_username=b.username AND bl.blocked_username=a.username)) WHERE a.conversation_id=$1 LIMIT 1",[id]);if(blocked.rowCount)return res.status(403).json({error:"المحادثة تحتوي على مستخدم محظور"});if(!b)return res.status(400).json({error:"اكتب رسالة أولًا"});if(!chatRate(u))return res.status(429).json({error:"أرسلت رسائل كثيرة، انتظر قليلًا"});const q=await pool.query("INSERT INTO chat_messages(conversation_id,scope,sender_username,body) VALUES($1,'private',$2,$3) RETURNING *",[id,u,b]);await pool.query("UPDATE chat_conversations SET updated_at=NOW() WHERE id=$1",[id]);await audit(req.session.user,"zajel_private_message","conversation #"+id+" · "+b);res.json({ok:true,message:chatMsg({...q.rows[0],...(await chatUser(u))})})});
+app.post("/api/chat/conversations/:id/messages",requireAuth,writeLimiter,async(req,res)=>{const id=Number(req.params.id),u=req.session.user.username,b=chatClean(req.body?.body,2000),p=await pool.query("SELECT 1 FROM chat_participants WHERE conversation_id=$1 AND username=$2",[id,u]);if(!p.rowCount)return res.status(403).json({error:"لا تملك صلاحية هذه المحادثة"});const blocked=await pool.query("SELECT 1 FROM chat_participants a JOIN chat_participants b ON a.conversation_id=b.conversation_id JOIN chat_blocks bl ON ((bl.blocker_username=a.username AND bl.blocked_username=b.username) OR (bl.blocker_username=b.username AND bl.blocked_username=a.username)) WHERE a.conversation_id=$1 LIMIT 1",[id]);if(blocked.rowCount)return res.status(403).json({error:"المحادثة تحتوي على مستخدم محظور"});if(!b)return res.status(400).json({error:"اكتب رسالة أولًا"});if(!chatRate(u))return res.status(429).json({error:"أرسلت رسائل كثيرة، انتظر قليلًا"});const q=await pool.query("INSERT INTO chat_messages(conversation_id,scope,sender_username,body) VALUES($1,'private',$2,$3) RETURNING *",[id,u,b]);await pool.query("UPDATE chat_conversations SET updated_at=NOW() WHERE id=$1",[id]);await audit(req.session.user,"zajel_private_message","conversation #"+id+" · "+b);res.json({ok:true,message:chatMsg({...q.rows[0],...(await chatUser(u))})})});
 app.post("/api/chat/conversations/:id/read",requireAuth,async(req,res)=>{const id=Number(req.params.id),u=req.session.user.username;await pool.query("UPDATE chat_participants SET last_read_message_id=COALESCE((SELECT MAX(id) FROM chat_messages WHERE conversation_id=$1),0) WHERE conversation_id=$1 AND username=$2",[id,u]);res.json({ok:true})});
 app.post("/api/chat/conversations/:id/leave",requireAuth,async(req,res)=>{const id=Number(req.params.id),u=req.session.user.username,c=await pool.query("SELECT owner_username,kind FROM chat_conversations WHERE id=$1",[id]);if(!c.rowCount)return res.status(404).json({error:"غير موجود"});if(c.rows[0].owner_username===u&&c.rows[0].kind==="private_group")return res.status(400).json({error:"مالك المحادثة لا يمكنه الخروج"});await pool.query("DELETE FROM chat_participants WHERE conversation_id=$1 AND username=$2",[id,u]);res.json({ok:true})});
 
