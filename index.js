@@ -882,7 +882,13 @@ function initBalootState(players,dealerIndex=0,matchScores){const deck=makeDeck3
 function finishBalootTrick(state,players){const winner=balootWinner(state),points=(state.trick||[]).reduce((n,x)=>n+balootPoints(x.card,state.trump),0)+(state.trickHistory.length===7?10:0),team=winner%2;state.handPoints[team]=(state.handPoints[team]||0)+points;state.trickHistory.push({cards:state.trick,winner});state.trick=[];state.turnPlayerIndex=winner;if(state.trickHistory.length>=8){state.teamScores=[(state.teamScores[0]||0)+(state.handPoints[0]||0),(state.teamScores[1]||0)+(state.handPoints[1]||0)];const a=state.teamScores[0],b=state.teamScores[1];if(a>=152||b>=152){state.winner=a===b?"تعادل — جولة فاصلة":(a>b?"الفريق A":"الفريق B");state.phase="finished"}else Object.assign(state,initBalootState(players,(state.dealerIndex+1)%4,state.teamScores))}}
 function playerKey(p){return p?.guestId?("g:"+p.guestId):("u:"+String(p?.username||"").toLowerCase());}
 function actorFromRequest(players,u,guestId){return u?players.find(p=>!p.bot&&p.username===u.username):players.find(p=>!p.bot&&p.guestId===guestId);}
-function seatOptions(game,max){return (GAME_SEATS[game]||[]).slice(0,Math.max(2,Math.min(max,8)));}
+function seatOptions(game,max){
+ const base=GAME_SEATS[game]||[];
+ const n=Math.max(2,Math.min(Number(max)||4,8));
+ const out=base.slice(0,n);
+ while(out.length<n)out.push("مقعد "+(out.length+1));
+ return out;
+}
 function makePlayerSecret(game,player,state){
   const key=playerKey(player);
   const secret=state.playerSecrets?.[key]||{};
