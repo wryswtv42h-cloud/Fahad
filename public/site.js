@@ -351,8 +351,10 @@ async function renderGames(){
         let action="";
         if(spectator) action="<p class='muted'>وضع مشاهدة — لا يمكنك تنفيذ حركات.</p>";
         else if(g.status!=="playing"){
-          const seatOptions=seatNames[g.game]||[];
-          action="<p class='muted'>اختر مقعدك ثم انتظر اكتمال اللاعبين.</p><div class='game-lobby-actions'>"+seatOptions.map((x,i)=>"<button data-game-seat='"+i+"'>"+escGame(x)+"</button>").join("")+"</div>";
+          const seatOptions=(seatNames[g.game]||[]).slice(0,Number(g.max_players)||4);
+          while(seatOptions.length<(Number(g.max_players)||4))seatOptions.push("مقعد "+(seatOptions.length+1));
+          const minPlayers=Math.max(2,Number(g.min_players)||2),need=Math.max(0,minPlayers-players.length);
+          action="<p class='muted'>اختر مقعدك ثم انتظر اكتمال الحد الأدنى للاعبين. "+(need?"باقي "+need+" لاعب.":"الجلسة جاهزة.")+"</p><div class='game-lobby-actions'>"+seatOptions.map((x,i)=>"<button data-game-seat='"+i+"'>"+escGame(x)+"</button>").join("")+"</div>";
           if(active?.host)action+="<button class='primary wide' id='game-start' "+(g.status!=="ready"?"disabled":"")+">ابدأ اللعبة</button>";
         }else{
           if(g.game==="CODENAMES"){
