@@ -255,3 +255,70 @@ applyView=async function(){
   const my=await fetch("/api/my/applications").then(r=>r.json()).catch(()=>({applications:[]}));$("#my-applications").innerHTML=(my.applications||[]).map(a=>"<div class='log-item'><b>#"+a.id+" · "+esc(a.type)+"</b><small>"+new Date(a.created_at).toLocaleString("ar-SA")+" · "+esc(a.status)+"</small></div>").join("")||"<p class='muted'>ما عندك تقديمات.</p>";
   $("#app-send").onclick=async()=>{const answers={};document.querySelectorAll(".app-q").forEach(x=>answers[x.dataset.q]=x.value.trim());const rr=await fetch("/api/applications",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({type:"إدارة",answers})}),dd=await rr.json();$("#app-status").textContent=rr.ok?"تم إرسال التقديم ✓":(dd.error||"تعذر الإرسال");if(rr.ok)applyView()};
 };
+
+// FINAL MLD ROUTER — single source of truth
+window.change=async function(v){
+  view=v;
+  mobile.classList.remove("open");
+  searchWrap.style.display=v==="members"?"flex":"none";
+  try{
+    if(v==="home"){await homeView();return}
+    if(v==="members"){await refresh();return}
+    if(v==="roles"){await refresh();return}
+    if(v==="top"){title.textContent="لوحة TOP";subtitle.textContent="إحصائيات المجتمع والألعاب.";await renderTop(await fetch("/api/public/top").then(r=>r.json()));setStatus("TOP جاهز");return}
+    if(v==="chat"){await mldChatView("public");return}
+    if(v==="private-chat"){await mldChatView("private");return}
+    if(v==="profile"){await mldChatProfile();return}
+    if(v==="message"){await messageView();return}
+    if(v==="games"){await renderGames();return}
+    if(v==="groups"){await groupsReal();return}
+    if(v==="account"){await mldMe();if(!mldUser)return authView();await renderAccount();return}
+    if(v==="tickets"){await mldMe();await ticketView();return}
+    if(v==="apply"){await applyView();return}
+    if(v==="login"){authView();return}
+    if(v==="reviews"){await reviewsView();return}
+    if(v==="logs"){await ownerLogs();return}
+    if(v==="admin"){await mldMe();if(mldUser?.role==="owner")await ownerPanel();else if(mldUser?.role==="admin")await adminPanel();else authView();return}
+    if(v==="owner"){await ownerPanel();return}
+    if(v==="blocks"){await mldChatBlocks();return}
+    await oldFinalChange(v);
+  }catch(e){
+    console.error("MLD route error:",v,e);
+    setStatus("تعذر فتح القائمة حاليًا");
+  }finally{
+    document.body.classList.remove("mld-booting");
+  }
+};
+
+// FINAL MLD AUTH/NAV VISIBILITY
+window.updateAuthBar=function(){
+  const el=$("#auth-bar"); if(!el)return;
+  document.querySelectorAll("[data-admin-nav]").forEach(x=>x.remove());
+  const role=mldUser?.role||"";
+  const isAdmin=role==="admin"||role==="owner";
+  const isOwner=role==="owner";
+  document.querySelectorAll('[data-view="login"]').forEach(x=>x.style.display=mldUser?"none":"");
+  document.querySelectorAll('[data-view="tickets"]').forEach(x=>x.style.display=isAdmin?"":"none");
+  document.querySelectorAll("#logs-nav,#logs-nav-mobile").forEach(x=>x.style.display=isOwner?"":"none");
+  el.innerHTML=mldUser
+    ? '<div class="auth-chip">مرحبًا <b>'+esc(mldUser.username)+'</b> · Discord: <b>'+esc(mldUser.discordUsername)+'</b> · '+(isOwner?"👑 أونر":isAdmin?"🛡️ إدارة":"👤 عضو")+' <button id="logout-btn" type="button">خروج</button></div>'
+    : '<div class="auth-chip">غير مسجل · <button data-view="login" type="button">تسجيل الدخول</button></div>';
+  const addNav=(host,mobileMode)=>{
+    if(!host)return;
+    const before=host.querySelector(".invite")||null;
+    if(isOwner){
+      const b=document.createElement("button");b.type="button";b.dataset.adminNav="1";b.dataset.view="owner";b.textContent="👑 الأونر";b.onclick=()=>window.change("owner");host.insertBefore(b,before);
+    }else if(role==="admin"){
+      const b=document.createElement("button");b.type="button";b.dataset.adminNav="1";b.dataset.view="admin";b.textContent="🛡️ الإدارة";b.onclick=()=>window.change("admin");host.insertBefore(b,before);
+    }
+  };
+  addNav(document.querySelector(".desktop-nav"),false);
+  addNav(document.querySelector("#mobile-menu"),true);
+  const out=$("#logout-btn");
+  if(out)out.onclick=async()=>{await fetch("/api/auth/logout",{method:"POST"});mldUser=null;updateAuthBar();window.change("home")};
+  if(mldUser?.mustChangePassword) setTimeout(()=>window.change("password"),0);
+};
+
+// INITIAL BOOT: never show the old static homepage before the new one is ready
+document.body.classList.add("mld-booting");
+mldMe().then(()=>window.change("home")).catch(()=>window.change("home"));
