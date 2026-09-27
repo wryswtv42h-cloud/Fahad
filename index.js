@@ -1248,7 +1248,7 @@ client.on("interactionCreate", async (interaction) => {
     await pool.query("UPDATE registration_verifications SET used_at=NOW() WHERE id=$1",[id]);
     await audit({username:v.username,discordUsername:v.discord_username},"register_confirmed","تم تأكيد إنشاء الحساب من زر Discord").catch(()=>{});
     await interaction.update({content:"✅ تم إنشاء حساب MLD بنجاح.",embeds:[],components:[]});
-    await interaction.followUp({content:"بيانات حسابك:\nاسم المستخدم: "+v.username+"\nDiscord: "+v.discord_username+"\nكلمة المرور: هي كلمة المرور التي اخترتها في الموقع (لا نخزنها كنص).\n\nتقدر الآن تسجل الدخول من الموقع.",ephemeral:true});
+    await interaction.user.send({content:"بيانات حسابك في MLD:\nاسم المستخدم: **"+v.username+"**\nDiscord: **"+v.discord_username+"**\nكلمة المرور: هي كلمة المرور التي اخترتها في الموقع، ولا يمكنني إظهارها أو استعادتها كنص.\n\nتقدر الآن تسجل الدخول من الموقع."}).catch(()=>{});
   }catch(e){console.error("Registration button:",e.message);if(!interaction.replied&&!interaction.deferred) await interaction.reply({content:"تعذر تنفيذ الطلب، حاول مرة أخرى.",ephemeral:true});}
 });
 client.on("guildMemberAdd", invalidateMemberSnapshot);
