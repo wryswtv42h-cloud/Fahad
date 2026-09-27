@@ -851,6 +851,15 @@ function publicGameState(game,state,actor){
     if(secret.prompt)out.prompt=secret.prompt;
     out.playerRole=actor?.seatLabel||"لاعب";
     out.privateInfo=secret.privateInfo||null;
+    if(game==="BALOOT"||game==="UNO"){
+      const idx=actor?(state.playersOrder||[]).indexOf(playerKey(actor)):-1;
+      const playerIndex=idx>=0?idx:(actor&&Array.isArray(state.playerKeys)?state.playerKeys.indexOf(playerKey(actor)):-1);
+      delete out.hands;
+      if(Array.isArray(state.hands)){
+        const fallbackIndex=actor&&Array.isArray(state.hands)&&state.hands.length===1?0:-1;
+        out.hand=Array.isArray(state.hands[playerIndex>=0?playerIndex:fallbackIndex])?state.hands[playerIndex>=0?playerIndex:fallbackIndex]:[];
+      }else out.hand=[];
+    }
   }
   return out;
 }
@@ -945,7 +954,7 @@ app.post("/api/games/:id/start",async(req,res)=>{
     state.playerSecrets[key]={prompt:engine.prompt||state.prompt||"ابدأ الجولة.",privateInfo:state.playerRoles[key]};
   });
   if(g.game==="CODENAMES")state.turn="red";
-  else if(g.game==="BALOOT"||g.game==="UNO")state.turnPlayerIndex=0;
+  else if(g.game==="BALOOT"||g.game==="UNO"){state.turnPlayerIndex=0;state.playerKeys=players.map(playerKey);}
   else state.turnPlayerKey=playerKey(players[0]);
   const updated=await pool.query("UPDATE game_lobbies SET status='playing',state=$1 WHERE id=$2 RETURNING id,game,host_username,host_discord_username,max_players,players,status,created_at",[JSON.stringify(state),g.id]);
   if(u)await audit(u,"game_start","session "+g.id+" "+g.game+" players="+players.length);
