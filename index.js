@@ -1199,6 +1199,21 @@ app.get("/api/public/member/:id", async (req, res) => {
   }
 });
 
+app.post("/api/admin/message",requireAdmin,async (req,res) => {
+  const now=Date.now(), ip=req.ip||"unknown", last=sendHits.get("admin:"+ip)||0, u=req.session.user;
+  if(now-last<10_000)return res.status(429).json({error:"انتظر 10 ثواني قبل الإرسال مرة أخرى"});
+  const title=String(req.body?.title||"رسالة من إدارة MLD").trim(), text=String(req.body?.message||"").trim(), targetId=String(req.body?.memberId||"").trim();
+  if(!targetId||!text||text.length>2000||title.length>120)return res.status(400).json({error:"بيانات الرسالة غير صحيحة"});
+  try{
+    const member=await (await getGuild()).members.fetch(targetId).catch(()=>null);
+    if(!member)return res.status(404).json({error:"العضو غير موجود"});
+    const embed=new EmbedBuilder().setTitle(title).setDescription("من إدارة MLD\n\n"+text).setColor("#ff9cdc").setFooter({text:"MLD Community"}).setTimestamp();
+    await member.send({embeds:[embed]}); sendHits.set("admin:"+ip,now);
+    await audit(u,"admin_dm_send","إلى Discord ID "+targetId+" · "+title);
+    res.json({ok:true});
+  }catch(error){console.error("Admin DM endpoint:",error);res.status(500).json({error:"تعذر الإرسال؛ قد يكون الخاص مقفلًا"});}
+});
+
 app.post("/api/public/message",requireAuth,async (req,res) => {
   const now = Date.now(), ip = req.ip || "unknown", last = sendHits.get(ip) || 0, u=req.session.user;
   if (now-last<10_000)return res.status(429).json({error:"انتظر 10 ثواني قبل الإرسال مرة أخرى"});
