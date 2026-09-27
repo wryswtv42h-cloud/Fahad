@@ -1202,7 +1202,7 @@ app.get("/api/public/member/:id", async (req, res) => {
 app.post("/api/public/message",requireAuth,async (req,res) => {
   const now = Date.now(), ip = req.ip || "unknown", last = sendHits.get(ip) || 0, u=req.session.user;
   if (now-last<10_000)return res.status(429).json({error:"انتظر 10 ثواني قبل الإرسال مرة أخرى"});
-  const title=String(req.body?.title||"رسالة من إدارة MLD").trim(), text=String(req.body?.message||"").trim(), targetId=String(req.body?.memberId||"").trim();
+  const title=String(req.body?.title||"رسالة من إدارة MLD").trim(), text=String(req.body?.message||"").trim(), targetId=String(req.body?.memberId||"").trim(), senderMode=req.body?.senderMode==="show"?"show":"hide";
   if(!targetId||!text||text.length>2000||title.length>120)return res.status(400).json({error:"بيانات الرسالة غير صحيحة"});
   try{
     const member=await (await getGuild()).members.fetch(targetId).catch(()=>null);
