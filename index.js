@@ -341,13 +341,6 @@ async function initAppDatabase() {
     ALTER TABLE community_groups ADD COLUMN IF NOT EXISTS name VARCHAR(60) DEFAULT 'قروب';
     ALTER TABLE community_groups ADD COLUMN IF NOT EXISTS description VARCHAR(240) NOT NULL DEFAULT '';
     ALTER TABLE community_groups ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'pending';
-    DO $ DECLARE t text; BEGIN
-      FOREACH t IN ARRAY ARRAY['group_members','group_join_requests','community_groups','applications','tickets','reviews'] LOOP
-        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name=t AND column_name='user_id') THEN
-          EXECUTE format('ALTER TABLE %I ALTER COLUMN user_id DROP NOT NULL', t);
-        END IF;
-      END LOOP;
-    END $;
     CREATE INDEX IF NOT EXISTS tickets_username_idx ON tickets(username,id DESC);
     CREATE INDEX IF NOT EXISTS ticket_messages_ticket_idx ON ticket_messages(ticket_id,id ASC);
     CREATE INDEX IF NOT EXISTS applications_username_idx ON applications(username,id DESC);
@@ -362,6 +355,11 @@ async function initAppDatabase() {
     CREATE INDEX IF NOT EXISTS chat_public_mutes_until_idx ON chat_public_mutes(muted_until);
     CREATE INDEX IF NOT EXISTS password_resets_active_idx ON password_resets(username,expires_at DESC) WHERE used_at IS NULL;
     INSERT INTO site_stats(id,visits) VALUES(1,0) ON CONFLICT (id) DO NOTHING;
+  `);
+  for (const table of ["group_members","group_join_requests","community_groups","applications","tickets","reviews"]) {
+    const legacy = await pool.query("SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name=$1 AND column_name='user_id'", [table]);
+    if (legacy.rowCount) await pool.query(`ALTER TABLE "${table}" ALTER COLUMN user_id DROP NOT NULL`);
+  
   `);
 }
 function currentUser(req){ return req.session?.user || null; }
