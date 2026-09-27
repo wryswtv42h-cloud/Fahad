@@ -39,6 +39,11 @@ test("four-player card lobby isolates each player's hand", async ({ request }) =
   }
   const started=await request.post(BASE+"/api/games/"+id+"/start",{data:payload(0)});
   expect(started.ok()).toBeTruthy();
+  const startBody=await started.json();
+  expect(startBody.game.state).toBeUndefined();
+  expect(startBody.state.hands).toBeUndefined();
+  expect(startBody.state.hand).toBeTruthy();
+  expect(startBody.state.hand.length).toBe(8);
   const states=[];
   for(let i=0;i<4;i++){
     const r=await request.get(BASE+"/api/games/"+id+"/state?guestId="+encodeURIComponent(ids[i]));
