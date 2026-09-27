@@ -3,16 +3,21 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+
 jobs:
   browser:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+
       - run: npm install
+
       - run: npx playwright install --with-deps chromium
+
       - name: Wait for Railway deployment
         run: |
           for i in {1..30}; do
@@ -25,17 +30,23 @@ jobs:
           done
           echo "Timed out waiting for the new Railway deployment"
           exit 1
+
       - name: JavaScript syntax check
         run: |
           node --check public/site.js > syntax-check.txt 2>&1 || true
           cat syntax-check.txt
-      - run: npx playwright test tests/site.spec.js --reporter=html,line
-      - name: Upload Playwright report
+
+      - name: Playwright smoke tests
+        run: npx playwright test tests/site.spec.js --reporter=html,line
+        env:
+          BASE_URL: https://discord-community-platform-production-9348.up.railway.app
+
+      - name: Upload Playwright diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
-          path: |\n            playwright-report/\n            syntax-check.txt
+          path: |
+            playwright-report/
+            syntax-check.txt
           if-no-files-found: warn
-        env:
-          BASE_URL: https://discord-community-platform-production-9348.up.railway.app
