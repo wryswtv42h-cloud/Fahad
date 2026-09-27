@@ -663,12 +663,13 @@ app.get("/api/owner/chat/conversations",requireOwner,async(req,res)=>{const q=aw
 app.get("/api/owner/chat/conversations/:id",requireOwner,async(req,res)=>{const q=await pool.query("SELECT m.id,m.sender_username,m.body,m.created_at,COALESCE(p.display_name,m.sender_username) display_name FROM chat_messages m LEFT JOIN chat_profiles p ON p.username=m.sender_username WHERE m.conversation_id=$1 ORDER BY m.id ASC LIMIT 500",[Number(req.params.id)]);res.json({messages:q.rows});});
 app.get("/api/owner/logs",requireOwner,async(req,res)=>{const q=await pool.query("SELECT id,username,discord_username,action,details,created_at FROM audit_logs ORDER BY created_at DESC LIMIT 300");res.json({logs:q.rows});});
 app.get("/api/owner/logs/zajel",requireOwner,async(req,res)=>{try{
-  const q=await pool.query("SELECT id,username,discord_username,action,details,created_at FROM audit_logs WHERE action IN ('dm_send','admin_dm_send') ORDER BY created_at DESC LIMIT 500");
+  const q=await pool.query("SELECT id,username,discord_username,action,details,created_at FROM audit_logs WHERE action IN ('dm_send','admin_dm_send','zajel_private_message') ORDER BY created_at DESC LIMIT 500");
   const logs=q.rows.map(x=>{
     const details=String(x.details||"");
-    const recipient=(details.match(/إلى Discord ID ([0-9]+)/)||[])[1]||"غير محدد";
-    const body=(details.match(/النص: ([\\s\\S]*)$/)||[])[1]||details;
-    return {...x,recipient,body};
+    const recipient=(details.match(/إلى Discord ID ([0-9]+)/)||[])[1]||((details.match(/(?:إلى|المستلم)\\s+([^·]+)/)||[])[1]||"غير محدد").trim();
+    const body=(details.match(/النص: ([\\s\\S]*)$/)||[])[1]||((details.match(/conversation #[0-9]+ · ([\\s\\S]*)$/)||[])[1]||"");
+    const type=x.action==="zajel_private_message"?"رسالة زاجل داخلية":"رسالة زاجل عبر Discord";
+    return {...x,recipient,body,type};
   });
   res.json({logs});
 }catch(e){console.error("Zajel logs:",e);res.status(500).json({error:"تعذر تحميل لوق الزاجل"});}});
