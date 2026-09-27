@@ -284,6 +284,31 @@ async function renderGames(){
 }
 function renderGroups(){ return groupsReal(); }
 
+
+// MLD NAVIGATION POLICY
+function mldNavButton(view,label,extra=""){
+  return '<button type="button" data-view="'+view+'" data-admin-nav="1" '+extra+'>'+label+'</button>';
+}
+function rebuildMobileMenu(){
+  const menu=$("#mobile-menu"); if(!menu)return;
+  const role=mldUser?.role||"";
+  const isAdmin=role==="admin"||role==="owner";
+  const isOwner=role==="owner";
+  const base=[
+    ["home","الرئيسية"],["members","الأعضاء"],["top","TOP"],["roles","الرتب القيادية"],
+    ["chat","الشات العام"],["private-chat","المحادثات الخاصة"],["profile","بروفايلي"],
+    ["games","الألعاب"],["groups","القروبات"],["account","حسابي"],["tickets","التذاكر"],
+    ["apply","التقديم"],["reviews","الآراء"]
+  ];
+  let html=base.map(x=>'<button type="button" data-view="'+x[0]+'">'+x[1]+'</button>').join("");
+  if(!mldUser) html+='<button type="button" data-view="login">تسجيل الدخول</button>';
+  if(mldUser) html+='<button type="button" data-view="logout">تسجيل الخروج</button>';
+  if(isAdmin) html+='<button type="button" data-view="admin">🛡️ الإدارة</button>';
+  if(isOwner) html+='<button type="button" data-view="owner">👑 لوحة الأونر</button>';
+  menu.innerHTML=html+'<a id="invite-mobile" class="invite" target="_blank">انضم للسيرفر</a>';
+  document.querySelectorAll("#mobile-menu [data-view]").forEach(b=>b.onclick=()=>change(b.dataset.view));
+}
+
 // FINAL MLD ROUTER — single source of truth
 window.change=async function(v){
   view=v;
@@ -340,8 +365,13 @@ window.updateAuthBar=function(){
       const b=document.createElement("button");b.type="button";b.dataset.adminNav="1";b.dataset.view="admin";b.textContent="🛡️ الإدارة";b.onclick=()=>window.change("admin");host.insertBefore(b,before);
     }
   };
-  addNav(document.querySelector(".desktop-nav"),false);
-  addNav(document.querySelector("#mobile-menu"),true);
+  rebuildMobileMenu();
+  const desktop=document.querySelector(".desktop-nav");
+  if(desktop){
+    desktop.querySelectorAll('[data-view="logs"],[data-view="owner"],[data-view="admin"]').forEach(x=>x.remove());
+    if(isOwner){const b=document.createElement("button");b.type="button";b.dataset.view="owner";b.textContent="👑 الأونر";b.onclick=()=>change("owner");desktop.insertBefore(b,desktop.querySelector(".invite"))}
+    else if(role==="admin"){const b=document.createElement("button");b.type="button";b.dataset.view="admin";b.textContent="🛡️ الإدارة";b.onclick=()=>change("admin");desktop.insertBefore(b,desktop.querySelector(".invite"))}
+  }
   const out=$("#logout-btn");
   if(out)out.onclick=async()=>{await fetch("/api/auth/logout",{method:"POST"});mldUser=null;updateAuthBar();window.change("home")};
   if(mldUser?.mustChangePassword) setTimeout(()=>window.change("password"),0);
