@@ -20,3 +20,42 @@ test("mobile menu opens, navigates, and closes", async ({ page }) => {
   await expect(page.locator("#mobile-menu")).not.toHaveClass(/open/);
   await expect(page.locator("#view-title")).toContainText("الأعضاء");
 });
+
+test("four-player card lobby isolates each player's hand", async ({ request }) => {
+  const ids = Array.from({length:4},(_,i)=>"e2e_"+Date.now()+"_"+i+"_"+Math.random().toString(36).slice(2,8));
+  const payload=i=>({guestId:ids[i],guestName:"E2E"+(i+1)});
+  const created=await request.post(BASE+"/api/games",{data:{game:"BALOOT",maxPlayers:4,...payload(0)}});
+  expect(created.ok()).toBeTruthy();
+  const lobby=(await created.json()).game;
+  const id=lobby.id;
+  for(let i=1;i<4;i++){
+    const r=await request.post(BASE+"/api/games/"+id+"/join",{data:payload(i)});
+    expect(r.ok()).toBeTruthy();
+  }
+  const seats=["فريق A - 1","فريق A - 2","فريق B - 1","فريق B - 2"];
+  for(let i=0;i<4;i++){
+    const r=await request.post(BASE+"/api/games/"+id+"/seat",{data:{...payload(i),seat:seats[i]}});
+    expect(r.ok()).toBeTruthy();
+  }
+  const started=await request.post(BASE+"/api/games/"+id+"/start",{data:payload(0)});
+  expect(started.ok()).toBeTruthy();
+  const states=[];
+  for(let i=0;i<4;i++){
+    const r=await request.get(BASE+"/api/games/"+id+"/state?guestId="+encodeURIComponent(ids[i]));
+    expect(r.ok()).toBeTruthy();
+    states.push((await r.json()).state);
+  }
+  for(const s of states){
+    expect(s.hand).toBeTruthy();
+    expect(s.hand.length).toBe(8);
+    expect(s.hands).toBeUndefined();
+    expect(s.playerSecrets).toBeUndefined();
+  }
+  const firstIds=states[0].hand.map(c=>c.id);
+  const secondIds=states[1].hand.map(c=>c.id);
+  expect(firstIds.some(x=>secondIds.includes(x))).toBeFalsy();
+  const spectator=await request.get(BASE+"/api/games/"+id+"/watch");
+  expect(spectator.ok()).toBeTruthy();
+  const finished=await request.post(BASE+"/api/games/"+id+"/finish",{data:payload(0)});
+  expect(finished.ok()).toBeTruthy();
+});
