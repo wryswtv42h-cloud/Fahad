@@ -914,7 +914,6 @@ function publicGameState(game,state,actor){
       out.legalTokens=idx>=0?(state.legalTokens||[]):[];
       out.dice=state.dice;out.awaitingMove=!!state.awaitingMove;
     }
-    }
   }
   return out;
 }
