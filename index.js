@@ -316,7 +316,17 @@ async function initAppDatabase() {
       ('heroTitle','مجتمع MLD بشكل مختلف.'),('heroSubtitle','أعضاء، رتب، توب، ورسائل خاصة في لوحة فخمة وسريعة تتحدث تلقائيًا.')
       ON CONFLICT (key) DO NOTHING;
     ALTER TABLE app_users ADD COLUMN IF NOT EXISTS discord_user_id VARCHAR(32);
-    CREATE TABLE IF NOT EXISTS ticket_close_logs (id BIGSERIAL PRIMARY KEY, ticket_id INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE, closed_by VARCHAR(32), transcript JSONB NOT NULL DEFAULT '[]'::jsonb, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());\n    CREATE INDEX IF NOT EXISTS tickets_username_idx ON tickets(username,id DESC);
+    CREATE TABLE IF NOT EXISTS ticket_close_logs (id BIGSERIAL PRIMARY KEY, ticket_id INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE, closed_by VARCHAR(32), transcript JSONB NOT NULL DEFAULT '[]'::jsonb, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());\n    ALTER TABLE tickets ADD COLUMN IF NOT EXISTS username VARCHAR(32);
+    ALTER TABLE tickets ADD COLUMN IF NOT EXISTS discord_username VARCHAR(100);
+    ALTER TABLE applications ADD COLUMN IF NOT EXISTS username VARCHAR(32);
+    ALTER TABLE applications ADD COLUMN IF NOT EXISTS discord_username VARCHAR(100);
+    ALTER TABLE community_groups ADD COLUMN IF NOT EXISTS username VARCHAR(32);
+    ALTER TABLE community_groups ADD COLUMN IF NOT EXISTS discord_username VARCHAR(100);
+    ALTER TABLE game_scores ADD COLUMN IF NOT EXISTS username VARCHAR(32);
+    ALTER TABLE game_scores ADD COLUMN IF NOT EXISTS discord_username VARCHAR(100);
+    ALTER TABLE reviews ADD COLUMN IF NOT EXISTS username VARCHAR(32);
+    ALTER TABLE reviews ADD COLUMN IF NOT EXISTS discord_username VARCHAR(100);
+    CREATE INDEX IF NOT EXISTS tickets_username_idx ON tickets(username,id DESC);
     CREATE INDEX IF NOT EXISTS ticket_messages_ticket_idx ON ticket_messages(ticket_id,id ASC);
     CREATE INDEX IF NOT EXISTS applications_username_idx ON applications(username,id DESC);
     CREATE INDEX IF NOT EXISTS applications_status_idx ON applications(status,id DESC);
