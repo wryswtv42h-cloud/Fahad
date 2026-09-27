@@ -33,7 +33,8 @@ jobs:
 
       - name: JavaScript syntax check
         run: |
-          node --check public/site.js > syntax-check.txt 2>&1
+          node --check index.js > syntax-check.txt 2>&1
+          node --check public/site.js >> syntax-check.txt 2>&1
           cat syntax-check.txt
 
       - name: Playwright smoke tests
