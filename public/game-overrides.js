@@ -38,7 +38,7 @@
         const g=d.game,s=d.state||{},players=g.players||[];
         const me=players.find(p=>window.mldUser?p.username===window.mldUser.username:p.guestId===guestId);
         const myIndex=players.findIndex(p=>window.mldUser?p.username===window.mldUser.username:p.guestId===guestId);
-        const current=Number(s.turnPlayerIndex);
+        const current=Number(s.turnPlayerIndex ?? s.turnIndex);
         const roomMeta=meta[g.game]||["◆","default"];
         const occupied=new Set(players.map(p=>p.seat).filter(Boolean));
         const mySeat=me?.seat||"";
@@ -51,6 +51,34 @@
           controls="<div class='game-result'><strong>انتهت اللعبة</strong><span>"+esc(s.winner)+"</span></div>";
         } else if(spectator){
           controls="<div class='game-spectator'>وضع المشاهدة — لا توجد لك يد أو دور خاص.</div>";
+        } else if(s.version>=4 && g.game==="CODENAMES"){
+          const role=s.playerRole||"spectator",mineClue=role.endsWith("spymaster"),mineGuess=role.endsWith("agent");
+          controls="<div class='game-phase-banner'>"+esc(role)+" · فريق "+esc(s.team||"—")+"</div>";
+          if(s.clue)controls+="<div class='game-prompt'>التلميح: <b>"+esc(s.clue.word)+"</b> · "+esc(s.clue.number)+"</div>";
+          controls+="<div class='codenames-board'>"+(s.words||[]).map((w,i)=>"<button class='code-word "+(w.revealed?"revealed":"")+"' data-eg-guess='"+i+"' "+(!mineGuess||w.revealed||!s.clue?"disabled":"")+">"+esc(w.word)+"</button>").join("")+"</div>";
+          if(mineClue)controls+="<div class='game-control-row'><input id='eg-clue' class='full' maxlength='30' placeholder='كلمة واحدة للتلميح'><input id='eg-clue-num' type='number' min='1' max='9' value='1'><button class='primary' data-eg-action='clue'>إعطاء التلميح</button></div>";
+          if(mineGuess&&s.clue)controls+="<button class='ghost' data-eg-action='endTurn'>إنهاء الدور</button>";
+        } else if(s.version>=4 && g.game==="SPYFALL"){
+          const p=s.private||{},mine=myIndex===current;
+          controls="<div class='game-private-card'><b>"+(p.spy?"🕵️ أنت الجاسوس":"📍 أنت لست الجاسوس")+"</b>"+(p.location?"<span>الموقع: "+esc(p.location)+"</span>":"")+(p.role?"<span>الدور: "+esc(p.role)+"</span>":"")+"</div>";
+          if(s.lastQuestion)controls+="<div class='game-prompt'><b>السؤال:</b> "+esc(s.lastQuestion.text)+"</div>"+(s.lastAnswer?"<div class='game-prompt'><b>الجواب:</b> "+esc(s.lastAnswer)+"</div>":"");
+          if(p.spy)controls+="<div class='game-control-row'><input id='eg-spy-location' class='full' placeholder='إذا عرفت الموقع اكتبه هنا'><button class='primary' data-eg-action='spyGuess'>كشف الموقع</button></div>";
+          if(mine)controls+="<div class='game-control-row'><select id='eg-spy-target' class='full'>"+players.map((x,i)=>i===myIndex?"":("<option value='"+i+"'>اسأل "+esc(x.username||"لاعب")+"</option>")).join("")+"</select><input id='eg-spy-q' class='full' maxlength='200' placeholder='اكتب سؤالك'><button class='primary' data-eg-action='question'>إرسال السؤال</button></div>";
+          if(s.lastQuestion&&s.lastQuestion.to===myIndex)controls+="<div class='game-control-row'><input id='eg-spy-a' class='full' maxlength='250' placeholder='اكتب إجابتك'><button class='primary' data-eg-action='answer'>إجابة</button></div>";
+          controls+="<div class='game-choice-grid'>"+players.map((x,i)=>"<button data-eg-action='accuse' data-eg-target='"+i+"'>اتهام "+esc(x.username||"لاعب")+"</button>").join("")+"</div>";
+        } else if(s.version>=4 && (g.game==="PICTIONARY"||g.game==="DRAW_GUESS"||g.game==="CHARADES"||g.game==="MIMIC"||g.game==="WHOAMI"||g.game==="SECRET_WORD")){
+          const secret=s.private?.secret||"",mine=myIndex===current;
+          controls="<div class='game-private-card'>"+(secret?"🔒 المعلومة الخاصة لهذا الجهاز: <b>"+esc(secret)+"</b>":"لا توجد معلومة خاصة لهذا الدور.")+"</div><div class='game-prompt'>"+esc(s.prompt||"ابدأ الجولة")+"</div><div class='game-control-row'><input id='eg-answer' class='full' placeholder='اكتب التخمين'><button class='primary' data-eg-action='submit'>إرسال التخمين</button></div>";
+        } else if(s.version>=4 && g.game==="TABOO"){
+          const p=s.private||{};controls="<div class='game-private-card'>الكلمة: <b>"+esc(p.secret||"—")+"</b><span>ممنوع: "+esc((p.taboo||[]).join(" · "))+"</span></div><div class='game-control-row'><input id='eg-taboo' class='full' maxlength='240' placeholder='اكتب التلميح'><button class='primary' data-eg-action='submit'>إرسال التلميح</button></div>";
+        } else if(s.version>=4 && (g.game==="TRIVIA"||g.game==="EMOJI_GUESS"||g.game==="HOT_SEAT"||g.game==="WOULD_YOU_RATHER"||g.game==="GUESS_PLAYER")){
+          controls="<div class='game-prompt'>"+esc(s.prompt||"اختر")+"</div><div class='game-choice-grid'>"+(s.choices||[]).map((x,i)=>"<button data-eg-choice='"+i+"'>"+esc(x)+"</button>").join("")+"</div>";
+        } else if(s.version>=4 && (g.game==="WORD_BOMB"||g.game==="CATEGORIES"||g.game==="FASTEST"||g.game==="RIDDLE_RUSH")){
+          controls="<div class='game-phase-banner'>"+esc(s.prompt||"")+(s.letter?" · الحرف: <b>"+esc(s.letter)+"</b>":"")+"</div><div class='game-control-row'><input id='eg-answer' class='full' maxlength='120' placeholder='اكتب الإجابة'><button class='primary' data-eg-action='submit'>إرسال</button></div>";
+        } else if(s.version>=4 && g.game==="DAQSH"){
+          controls="<div class='game-phase-banner'>"+(s.signal?"⚡ اضغط الآن!":"انتظر الإشارة...")+"</div><button class='primary wide' data-eg-action='daqsh' "+(!s.signal?"disabled":"")+">دقش ⚡</button>";
+        } else if(s.version>=4 && g.game==="QAWSAR"){
+          controls="<div class='game-private-card'>يدك الخاصة</div><div class='game-hand'>"+(s.private?.hand||[]).map((x,i)=>"<button class='game-card-button' data-eg-card='"+i+"'><span>"+esc(x)+"</span></button>").join("")+"</div>";
         } else if(g.game==="BALOOT"){
           const mine=myIndex===current;
           if(s.phase==="bidding") controls="<div class='game-phase-banner'>"+(mine?"دورك في الشراء":"انتظر شراء اللاعبين")+" · الجولة "+esc(s.bidRound||1)+"</div><div class='game-bid-actions'><button data-eg-action='bid' data-bid='pass'>بس</button><button data-eg-action='bid' data-bid='sun'>صن</button>"+["♠","♥","♦","♣"].map(x=>"<button data-eg-action='bid' data-bid='hokum' data-suit='"+x+"'>حكم "+x+"</button>").join("")+"</div>";
@@ -73,8 +101,20 @@
         document.querySelectorAll("[data-eg-choice]").forEach(b=>b.onclick=()=>act("choose",{choice:Number(b.dataset.egChoice)}));
         document.querySelectorAll("[data-eg-guess]").forEach(b=>b.onclick=()=>act("guess",{index:Number(b.dataset.egGuess)}));
         document.querySelectorAll("[data-eg-token]").forEach(b=>b.onclick=()=>act("moveToken",{token:Number(b.dataset.egToken)}));
-        document.querySelectorAll("[data-eg-action]").forEach(b=>b.onclick=()=>act(b.dataset.egAction,{bid:b.dataset.bid,suit:b.dataset.suit}));
+        document.querySelectorAll("[data-eg-action]").forEach(b=>b.onclick=()=>{
+          const a=b.dataset.egAction;
+          const extra={bid:b.dataset.bid,suit:b.dataset.suit,target:b.dataset.egTarget};
+          if(a==="clue"){extra.word=$("#eg-clue")?.value.trim();extra.number=Number($("#eg-clue-num")?.value)||1}
+          if(a==="question"){extra.target=Number($("#eg-spy-target")?.value);extra.text=$("#eg-spy-q")?.value.trim()}
+          if(a==="answer"&&$("#eg-spy-a"))extra.text=$("#eg-spy-a").value.trim();
+          if(a==="spyGuess")extra.location=$("#eg-spy-location")?.value.trim();
+          if(a==="submit")extra.text=($("#eg-taboo")?.value||$("#eg-answer")?.value||"").trim();
+          act(a,extra)
+        });
         document.querySelectorAll("[data-game-card]").forEach(b=>b.onclick=()=>act("playCard",{index:Number(b.dataset.gameCard)}));
+        document.querySelectorAll("[data-eg-card]").forEach(b=>b.onclick=()=>act("playCard",{index:Number(b.dataset.egCard)}));
+        document.querySelectorAll("[data-eg-choice]").forEach(b=>b.onclick=()=>act("choose",{choice:Number(b.dataset.egChoice)}));
+        document.querySelectorAll("[data-eg-guess]").forEach(b=>b.onclick=()=>act("guess",{index:Number(b.dataset.egGuess)}));
       }catch(e){clearActive();content.innerHTML="<section class='game-room'><h3>انتهت الجلسة</h3><p class='muted'>"+esc(e.message)+"</p><button class='primary' id='eg-dead-back'>العودة للألعاب</button></section>";$("#eg-dead-back").onclick=goList}
     };
     const act=async(action,extra={})=>{const body={...payload(),action,...extra};if(action==="clue"){body.word=$("#eg-clue")?.value.trim();body.number=Number($("#eg-clue-num")?.value)||1}if(action==="answer")body.answer=$("#eg-answer")?.value.trim()||"";try{await api("/api/games/"+id+"/action",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});sound(action==="playCard"?"card":"click");await render()}catch(e){const x=$(".game-board-status");if(x)x.textContent=e.message;sound("error")}};
