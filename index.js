@@ -1045,6 +1045,13 @@ app.post("/api/games/:id/leave",async(req,res)=>{
   if(i<0)return res.status(403).json({error:"أنت لست داخل هذه الجلسة"});
   if(g.status==="finished"||g.status==="closed")return res.json({ok:true,closed:true});
   const wasHost=!!players[i]?.host;
+  if(g.status==="playing"){
+    const human=players[i], bot={...human,username:"بوت "+(human.username||"لاعب"),discordUsername:"بوت",guestId:null,guest:false,bot:true,host:false};
+    players[i]=bot;
+    await pool.query("UPDATE game_lobbies SET players=$1 WHERE id=$2",[JSON.stringify(players),g.id]);
+    if(u)await audit(u,"game_leave","session "+g.id+" · replaced_by_bot");
+    return res.json({ok:true,closed:false,replacedByBot:true});
+  }
   players.splice(i,1);
   if(players.length===0){
     await pool.query("UPDATE game_lobbies SET status='closed',players='[]'::jsonb WHERE id=$1",[g.id]);
@@ -1061,25 +1068,25 @@ app.post("/api/games/:id/leave",async(req,res)=>{
   res.json({ok:true,closed:false});
 });
 app.get("/api/games/:id/state",async(req,res)=>{
-  // Finished games remain viewable for five minutes as a results room.
-  if(row?.status==="finished"){
-    const endedAt=Date.parse(row.state?.endedAt||row.updated_at||row.updatedAt||0)||0;
-    if(endedAt && Date.now()-endedAt>GAME_RESULT_TTL_MS){
-      await pool.query("DELETE FROM game_lobbies WHERE id=$1",[row.id]);
-      return res.status(404).json({error:"انتهت جلسة اللعبة"});
-    }
-  }
-
   const u=currentUser(req),guestId=String(req.query?.guestId||"").trim();
   const q=await pool.query("SELECT id,game,players,status,state FROM game_lobbies WHERE id=$1",[req.params.id]);
   if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة"});
   const row=q.rows[0],players=Array.isArray(row.players)?row.players:[],actor=actorFromRequest(players,u,guestId);
-  if(row.status==="finished"||row.status==="closed")return res.status(410).json({error:"انتهت الجلسة وتم إغلاقها",closed:true});
+  if(row.status==="finished"){
+    const endedAt=Date.parse(row.state?.endedAt||row.state?.finishedAt||"")||0;
+    if(endedAt && Date.now()-endedAt>GAME_RESULT_TTL_MS){
+      await pool.query("DELETE FROM game_lobbies WHERE id=$1",[row.id]);
+      return res.status(404).json({error:"انتهت جلسة اللعبة"});
+    }
+    return res.json({game:{...row,players:players.map(p=>({username:p.username,guest:!!p.guest,host:!!p.host,seat:p.seat||null,seatLabel:p.seatLabel||null})),minPlayers:GAME_MIN_PLAYERS[row.game]||2},state:publicGameState(row.game,row.state,actor),results:true,expiresAt:new Date(endedAt+GAME_RESULT_TTL_MS).toISOString()});
+  }
+  if(row.status==="closed")return res.status(410).json({error:"انتهت الجلسة وتم إغلاقها",closed:true});
   let state=row.state&&Object.keys(row.state).length?row.state:null;
   if(row.status==="playing"&&!state){state=makeGameState(row.game);}
   if(row.status==="playing"){
     if(state.version>=4){ state.__players=players.map(p=>({username:p.username,guest:!!p.guest,bot:!!p.bot,guestId:p.guestId,seat:p.seat,seatLabel:p.seatLabel,host:!!p.host})); state=GAME_ENGINE_V4.bot(row.game,state,players); }
     else state=simulateBotTurns(row.game,players,state);
+    if(state.winner&&!state.endedAt)state.endedAt=new Date().toISOString();
     await pool.query("UPDATE game_lobbies SET state=$1,status=$2 WHERE id=$3",[JSON.stringify(state),state.winner?"finished":"playing",row.id]);
   }
   const publicPlayers=players.map(p=>({username:p.username,guest:!!p.guest,host:!!p.host,seat:p.seat||null,seatLabel:p.seatLabel||null}));
@@ -1097,6 +1104,7 @@ app.post("/api/games/:id/action",async(req,res)=>{
       state.__players=players.map(p=>({username:p.username,guest:!!p.guest,bot:!!p.bot,guestId:p.guestId,seat:p.seat,seatLabel:p.seatLabel,host:!!p.host}));
       GAME_ENGINE_V4.apply(g.game,state,players,actor,action,req.body||{});
       const finished=!!state.winner;
+      if(finished)state.endedAt=new Date().toISOString();
       const up=await pool.query("UPDATE game_lobbies SET state=$1,status=$2 WHERE id=$3 RETURNING state,status,players",[JSON.stringify(state),finished?"finished":"playing",g.id]);
       return res.json({ok:true,state:publicGameState(g.game,up.rows[0].state,actor),status:up.rows[0].status,players:up.rows[0].players.map(p=>({username:p.username,guest:!!p.guest,host:!!p.host,seat:p.seat||null,seatLabel:p.seatLabel||null}))});
     }catch(e){return res.status(400).json({error:e.message||"الحركة غير صحيحة"});}
