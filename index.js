@@ -1144,7 +1144,7 @@ app.get("/api/public/members", async (req, res) => {
         })
       : allMembers;
 
-    const resultLimit=Math.min(Number(req.query.limit) || (cleanQuery ? 8 : 5), 8);
+    const resultLimit=cleanQuery ? Math.min(Number(req.query.limit) || 8, 8) : filtered.length;
     const ranked=[...filtered].sort((a,b)=>{
       const aq=String(a.user.username||"").toLocaleLowerCase("ar"), bq=String(b.user.username||"").toLocaleLowerCase("ar");
       const as=aq===cleanQuery?0:aq.startsWith(cleanQuery)?1:2, bs=bq===cleanQuery?0:bq.startsWith(cleanQuery)?1:2;
