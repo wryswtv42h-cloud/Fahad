@@ -356,9 +356,15 @@ async function initAppDatabase() {
     CREATE INDEX IF NOT EXISTS password_resets_active_idx ON password_resets(username,expires_at DESC) WHERE used_at IS NULL;
     INSERT INTO site_stats(id,visits) VALUES(1,0) ON CONFLICT (id) DO NOTHING;
   `);
-  for (const table of ["group_members","group_join_requests","community_groups","applications","tickets","reviews"]) {
+  // Repair very old schemas where user_id was incorrectly used as the primary key.
+  for (const table of ["group_members","group_join_requests","community_groups"]) {
     const legacy = await pool.query("SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name=$1 AND column_name='user_id'", [table]);
-    if (legacy.rowCount) await pool.query(`ALTER TABLE "${table}" ALTER COLUMN user_id DROP NOT NULL`);
+    if (legacy.rowCount) {
+      await pool.query(`ALTER TABLE "${table}" DROP CONSTRAINT IF EXISTS "${table}_pkey"`);
+      await pool.query(`ALTER TABLE "${table}" ADD COLUMN IF NOT EXISTS id SERIAL`);
+      await pool.query(`ALTER TABLE "${table}" ADD PRIMARY KEY (id)`);
+      await pool.query(`ALTER TABLE "${table}" ALTER COLUMN user_id DROP NOT NULL`);
+    }
   }
 }
 function currentUser(req){ return req.session?.user || null; }
