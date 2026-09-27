@@ -304,21 +304,25 @@ async function initAppDatabase() {
     CREATE TABLE IF NOT EXISTS game_lobbies (id SERIAL PRIMARY KEY, game VARCHAR(30) NOT NULL, host_username VARCHAR(32) NOT NULL, host_discord_username VARCHAR(100) NOT NULL, max_players INTEGER NOT NULL DEFAULT 4, players JSONB NOT NULL DEFAULT '[]'::jsonb, status VARCHAR(20) NOT NULL DEFAULT 'waiting', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
     ALTER TABLE game_lobbies ADD COLUMN IF NOT EXISTS state JSONB NOT NULL DEFAULT '{}'::jsonb;
     ALTER TABLE community_groups ADD COLUMN IF NOT EXISTS group_conversation_id BIGINT; ALTER TABLE community_groups ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'pending'; ALTER TABLE community_groups ADD COLUMN IF NOT EXISTS discord_role_id VARCHAR(32); ALTER TABLE community_groups ADD COLUMN IF NOT EXISTS discord_channel_id VARCHAR(32);
-    CREATE TABLE IF NOT EXISTS reviews (id SERIAL PRIMARY KEY, username VARCHAR(32) NOT NULL, discord_username VARCHAR(100) NOT NULL, rating INTEGER NOT NULL DEFAULT 5, message VARCHAR(1000) NOT NULL, status VARCHAR(20) NOT NULL DEFAULT 'visible', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
-    ALTER TABLE reviews ADD COLUMN IF NOT EXISTS is_demo BOOLEAN NOT NULL DEFAULT false;
+    CREATE TABLE IF NOT EXISTS reviews (id SERIAL PRIMARY KEY, username VARCHAR(32) NOT NULL DEFAULT 'زائر مجهول', discord_username VARCHAR(100) NOT NULL DEFAULT 'غير مسجل', rating INTEGER NOT NULL DEFAULT 5, message VARCHAR(1000) NOT NULL DEFAULT '', status VARCHAR(20) NOT NULL DEFAULT 'visible', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
     ALTER TABLE reviews ADD COLUMN IF NOT EXISTS username VARCHAR(32);
     ALTER TABLE reviews ADD COLUMN IF NOT EXISTS discord_username VARCHAR(100);
     ALTER TABLE reviews ADD COLUMN IF NOT EXISTS rating INTEGER NOT NULL DEFAULT 5;
-    ALTER TABLE reviews ADD COLUMN IF NOT EXISTS is_demo BOOLEAN NOT NULL DEFAULT false;
-    INSERT INTO reviews(username,discord_username,rating,message,is_demo,status)
-    SELECT 'زائر مجهول','غير مسجل',r.rating,r.message,true,'visible'
-    FROM (VALUES
-      (5,'التصميم مرتب وسريع، خصوصًا من الجوال.'),(5,'واجهة جميلة والتنقل بين الأقسام واضح.'),(4,'الألعاب فكرة ممتازة، وأتمنى إضافة ألعاب أكثر.'),(5,'الأعضاء والمعلومات تظهر بشكل مرتب.'),(4,'تجربة الشات سهلة وواضحة.'),(5,'يعجبني أن الموقع يجمع أكثر من خدمة في مكان واحد.'),(5,'الصفحات تفتح بسرعة والتصميم مريح.'),(4,'فكرة القروبات ممتازة للمجتمع.'),(5,'قسم الآراء نفسه سهل الاستخدام.'),(5,'التجربة على الجوال ممتازة.'),(4,'الألعاب تعطي الموقع جو مختلف.'),(5,'التصميم فخم وبسيط بنفس الوقت.'),(5,'التنقل بين الصفحات واضح جدًا.'),(4,'أحببت فكرة الرسائل الخاصة.'),(5,'الموقع مرتب من أول دخول.'),(5,'الأعضاء والرتب معروضة بشكل جميل.'),(4,'واجهة الألعاب واضحة.'),(5,'الدعم والتذاكر مرتبة.'),(5,'تجربة المستخدم عمومًا ممتازة.'),(4,'الستايل مناسب لمجتمع ديسكورد.'),(5,'الموقع خفيف وما فيه تعقيد.'),(5,'فكرة مشاهدة جلسات الألعاب حلوة.'),(4,'أعجبني ترتيب الأقسام.'),(5,'إضافة الرأي سهلة وسريعة.'),(5,'التصميم على الشاشة الصغيرة ممتاز.'),(4,'قسم القروبات مفيد للمجتمع.'),(5,'الشات مرتب وسهل القراءة.'),(5,'فكرة الأونر والإدارة واضحة.'),(4,'الألعاب تحتاج وقت للتجربة لكن الفكرة جميلة.'),(5,'الموقع يعطي إحساس منصة مجتمع متكاملة.'),(5,'الواجهة نظيفة وواضحة.'),(4,'أحببت عرض الأعضاء والرتب.'),(5,'التجربة العامة سلسة.'),(5,'ميزة الرسائل الخاصة مفيدة.'),(4,'واجهة الجوال ممتازة.'),(5,'أقسام الموقع كثيرة ومترابطة.'),(5,'فكرة الألعاب داخل المجتمع ممتازة.'),(4,'الموقع مناسب للمجتمعات الكبيرة.'),(5,'التصميم جميل وسهل الاستخدام.')
-    ) AS r(rating,message)
-    WHERE NOT EXISTS (SELECT 1 FROM reviews WHERE is_demo=true);
     ALTER TABLE reviews ADD COLUMN IF NOT EXISTS message TEXT;
     ALTER TABLE reviews ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'visible';
     ALTER TABLE reviews ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+    ALTER TABLE reviews ADD COLUMN IF NOT EXISTS is_demo BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE reviews ALTER COLUMN text DROP NOT NULL;
+    UPDATE reviews SET message=COALESCE(NULLIF(message,''),text,'رأي قديم') WHERE message IS NULL OR message='';
+    UPDATE reviews SET username=COALESCE(NULLIF(username,''),'زائر مجهول'),discord_username=COALESCE(NULLIF(discord_username,''),'غير مسجل'),rating=GREATEST(1,LEAST(5,COALESCE(rating,5))),status=COALESCE(NULLIF(status,''),'visible') WHERE username IS NULL OR discord_username IS NULL OR rating IS NULL OR status IS NULL;
+    INSERT INTO reviews(username,discord_username,rating,message,text,is_demo,status)
+    SELECT 'زائر مجهول #'||gs::text,'غير مسجل',1+floor(random()*5)::int,
+      (ARRAY['التصميم مرتب وسهل الاستخدام من أول دخول.','تجربة الجوال ممتازة والتنقل واضح.','قسم الألعاب ممتع وفكرته جميلة.','الأعضاء والرتب معروضة بشكل مرتب.','الشات سريع وواضح في الاستخدام.','القروبات فكرة حلوة للمجتمع.','واجهة الموقع نظيفة ومريحة للعين.','أعجبني ترتيب الصفحات وسهولة الوصول لها.','الرسائل الخاصة إضافة مفيدة للمجتمع.','قسم الآراء نفسه بسيط وسريع.','تجربة الموقع على الشاشة الصغيرة ممتازة.','فكرة جلسات الألعاب جميلة جدًا.','التصميم يعطي إحساس منصة مجتمع متكاملة.','التذاكر مرتبة وسهلة المتابعة.','عرض الأعضاء والبيانات واضح.','الموقع خفيف وسلس في التصفح.','تنظيم الأقسام ممتاز.','واجهة الألعاب واضحة للمستخدم.','فكرة الزاجل والرسائل مميزة.','التجربة العامة مرتبة وممتعة.'])[1+floor(random()*20)::int],
+      (ARRAY['التصميم مرتب وسهل الاستخدام من أول دخول.','تجربة الجوال ممتازة والتنقل واضح.','قسم الألعاب ممتع وفكرته جميلة.','الأعضاء والرتب معروضة بشكل مرتب.','الشات سريع وواضح في الاستخدام.','القروبات فكرة حلوة للمجتمع.','واجهة الموقع نظيفة ومريحة للعين.','أعجبني ترتيب الصفحات وسهولة الوصول لها.','الرسائل الخاصة إضافة مفيدة للمجتمع.','قسم الآراء نفسه بسيط وسريع.','تجربة الموقع على الشاشة الصغيرة ممتازة.','فكرة جلسات الألعاب جميلة جدًا.','التصميم يعطي إحساس منصة مجتمع متكاملة.','التذاكر مرتبة وسهلة المتابعة.','عرض الأعضاء والبيانات واضح.','الموقع خفيف وسلس في التصفح.','تنظيم الأقسام ممتاز.','واجهة الألعاب واضحة للمستخدم.','فكرة الزاجل والرسائل مميزة.','التجربة العامة مرتبة وممتعة.'])[1+floor(random()*20)::int],
+      true,'visible'
+    FROM generate_series(1,196) gs
+    WHERE (SELECT COUNT(*) FROM reviews WHERE is_demo=true) < 196
+      AND gs <= 196-(SELECT COUNT(*) FROM reviews WHERE is_demo=true);
     CREATE TABLE IF NOT EXISTS announcements (id SERIAL PRIMARY KEY, text VARCHAR(300) NOT NULL, link TEXT DEFAULT '', active BOOLEAN NOT NULL DEFAULT true, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
     CREATE TABLE IF NOT EXISTS site_stats (id INTEGER PRIMARY KEY DEFAULT 1, visits BIGINT NOT NULL DEFAULT 0, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
     CREATE TABLE IF NOT EXISTS site_settings (key VARCHAR(80) PRIMARY KEY, value TEXT NOT NULL DEFAULT '');
@@ -758,7 +762,7 @@ app.delete("/api/owner/reviews/:id",requireOwner,async(req,res)=>{const id=Numbe
 app.delete("/api/owner/games/:id",requireOwner,async(req,res)=>{const id=Number(req.params.id);const q=await pool.query("DELETE FROM game_lobbies WHERE id=$1 RETURNING id",[id]);if(!q.rowCount)return res.status(404).json({error:"جلسة اللعبة غير موجودة"});await audit(req.session.user,"game_delete","#"+id);res.json({ok:true});});
 app.post("/api/owner/games/:id/finish",requireOwner,async(req,res)=>{const id=Number(req.params.id);const q=await pool.query("UPDATE game_lobbies SET status='finished',state=COALESCE(state,'{}'::jsonb)||jsonb_build_object('finishedAt',NOW()::text,'ownerFinished',true) WHERE id=$1 RETURNING id,status",[id]);if(!q.rowCount)return res.status(404).json({error:"جلسة اللعبة غير موجودة"});await audit(req.session.user,"game_finish_owner","#"+id);res.json({ok:true,game:q.rows[0]});});
 app.get("/api/reviews",async(req,res)=>{const q=await pool.query("SELECT id,username,rating,message,is_demo,created_at FROM reviews WHERE status='visible' ORDER BY id DESC LIMIT 100");res.set("Cache-Control","no-store");res.json({reviews:q.rows});});
-app.post("/api/reviews",async(req,res)=>{const u=req.session.user||null,message=String(req.body?.message||"").trim(),rating=Math.max(1,Math.min(5,Number(req.body?.rating)||5));if(message.length<3||message.length>1000)return res.status(400).json({error:"الرأي يجب أن يكون بين 3 و1000 حرف"});const username=u?.username||"زائر",discordUsername=u?.discordUsername||"غير مسجل";const q=await pool.query("INSERT INTO reviews(username,discord_username,rating,message) VALUES($1,$2,$3,$4) RETURNING id",[username,discordUsername,rating,message]);if(u)await audit(u,"review_create",`#${q.rows[0].id}`);res.json({ok:true,id:q.rows[0].id});});
+app.post("/api/reviews",async(req,res)=>{const u=req.session.user||null,message=String(req.body?.message||"").trim(),rating=Math.max(1,Math.min(5,Number(req.body?.rating)||5));if(message.length<3||message.length>1000)return res.status(400).json({error:"الرأي يجب أن يكون بين 3 و1000 حرف"});const username=u?.username||"زائر",discordUsername=u?.discordUsername||"غير مسجل";const q=await pool.query("INSERT INTO reviews(username,discord_username,rating,message,text,is_demo) VALUES($1,$2,$3,$4,$4,false) RETURNING id",[username,discordUsername,rating,message]);if(u)await audit(u,"review_create",`#${q.rows[0].id}`);res.json({ok:true,id:q.rows[0].id});});
 app.get("/api/announcements",async(req,res)=>{const q=await pool.query("SELECT id,text,link FROM announcements WHERE active=true ORDER BY id DESC LIMIT 5");res.json({announcements:q.rows});});
 app.post("/api/owner/users/:id/ban",requireOwner,async(req,res)=>{const banned=!!req.body?.banned,id=Number(req.params.id);const q=await pool.query("UPDATE app_users SET banned=$1 WHERE id=$2 AND role<>$3 RETURNING id,username,banned",[banned,id,"owner"]);if(!q.rowCount)return res.status(404).json({error:"الحساب غير موجود أو لا يمكن حظر الأونر"});await audit(req.session.user,banned?"account_ban":"account_unban",q.rows[0].username);res.json({ok:true,user:q.rows[0]});});
 app.delete("/api/owner/users/:id",requireOwner,async(req,res)=>{const id=Number(req.params.id),u=await pool.query("SELECT username,role FROM app_users WHERE id=$1",[id]);if(!u.rowCount||u.rows[0].role==="owner")return res.status(404).json({error:"الحساب غير موجود أو لا يمكن حذف الأونر"});const username=u.rows[0].username,c=await pool.connect();try{await c.query("BEGIN");await c.query("DELETE FROM registration_verifications WHERE username=$1 OR discord_user_id IN (SELECT discord_user_id FROM app_users WHERE username=$1)",[username]);await c.query("DELETE FROM password_resets WHERE username=$1",[username]);await c.query("DELETE FROM ticket_messages WHERE ticket_id IN (SELECT id FROM tickets WHERE username=$1)",[username]);await c.query("DELETE FROM tickets WHERE username=$1",[username]);await c.query("DELETE FROM applications WHERE username=$1",[username]);await c.query("DELETE FROM group_join_requests WHERE username=$1",[username]);await c.query("DELETE FROM group_members WHERE username=$1",[username]);await c.query("DELETE FROM community_groups WHERE username=$1",[username]);await c.query("DELETE FROM game_scores WHERE username=$1",[username]);await c.query("DELETE FROM game_lobbies WHERE host_username=$1",[username]);await c.query("DELETE FROM reviews WHERE username=$1",[username]);await c.query("DELETE FROM anonymous_replies WHERE author_username=$1",[username]);await c.query("DELETE FROM anonymous_posts WHERE author_username=$1",[username]);await c.query("DELETE FROM audit_logs WHERE username=$1",[username]);await c.query("DELETE FROM chat_public_mutes WHERE username=$1 OR muted_by=$1",[username]);await c.query("DELETE FROM chat_blocks WHERE blocker_username=$1 OR blocked_username=$1",[username]);await c.query("DELETE FROM chat_messages WHERE sender_username=$1",[username]);await c.query("DELETE FROM chat_conversations WHERE owner_username=$1",[username]);await c.query("DELETE FROM chat_profiles WHERE username=$1",[username]);await c.query("DELETE FROM user_sessions WHERE sess->'user'->>'username'=$1",[username]).catch(()=>{});await c.query("DELETE FROM app_users WHERE username=$1",[username]);await c.query("COMMIT");await audit(req.session.user,"account_delete",username);res.json({ok:true})}catch(e){await c.query("ROLLBACK");console.error("Owner account delete:",e);res.status(500).json({error:"تعذر حذف الحساب بالكامل"})}finally{c.release()}});
@@ -935,6 +939,28 @@ function fillMissingGameBots(game,players,minPlayers,maxPlayers){
   return players;
 }
 function firstHumanPlayer(players){return players.find(p=>!p.bot)||players[0]||null;}
+function simulateBotTurns(game,players,state){
+  if(!state||!Array.isArray(players)||!players.some(p=>p.bot))return state;
+  const humanKeys=new Set(players.filter(p=>!p.bot).map(playerKey));
+  if(game==="BALOOT"||game==="UNO"){
+    if(!Array.isArray(state.hands))return state;
+    for(let guard=0;guard<players.length*2;guard++){
+      const idx=Number(state.turnPlayerIndex);
+      if(!Number.isInteger(idx)||!players[idx])break;
+      if(humanKeys.has(playerKey(players[idx])))break;
+      const hand=Array.isArray(state.hands[idx])?state.hands[idx]:[];
+      if(!hand.length){state.winner=players[idx].username;break;}
+      const card=hand.splice(Math.floor(Math.random()*hand.length),1)[0];
+      state.lastPlayed=card;
+      if(!hand.length){state.winner=players[idx].username;break;}
+      state.turnPlayerIndex=(idx+1)%players.length;
+    }
+  }else if(game!=="CODENAMES" && state.turnPlayerKey && !humanKeys.has(state.turnPlayerKey)){
+    const next=players.find(p=>!p.bot);
+    if(next)state.turnPlayerKey=playerKey(next);
+  }
+  return state;
+}
 async function activeGameFor(req){
   const u=currentUser(req),guestId=String(req.body?.guestId||req.query?.guestId||"").trim();
   const q=await pool.query("SELECT id,players,status FROM game_lobbies WHERE status IN ('waiting','ready','playing') ORDER BY id DESC LIMIT 100");
@@ -1079,7 +1105,8 @@ app.get("/api/games/:id/state",async(req,res)=>{
   const row=q.rows[0],players=Array.isArray(row.players)?row.players:[],actor=actorFromRequest(players,u,guestId);
   if(row.status==="finished"||row.status==="closed")return res.status(410).json({error:"انتهت الجلسة وتم إغلاقها",closed:true});
   let state=row.state&&Object.keys(row.state).length?row.state:null;
-  if(row.status==="playing"&&!state){state=makeGameState(row.game);await pool.query("UPDATE game_lobbies SET state=$1 WHERE id=$2",[JSON.stringify(state),row.id]);}
+  if(row.status==="playing"&&!state){state=makeGameState(row.game);}
+  if(row.status==="playing"){state=simulateBotTurns(row.game,players,state);await pool.query("UPDATE game_lobbies SET state=$1,status=$2 WHERE id=$3",[JSON.stringify(state),state.winner?"finished":"playing",row.id]);}
   const publicPlayers=players.map(p=>({username:p.username,guest:!!p.guest,host:!!p.host,seat:p.seat||null,seatLabel:p.seatLabel||null}));
   res.json({game:{...row,players:publicPlayers,minPlayers:GAME_MIN_PLAYERS[row.game]||2},state:publicGameState(row.game,state,actor)});
 });
