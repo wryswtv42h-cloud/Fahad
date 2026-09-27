@@ -3,7 +3,7 @@ require("dotenv").config();
 
 const path = require("path");
 const express = require("express");
-const { Client, GatewayIntentBits, EmbedBuilder, ChannelType, PermissionFlagsBits } = require("discord.js");
+const { Client, GatewayIntentBits, EmbedBuilder, ChannelType, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
 const bcrypt = require("bcryptjs");
 const session = require("express-session");
 const pgSession = require("connect-pg-simple")(session);
@@ -450,12 +450,14 @@ app.post("/api/auth/register",authLimiter,async(req,res)=>{
     const hash=await bcrypt.hash(password,12);
     const crypto=require("crypto"),code=crypto.randomBytes(3).toString("hex").toUpperCase();
     await pool.query("UPDATE registration_verifications SET used_at=NOW() WHERE (username=$1 OR discord_user_id=$2) AND used_at IS NULL",[username,member.user.id]);
-    await pool.query("INSERT INTO registration_verifications(username,password_hash,discord_username,discord_user_id,code,expires_at) VALUES($1,$2,$3,$4,$5,NOW()+INTERVAL '10 minutes')",[username,hash,member.user.username,member.user.id,code]);
+    const pending=await pool.query("INSERT INTO registration_verifications(username,password_hash,discord_username,discord_user_id,code,expires_at) VALUES($1,$2,$3,$4,$5,NOW()+INTERVAL '10 minutes') RETURNING id",[username,hash,member.user.username,member.user.id,code]);
+    const verificationId=pending.rows[0].id;
+    const row=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("register_yes:"+verificationId).setLabel("نعم، هذا حسابي").setStyle(ButtonStyle.Success),new ButtonBuilder().setCustomId("register_no:"+verificationId).setLabel("لا، إلغاء").setStyle(ButtonStyle.Danger));
     try{
-      await member.send({embeds:[new EmbedBuilder().setTitle("تأكيد إنشاء حساب MLD").setDescription("وصلنا طلب إنشاء حساب للموقع باسم **"+username+"**. إذا كان الطلب منك، أرسل في هذا الخاص:\n\n**تأكيد "+code+"**\n\nينتهي الرمز خلال 10 دقائق. إذا لم تطلب إنشاء الحساب، تجاهل الرسالة.").setColor("#ff9cdc").setTimestamp()]});
-    }catch(e){await pool.query("UPDATE registration_verifications SET used_at=NOW() WHERE code=$1 AND used_at IS NULL",[code]);return res.status(400).json({error:"تعذر إرسال رسالة التأكيد في Discord. افتح الخاص مع الزاجل ثم حاول مرة أخرى."});}
-    await audit({username,discordUsername:member.user.username},"register_pending","طلب إنشاء حساب بانتظار تأكيد Discord").catch(()=>{});
-    res.json({ok:true,pending:true,message:"تم إرسال رسالة تأكيد إلى الخاص في Discord. أرسل كلمة تأكيد الرمز هناك، ثم سجل دخولك من الموقع."});
+      await member.send({embeds:[new EmbedBuilder().setTitle("تأكيد إنشاء حساب MLD").setDescription("تم العثور على حساب Discord **"+member.user.username+"**. هل تريد إنشاء حساب الموقع **"+username+"**؟\n\nاضغط «نعم» لإنشاء الحساب فورًا، أو «لا» لإلغاء الطلب.\n\nينتهي الطلب خلال 10 دقائق.").setColor("#ff9cdc").setTimestamp()],components:[row]});
+    }catch(e){await pool.query("UPDATE registration_verifications SET used_at=NOW() WHERE id=$1 AND used_at IS NULL",[verificationId]);return res.status(400).json({error:"تعذر إرسال رسالة التأكيد في Discord. افتح الخاص مع الزاجل ثم حاول مرة أخرى."});}
+    await audit({username,discordUsername:member.user.username},"register_pending","طلب إنشاء حساب بانتظار تأكيد زر Discord").catch(()=>{});
+    res.json({ok:true,pending:true,message:"تم إرسال رسالة التأكيد إلى الخاص في Discord. اضغط «نعم» أو «لا» هناك."});
   }catch(e){console.error("Register:",e);res.status(500).json({error:"تعذر إنشاء طلب الحساب"});}
 });
 app.post("/api/auth/login",authLimiter,async(req,res)=>{
@@ -1211,6 +1213,26 @@ ${text}`).setColor("#ff9cdc").setFooter({text:"MLD Community"}).setTimestamp();
     await audit(u,"dm_send",`إلى Discord ID ${targetId} · ${title}`);
     res.json({ok:true});
   }catch(error){console.error("DM endpoint:",error);res.status(500).json({error:"تعذر الإرسال؛ قد يكون الخاص مقفلًا"});}
+});
+client.on("interactionCreate", async (interaction) => {
+  if (!interaction.isButton()) return;
+  const [action,idText]=String(interaction.customId||"").split(":");
+  if (!["register_yes","register_no"].includes(action)) return;
+  const id=Number(idText);
+  if (!Number.isInteger(id)) return interaction.reply({content:"طلب غير صالح.",ephemeral:true});
+  try{
+    const q=await pool.query("SELECT * FROM registration_verifications WHERE id=$1 AND discord_user_id=$2 AND used_at IS NULL AND expires_at>NOW()",[id,interaction.user.id]);
+    if(!q.rowCount) return interaction.reply({content:"هذا الطلب غير صالح أو انتهت مدته أو تم استخدامه مسبقًا.",ephemeral:true});
+    const v=q.rows[0];
+    if(action==="register_no"){await pool.query("UPDATE registration_verifications SET used_at=NOW() WHERE id=$1",[id]);await interaction.update({content:"❌ تم إلغاء إنشاء الحساب. لن يتم إنشاء أي حساب.",embeds:[],components:[]});await audit({username:v.username,discordUsername:v.discord_username},"register_cancelled","إلغاء إنشاء الحساب من زر Discord").catch(()=>{});return;}
+    const exists=await pool.query("SELECT id FROM app_users WHERE username=$1 OR lower(trim(discord_username))=lower(trim($2))",[v.username,v.discord_username]);
+    if(exists.rowCount){await pool.query("UPDATE registration_verifications SET used_at=NOW() WHERE id=$1",[id]);return interaction.update({content:"⚠️ الحساب موجود مسبقًا أو Discord مرتبط بحساب آخر. لم يتم إنشاء حساب جديد.",embeds:[],components:[]});}
+    await pool.query("INSERT INTO app_users(username,password_hash,discord_username,discord_user_id,role) VALUES($1,$2,$3,$4,'user')",[v.username,v.password_hash,v.discord_username,v.discord_user_id]);
+    await pool.query("UPDATE registration_verifications SET used_at=NOW() WHERE id=$1",[id]);
+    await audit({username:v.username,discordUsername:v.discord_username},"register_confirmed","تم تأكيد إنشاء الحساب من زر Discord").catch(()=>{});
+    await interaction.update({content:"✅ تم إنشاء حساب MLD بنجاح.",embeds:[],components:[]});
+    await interaction.followUp({content:"بيانات حسابك:\nاسم المستخدم: "+v.username+"\nDiscord: "+v.discord_username+"\nكلمة المرور: هي كلمة المرور التي اخترتها في الموقع (لا نخزنها كنص).\n\nتقدر الآن تسجل الدخول من الموقع.",ephemeral:true});
+  }catch(e){console.error("Registration button:",e.message);if(!interaction.replied&&!interaction.deferred) await interaction.reply({content:"تعذر تنفيذ الطلب، حاول مرة أخرى.",ephemeral:true});}
 });
 client.on("guildMemberAdd", invalidateMemberSnapshot);
 client.on("guildMemberRemove", async (member) => {
