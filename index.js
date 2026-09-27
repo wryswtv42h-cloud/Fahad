@@ -37,6 +37,7 @@ app.use(cors());
 app.use(express.json({ limit: "20kb" }));
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 app.use(session({ secret: process.env.SESSION_SECRET || "mld-session-secret", resave: true, saveUninitialized: false, store: new pgSession({ pool, tableName: "user_sessions", createTableIfMissing: true }), cookie: { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", maxAge: 2592000000 } }));
+app.get("/health",(req,res)=>res.status(200).json({ok:true,service:"mld",timestamp:new Date().toISOString()}));
 app.use(express.static(path.join(__dirname, "public")));
 
 const leadershipRoleIds = [
@@ -1126,7 +1127,7 @@ app.get("*", (req, res) => {
 });
 
 app.listen(port, async () => { console.log(`MLD listening on port ${port}`); try { await initAppDatabase(); await ensureOwner(); await ensureChatDatabase(); console.log("App database ready"); } catch (error) { console.error("Database init failed:", error.message); } });
-client.once("ready", () => console.log(`Logged in as ${client.user.tag}`));
+client.once("clientReady", () => console.log(`Logged in as ${client.user.tag}`));
 client.login(token).catch((error) => {
   console.error("Discord login failed:", error.message);
   process.exit(1);
