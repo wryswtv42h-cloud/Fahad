@@ -937,6 +937,20 @@ app.post("/api/games/:id/action",async(req,res)=>{
       if(team!==state.turn)return res.status(403).json({error:"ليس دور فريقك"});
       state.guessesLeft=0;state.turn=state.turn==="red"?"blue":"red";state.turnNumber++;state.clue=null;
     }else return res.status(400).json({error:"حركة غير معروفة"});
+  }else if((g.game==="BALOOT"||g.game==="UNO")&&action==="playCard"){
+    const playerIndex=players.findIndex(p=>playerKey(p)===playerKey(actor));
+    const hand=Array.isArray(state.hands?.[playerIndex])?state.hands[playerIndex]:[];
+    const idx=Number(req.body?.index);
+    if(state.turnPlayerIndex!==playerIndex)return res.status(403).json({error:"ليس دورك الآن"});
+    if(!Number.isInteger(idx)||idx<0||idx>=hand.length)return res.status(400).json({error:"الورقة غير صحيحة"});
+    const card=hand[idx];
+    hand.splice(idx,1);
+    state.lastPlayed=card;
+    if(hand.length===0){
+      state.winner=actor.username||actor.guestId||("لاعب "+(playerIndex+1));
+    }else{
+      state.turnPlayerIndex=(state.turnPlayerIndex+1)%players.length;
+    }
   }else if(action==="round"||action==="answer"||action==="choose"){
     const engine=GAME_ENGINE[g.game]||{kind:"text",prompt:"ابدأ الجولة واكتب إجابتك.",choices:[],answer:""};
     if(state.turnPlayerKey && state.turnPlayerKey!==playerKey(actor))return res.status(403).json({error:"انتظر دور اللاعب الآخر"});
