@@ -81,7 +81,7 @@ const authLimiter=rateLimit(10*60*1000,30,req=>"auth:"+req.ip);
 const resetLimiter=rateLimit(15*60*1000,5,req=>"reset:"+req.ip);
 const writeLimiter=rateLimit(60*1000,90,req=>"write:"+((req.session&&req.session.user?.username)||req.ip));
 
-app.get("/health",(req,res)=>res.status(200).json({ok:true,service:"mld",version:"hardening-2",botReady:client.isReady(),membersCached:Boolean(memberSnapshot)}));
+app.get("/health",(req,res)=>res.status(200).json({ok:true,service:"mld",version:"hardening-3",botReady:client.isReady(),membersCached:Boolean(memberSnapshot)}));
 app.use(express.static(path.join(__dirname, "public"),{maxAge:"1h",etag:true}));
 
 const leadershipRoleIds = [
