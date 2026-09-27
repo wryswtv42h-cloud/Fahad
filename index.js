@@ -834,6 +834,11 @@ app.post("/api/games/:id/start",async(req,res)=>{
   if(players.length<(GAME_MIN_PLAYERS[g.game]||2))return res.status(409).json({error:"عدد اللاعبين غير كافٍ"});
   const state=g.state&&Object.keys(g.state).length?g.state:makeGameState(g.game);
   state.startedAt=new Date().toISOString();
+  if(g.game==="BALOOT"||g.game==="UNO"){
+    const deck=g.game==="BALOOT"?makeDeck32():shuffle(["🔴","🟡","🟢","🔵"].flatMap(c=>["0","1","2","3","4","5","6","7","8","9","Skip","Reverse","+2"].flatMap(v=>[{id:c+"-"+v+"-a",color:c,value:v},{id:c+"-"+v+"-b",color:c,value:v}])));
+    state.hands=Array.from({length:players.length},()=>[]);
+    deck.forEach((card,i)=>state.hands[i%players.length].push(card));
+  }
   state.playerRoles={};
   state.playerSecrets={};
   players.forEach((p,i)=>{
@@ -841,7 +846,7 @@ app.post("/api/games/:id/start",async(req,res)=>{
     if(g.game==="CODENAMES"){
       const role=i===0?"red_spymaster":i===1?"red_agent":i===2?"blue_spymaster":"blue_agent";
       state.playerRoles[key]=role;
-    }else state.playerRoles[key]=p.seatLabel||("لاعب "+(i+1));
+    }else state.playerRoles[key]=(g.game==="BALOOT"||g.game==="UNO")?i:(p.seatLabel||("لاعب "+(i+1)));
     const engine=GAME_ENGINE[g.game]||{};
     state.playerSecrets[key]={prompt:engine.prompt||state.prompt||"ابدأ الجولة.",privateInfo:state.playerRoles[key]};
   });
