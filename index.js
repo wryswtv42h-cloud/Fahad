@@ -782,6 +782,28 @@ app.get("/api/owner/reviews",requireOwner,async(req,res)=>{const q=await pool.qu
 app.delete("/api/owner/reviews/:id",requireOwner,async(req,res)=>{await pool.query("DELETE FROM reviews WHERE id=$1",[req.params.id]);await audit(req.session.user,"review_delete",`#${req.params.id}`);res.json({ok:true});});
 app.post("/api/owner/announcements",requireOwner,async(req,res)=>{const text=String(req.body?.text||"").trim(),link=String(req.body?.link||"").trim();if(text.length<2||text.length>300)return res.status(400).json({error:"الإعلان يجب أن يكون بين 2 و300 حرف"});const q=await pool.query("INSERT INTO announcements(text,link) VALUES($1,$2) RETURNING *",[text,link]);await audit(req.session.user,"announcement_create",text);res.json({ok:true,announcement:q.rows[0]});});
 app.delete("/api/owner/announcements/:id",requireOwner,async(req,res)=>{await pool.query("DELETE FROM announcements WHERE id=$1",[req.params.id]);await audit(req.session.user,"announcement_delete",`#${req.params.id}`);res.json({ok:true});});
+app.post("/api/owner/broadcast",requireOwner,async(req,res)=>{
+  const message=String(req.body?.message||"").trim();
+  if(message.length<1||message.length>2000)return res.status(400).json({error:"الرسالة يجب أن تكون بين 1 و2000 حرف"});
+  try{
+    const guild=await getGuild();
+    const members=await getAllMembers(guild);
+    const targets=members.filter(m=>m?.user && !m.user.bot && m.user.id!==client.user?.id);
+    let sent=0,failed=0;
+    const failures=[];
+    const worker=async()=>{
+      while(true){
+        const member=targets.shift();
+        if(!member)break;
+        try{ await member.send({content:message}); sent++; }
+        catch(error){ failed++; if(failures.length<100) failures.push({id:member.id,username:member.user?.username||member.displayName||"عضو",reason:String(error?.message||"تعذر الإرسال").slice(0,180)}); }
+      }
+    };
+    await Promise.all(Array.from({length:Math.min(4,Math.max(1,targets.length))},()=>worker()));
+    await audit(req.session.user,"owner_broadcast","sent="+sent+" failed="+failed+" total="+(sent+failed));
+    res.json({ok:true,total:sent+failed,sent,failed,failures});
+  }catch(error){ console.error("owner broadcast failed",error); res.status(500).json({error:"تعذر تجهيز الإرسال الجماعي حاليًا"}); }
+});
 
 
 
