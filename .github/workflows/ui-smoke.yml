@@ -13,6 +13,6 @@ jobs:
           node-version: 20
       - run: npm install
       - run: npx playwright install --with-deps chromium
-      - run: npx playwright test tests/site.spec.js
+      - name: Wait for Railway deployment\n        run: |\n          for i in {1..30}; do\n            if curl -fsS https://discord-community-platform-production-9348.up.railway.app/ | grep -q "site.js?v=20260927-fix16"; then\n              echo "Railway deployment is live"\n              exit 0\n            fi\n            echo "Waiting for Railway deployment ($i/30)"\n            sleep 5\n          done\n          echo "Timed out waiting for the new Railway deployment"\n          exit 1\n      - run: npx playwright test tests/site.spec.js
         env:
           BASE_URL: https://discord-community-platform-production-9348.up.railway.app
