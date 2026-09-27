@@ -26,7 +26,6 @@ jobs:
           echo "Timed out waiting for the new Railway deployment"
           exit 1
       - run: npx playwright test tests/site.spec.js --reporter=html,line
-        continue-on-error: true
       - name: Upload Playwright report
         if: always()
         uses: actions/upload-artifact@v4
