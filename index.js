@@ -612,7 +612,8 @@ app.post("/api/groups",requireAuth,async(req,res)=>{
 app.delete("/api/groups/:id",requireAuth,async(req,res)=>{await pool.query("DELETE FROM community_groups WHERE id=$1 AND username=$2",[req.params.id,req.session.user.username]);res.json({ok:true});});
 app.get("/api/owner/chat/conversations",requireOwner,async(req,res)=>{const q=await pool.query("SELECT c.id,c.kind,c.owner_username,c.title,c.updated_at,(SELECT COUNT(*) FROM chat_participants p WHERE p.conversation_id=c.id) participants,(SELECT body FROM chat_messages m WHERE m.conversation_id=c.id ORDER BY m.id DESC LIMIT 1) last_message FROM chat_conversations c WHERE c.kind IN ('dm','private_group') ORDER BY c.updated_at DESC LIMIT 200");res.json({conversations:q.rows.map(x=>({...x,id:Number(x.id),participants:Number(x.participants)}))});});
 app.get("/api/owner/chat/conversations/:id",requireOwner,async(req,res)=>{const q=await pool.query("SELECT m.id,m.sender_username,m.body,m.created_at,COALESCE(p.display_name,m.sender_username) display_name FROM chat_messages m LEFT JOIN chat_profiles p ON p.username=m.sender_username WHERE m.conversation_id=$1 ORDER BY m.id ASC LIMIT 500",[Number(req.params.id)]);res.json({messages:q.rows});});
-app.get("/api/owner/logs",requireOwner,async(req,res)=>{const q=await pool.query("SELECT id,username,discord_username,action,details,created_at FROM audit_logs UNION ALL SELECT (1000000000+m.id)::bigint,u.username,u.discord_username,'zajel_private_message','conversation #'||m.conversation_id||' · '||m.body,m.created_at FROM chat_messages m JOIN app_users u ON u.username=m.sender_username WHERE m.scope='private' AND NOT EXISTS (SELECT 1 FROM audit_logs a WHERE a.action='zajel_private_message' AND a.details='conversation #'||m.conversation_id||' · '||m.body) ORDER BY created_at DESC LIMIT 300");res.json({logs:q.rows});});
+app.get("/api/owner/logs",requireOwner,async(req,res)=>{const q=await pool.query("SELECT id,username,discord_username,action,details,created_at FROM audit_logs ORDER BY created_at DESC LIMIT 300");res.json({logs:q.rows});});
+app.get("/api/owner/logs/zajel",requireOwner,async(req,res)=>{const q=await pool.query("SELECT (1000000000+m.id)::bigint AS id,u.username,u.discord_username,'zajel_private_message' AS action,'conversation #'||m.conversation_id||' · '||m.body AS details,m.created_at FROM chat_messages m JOIN app_users u ON u.username=m.sender_username WHERE m.scope='private' ORDER BY m.id DESC LIMIT 500");res.json({logs:q.rows});});
 app.get("/api/owner/tickets",requireAdmin,async(req,res)=>{const q=await pool.query("SELECT id,username,discord_username,subject,message,status,created_at FROM tickets ORDER BY id DESC LIMIT 100");res.json({tickets:q.rows});});
 app.get("/api/owner/applications",requireAdmin,async(req,res)=>{const q=await pool.query("SELECT id,username,discord_username,type,answers,status,created_at FROM applications ORDER BY id DESC LIMIT 100");res.json({applications:q.rows});});
 app.post("/api/owner/applications/:id/status",requireAdmin,async(req,res)=>{
@@ -679,17 +680,7 @@ app.get("/api/owner/users",requireOwner,async(req,res)=>{const q=await pool.quer
 app.get("/api/owner/users/:username/messages",requireOwner,async(req,res)=>{
   const username=String(req.params.username||"").trim().toLowerCase();
   if(!username)return res.status(400).json({error:"الحساب غير صحيح"});
-  const q=await pool.query(`
-    SELECT m.id,m.sender_username,m.body,m.created_at,c.id AS conversation_id,
-           COALESCE(p.display_name,m.sender_username) AS display_name
-    FROM chat_messages m
-    JOIN chat_conversations c ON c.id=m.conversation_id
-    JOIN chat_participants cp ON cp.conversation_id=c.id AND cp.username=$1
-    LEFT JOIN chat_profiles p ON p.username=m.sender_username
-    WHERE c.kind='dm'
-    ORDER BY m.id DESC
-    LIMIT 500
-  `,[username]);
+  const q=await pool.query("SELECT m.id,m.sender_username,m.body,m.created_at,c.id AS conversation_id,c.title,COALESCE(p.display_name,m.sender_username) AS display_name,COALESCE(p.avatar_url,'') AS avatar_url FROM chat_messages m JOIN chat_conversations c ON c.id=m.conversation_id JOIN chat_participants cp ON cp.conversation_id=c.id AND cp.username=$1 LEFT JOIN chat_profiles p ON p.username=m.sender_username WHERE c.kind='dm' AND m.deleted_at IS NULL ORDER BY m.id ASC LIMIT 1000",[username]);
   res.json({messages:q.rows});
 });
 app.post("/api/owner/users/:id/role",requireOwner,async(req,res)=>{const role=String(req.body?.role||"user");if(!["user","admin","owner"].includes(role))return res.status(400).json({error:"صلاحية غير صحيحة"});const q=await pool.query("UPDATE app_users SET role=$1 WHERE id=$2 RETURNING username,role",[role,req.params.id]);if(!q.rowCount)return res.status(404).json({error:"الحساب غير موجود"});await audit(req.session.user,"user_role_change",`${q.rows[0].username} => ${role}`);res.json({ok:true,user:q.rows[0]});});
