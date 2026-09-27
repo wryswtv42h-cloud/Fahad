@@ -426,7 +426,7 @@ window.change=async function(v){
   searchWrap.style.display=v==="members"?"flex":"none";
   try{
     if(v==="home"){await homeView();return}
-    if(v==="members"){title.textContent="أعضاء المجتمع";subtitle.textContent="كل الأعضاء والبيانات تتحدث تلقائيًا.";await refresh();return}
+    if(v==="members"){title.textContent="الأعضاء";subtitle.textContent="كل الأعضاء والبيانات تتحدث تلقائيًا.";await refresh();return}
     if(v==="roles"){title.textContent="الرتب القيادية";subtitle.textContent="الرتب والصلاحيات القيادية في سيرفر MLD.";await refresh();return}
     if(v==="top"){title.textContent="لوحة TOP";subtitle.textContent="إحصائيات المجتمع والألعاب.";await renderTop(await fetch("/api/public/top").then(r=>r.json()));setStatus("TOP جاهز");return}
     if(v==="chat"){await mldChatView("public");return}     if(v==="private-chat"){await mldChatView("private");return}
@@ -462,7 +462,7 @@ window.updateAuthBar=function(){
   const isAdmin=role==="admin" || role==="owner";
   const isOwner=role==="owner";
   document.querySelectorAll('[data-view="login"]').forEach(x=>x.style.display=mldUser?"none":"");
-  document.querySelectorAll('[data-view="tickets"]').forEach(x=>x.style.display=isAdmin?"":"none");
+  document.querySelectorAll('[data-view="tickets"]').forEach(x=>x.style.display="");
   document.querySelectorAll("#logs-nav,#logs-nav-mobile").forEach(x=>x.remove());
   el.innerHTML=mldUser
     ? '<div class="auth-chip">مرحبًا <b>'+esc(mldUser.username)+'</b> · Discord: <b>'+esc(mldUser.discordUsername)+'</b> · '+(isOwner?"👑 أونر":isAdmin?"🛡️ إدارة":"👤 عضو")+' <button id="logout-btn" type="button">خروج</button></div>'
