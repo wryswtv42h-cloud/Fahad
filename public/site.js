@@ -270,7 +270,7 @@ window.adminPanel=async function(){
 };
 
 /* MLD Owner Control Center */
-ownerPanel=async function(){
+ownerControlCenter=async function(){
   await mldMe(); if(!mldUser||mldUser.role!=="owner")return authView();
   searchWrap.style.display="none"; title.textContent="لوحة الأونر"; subtitle.textContent="تحكم كامل: التقديمات، التذاكر، القروبات، الألعاب، الزاجل، اللوقات والإعلانات."; content.className="feature-grid";
   content.innerHTML="<article class='feature-card'><div class='feature-icon'>👑</div><h3>مركز الأونر</h3><div class='game-lobby-actions'><button class='primary' data-owner-tab='apps'>📝 التقديمات</button><button data-owner-tab='tickets'>🎫 التذاكر</button><button data-owner-tab='groups'>👥 القروبات</button><button data-owner-tab='group-requests'>📨 طلبات القروبات</button><button data-owner-tab='games'>🎮 الألعاب</button><button data-owner-tab='logs'>📜 لوقات الحسابات</button><button data-owner-tab='zajel-log'>💬 لوق الزاجل</button><button data-owner-tab='deleted-messages'>🗑️ الرسائل المحذوفة</button><button data-owner-tab='group-logs'>📋 لوق القروبات</button><button data-owner-tab='users'>👤 الحسابات</button><button data-owner-tab='anonymous-log'>🤫 لوق الفضفضة</button><button data-owner-tab='announcements'>📢 الشريط الإعلاني</button></div></article><div id='owner-panel-body' class='feature-grid'></div>";
@@ -447,7 +447,7 @@ window.change=async function(v){
     if(v==="reviews"){await reviewsView();return};if(v==="anonymous")return anonymousView()
     if(v==="logs"){await ownerLogs();return}
     if(v==="admin"){await mldMe();if(["admin","owner"].includes(mldUser?.role))return window.adminPanel();return authView()}
-    if(v==="owner"){await ownerPanel();return}
+    if(v==="owner"){await ownerControlCenter();return}
     if(v==="blocks"){await mldChatBlocks();return}
     await homeView();
   }catch(e){
