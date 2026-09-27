@@ -48,7 +48,8 @@
         if(g.status!=="playing"){
           controls="<div class='game-perspective'>منظورك الخاص · "+(mySeat?esc(mySeat):"لم تختر مقعدًا بعد")+"</div><div class='game-seat-picker'>"+seatButtons+"</div><div class='game-lobby-note'>كل جهاز يختار مقعده بنفسه. المقعد المحجوز لا يظهر كمتاح.</div>"+(me?.host&&!mySeat?"<button class='primary wide' disabled>اختر مقعدك لبدء الجلسة</button>":me?.host?"<button class='primary wide' id='eg-start'>ابدأ الجلسة</button>":"");
         } else if(s.winner){
-          controls="<div class='game-result'><strong>انتهت اللعبة</strong><span>"+esc(s.winner)+"</span></div>";
+          const scoreRows=Array.isArray(s.scores)?players.map((p,i)=>"<div class='game-result-row'><span>"+esc(p.username||"لاعب")+"</span><b>"+esc(s.scores[i]??0)+" نقطة</b></div>").join(""):(s.teamScores?Object.entries(s.teamScores).map(([k,v])=>"<div class='game-result-row'><span>"+esc(k==="red"?"الفريق الأحمر":k==="blue"?"الفريق الأزرق":k==="0"?"الفريق A":"الفريق B")+"</span><b>"+esc(v)+"</b></div>").join(""):"");
+          controls="<div class='game-results-panel'><div class='game-result-winner'>🏆 "+esc(s.winner)+"</div><p class='muted'>انتهت الجلسة — النتيجة محفوظة مؤقتًا.</p>"+scoreRows+"<div class='game-result-countdown' id='eg-result-countdown'></div></div>";
         } else if(spectator){
           controls="<div class='game-spectator'>وضع المشاهدة — لا توجد لك يد أو دور خاص.</div>";
         } else if(s.version>=4 && g.game==="CODENAMES"){
