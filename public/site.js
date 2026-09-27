@@ -63,7 +63,7 @@ function updateAuthBar(){const el=$("#auth-bar");if(!el)return;const admin=!!mld
         const body={username,password:$("#auth-pass").value}; if(register) body.discordUsername=discordUsername;
         const r=await fetch(register?"/api/auth/register":"/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}),d=await r.json();
         if(!r.ok)throw Error(d.error||"تعذر تسجيل الدخول");
-        mldUser=d.user||null; updateAuthBar();
+        if(register && d.pending){ st.textContent="تم إرسال تأكيد إلى الخاص في Discord. وافق من الزاجل ثم ارجع وسجل الدخول."; btn.disabled=false; return; } mldUser=d.user||null; updateAuthBar();
         if(mldUser?.mustChangePassword){ st.textContent="تم قبول كلمة المرور المؤقتة — غيّر كلمة المرور الآن"; return renderPasswordChange(); }
         st.textContent="تم بنجاح ✓"; setTimeout(()=>change("home"),250);
       }
@@ -475,4 +475,4 @@ if(mobile){
 
 // INITIAL BOOT: never show the old static homepage before the new one is ready
 document.body.classList.add("mld-booting");
-Promise.race([mldMe(),new Promise(r=>setTimeout(r,1500))]).catch(()=>null).then(()=>window.change("home")).catch(()=>window.change("home"));
+Promise.race([mldMe(),new Promise(r=>setTimeout(r,700))]).catch(()=>null).then(()=>window.change("home")).catch(()=>window.change("home"));
