@@ -254,3 +254,14 @@ body.mld-booting #mld-welcome{opacity:1;visibility:visible}
 
 
 .member-fav{position:absolute;left:14px;top:14px;width:34px;height:34px;border:1px solid #ffffff16;border-radius:11px;background:#ffffff08;color:var(--muted);font-size:18px;cursor:pointer;z-index:3}.member-fav:hover,.member-fav.active{color:var(--accent);border-color:#ff9cde55;background:#ff9cde10}.card{position:relative}.card>b{margin-right:auto}
+
+/* Responsive admin navigation: tablets/laptops use the same complete menu as phones */
+@media (max-width:1200px){
+  .desktop-nav{display:none!important}
+  .menu{display:block!important}
+  .mobile-menu{display:none}
+  .mobile-menu.open{display:grid}
+}
+@media (min-width:821px) and (max-width:1200px){
+  .mobile-menu.open{grid-template-columns:repeat(3,minmax(0,1fr));padding:14px 24px 20px}
+}
