@@ -372,7 +372,7 @@ function mldNavButton(view,label,extra=""){
 function rebuildMobileMenu(){
   const menu=$("#mobile-menu"); if(!menu)return;
   const role=mldUser?.role||"";
-  const isAdmin=role==="admin"||role==="owner";
+  const isAdmin=role==="admin";
   const isOwner=role==="owner";
   const base=[
     ["home","الرئيسية"],["members","الأعضاء"],["top","TOP"],["roles","الرتب القيادية"],
@@ -429,7 +429,7 @@ window.updateAuthBar=function(){
   const el=$("#auth-bar"); if(!el)return;
   document.querySelectorAll("[data-admin-nav]").forEach(x=>x.remove());
   const role=mldUser?.role||"";
-  const isAdmin=role==="admin"||role==="owner";
+  const isAdmin=role==="admin";
   const isOwner=role==="owner";
   document.querySelectorAll('[data-view="login"]').forEach(x=>x.style.display=mldUser?"none":"");
   document.querySelectorAll('[data-view="tickets"]').forEach(x=>x.style.display=isAdmin?"":"none");
