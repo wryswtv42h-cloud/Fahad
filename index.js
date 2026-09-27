@@ -362,16 +362,28 @@ async function initAppDatabase() {
     CREATE INDEX IF NOT EXISTS password_resets_active_idx ON password_resets(username,expires_at DESC) WHERE used_at IS NULL;
     INSERT INTO site_stats(id,visits) VALUES(1,0) ON CONFLICT (id) DO NOTHING;
   `);
-  // Repair very old schemas where user_id was incorrectly used as the primary key.
+  // Repair very old schemas without breaking foreign keys.
   for (const table of ["group_members","group_join_requests","community_groups","applications","tickets","reviews"]) {
     const legacy = await pool.query("SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name=$1 AND column_name='user_id'", [table]);
-    if (legacy.rowCount) {
-      await pool.query(`ALTER TABLE "${table}" DROP CONSTRAINT IF EXISTS "${table}_pkey"`);
+    if (!legacy.rowCount) continue;
+    const pk = await pool.query("SELECT 1 FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu ON kcu.constraint_name=tc.constraint_name AND kcu.table_schema=tc.table_schema WHERE tc.table_schema='public' AND tc.table_name=$1 AND tc.constraint_type='PRIMARY KEY' AND kcu.column_name='user_id'", [table]);
+    if (pk.rowCount) {
+      await pool.query(`ALTER TABLE "${table}" DROP CONSTRAINT IF EXISTS "${table}_pkey" CASCADE`);
       await pool.query(`ALTER TABLE "${table}" ADD COLUMN IF NOT EXISTS id SERIAL`);
-      await pool.query(`ALTER TABLE "${table}" ADD PRIMARY KEY (id)`);
-      await pool.query(`ALTER TABLE "${table}" ALTER COLUMN user_id DROP NOT NULL`);
+      await pool.query(`UPDATE "${table}" SET id=nextval(pg_get_serial_sequence('${table}','id')) WHERE id IS NULL`);
+      await pool.query(`ALTER TABLE "${table}" ADD CONSTRAINT "${table}_pkey" PRIMARY KEY (id)`);
     }
+    await pool.query(`ALTER TABLE "${table}" ALTER COLUMN user_id DROP NOT NULL`);
   }
+  // Restore foreign keys that may have been removed by a legacy primary-key repair.
+  await pool.query(`ALTER TABLE ticket_messages DROP CONSTRAINT IF EXISTS ticket_messages_ticket_id_fkey`);
+  await pool.query(`ALTER TABLE ticket_messages ADD CONSTRAINT ticket_messages_ticket_id_fkey FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE`);
+  await pool.query(`ALTER TABLE ticket_close_logs DROP CONSTRAINT IF EXISTS ticket_close_logs_ticket_id_fkey`);
+  await pool.query(`ALTER TABLE ticket_close_logs ADD CONSTRAINT ticket_close_logs_ticket_id_fkey FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE`);
+  await pool.query(`ALTER TABLE group_members DROP CONSTRAINT IF EXISTS group_members_group_id_fkey`);
+  await pool.query(`ALTER TABLE group_members ADD CONSTRAINT group_members_group_id_fkey FOREIGN KEY (group_id) REFERENCES community_groups(id) ON DELETE CASCADE`);
+  await pool.query(`ALTER TABLE group_join_requests DROP CONSTRAINT IF EXISTS group_join_requests_group_id_fkey`);
+  await pool.query(`ALTER TABLE group_join_requests ADD CONSTRAINT group_join_requests_group_id_fkey FOREIGN KEY (group_id) REFERENCES community_groups(id) ON DELETE CASCADE`);
 }
 function currentUser(req){ return req.session?.user || null; }
 function normalizeDiscordName(value){
