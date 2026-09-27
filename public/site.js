@@ -306,6 +306,11 @@ window.adminPanel=async function(){
   setStatus("لوحة الإدارة جاهزة");
 };
 
+async function ownerBroadcastView(){
+  searchWrap.style.display="none";title.textContent="برودكاست السيرفر";subtitle.textContent="إرسال رسالة خاصة من البوت إلى أعضاء السيرفر — للأونر فقط.";content.className="feature-grid";
+  content.innerHTML="<article class='feature-card'><h3>برودكاست السيرفر</h3><p class='muted'>اكتب رسالتك ثم أرسلها لكل أعضاء السيرفر. الحد الأقصى 2000 حرف.</p><div class='form-stack'><textarea id='broadcast-main-text' class='full' maxlength='2000' rows='9' placeholder='اكتب الرسالة هنا...'></textarea><button class='primary wide' id='broadcast-main-send'>إرسال للجميع</button><p id='broadcast-main-status' class='muted'></p></div></article>";
+  $("#broadcast-main-send").onclick=async()=>{const message=$("#broadcast-main-text").value.trim(),st=$("#broadcast-main-status"),btn=$("#broadcast-main-send");if(!message)return st.textContent="اكتب الرسالة أولًا.";if(!confirm("متأكد من إرسال الرسالة لكل أعضاء السيرفر؟"))return;btn.disabled=true;st.textContent="جاري الإرسال...";try{const r=await fetch("/api/owner/broadcast",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message})}),d=await r.json();if(!r.ok)throw Error(d.error||"تعذر الإرسال");st.textContent="تم: أُرسلت "+d.sent+"، وتعذر الوصول إلى "+d.failed+" من أصل "+d.total+".";if(d.failed&&d.failures?.length){content.insertAdjacentHTML("beforeend","<article class='feature-card'><h3>تعذر الإرسال لبعض الأعضاء</h3><div class='log-list'>"+d.failures.map(x=>"<div class='log-item'><b>"+esc(x.username)+"</b><small>"+esc(x.id)+"</small><p>"+esc(x.reason)+"</p></div>").join("")+"</div></article>")}}catch(e){st.textContent=e.message}finally{btn.disabled=false}};
+}
 /* MLD Owner Control Center */
 async function ownerControlCenter(){
   await mldMe(); if(!mldUser||mldUser.role!=="owner")return authView();
@@ -502,7 +507,7 @@ function rebuildMobileMenu(){
   if(!mldUser) html+='<button type="button" data-view="login">تسجيل الدخول</button>';
   if(mldUser) html+='<button type="button" data-view="logout">تسجيل الخروج</button>';
   if(isAdmin) html+='<button type="button" data-view="admin"> الإدارة</button>';
-  if(isOwner) html+='<button type="button" data-view="owner"> لوحة الأونر</button>';
+  if(isOwner) html+='<button type="button" data-view="owner"> لوحة الأونر</button><button type="button" data-view="broadcast"> برودكاست</button>';
   menu.innerHTML=html+'<a id="invite-mobile" class="invite" target="_blank">انضم للسيرفر</a>';
   
 }
@@ -544,6 +549,7 @@ window.change=async function(v){
     if(v==="logs"){await ownerLogs();return}
     if(v==="admin"){await mldMe();if(["admin","owner"].includes(mldUser?.role))return window.adminPanel();return authView()}
     if(v==="owner"){await ownerControlCenter();return}
+    if(v==="broadcast"){await mldMe();if(mldUser?.role!=="owner")return authView();return ownerBroadcastView()}
     if(v==="blocks"){await mldChatBlocks();return}
     await homeView();
   }catch(e){
