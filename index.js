@@ -1035,7 +1035,7 @@ app.get("/api/games/:id/state",async(req,res)=>{
   let state=row.state&&Object.keys(row.state).length?row.state:null;
   if(row.status==="playing"&&!state){state=makeGameState(row.game);await pool.query("UPDATE game_lobbies SET state=$1 WHERE id=$2",[JSON.stringify(state),row.id]);}
   const publicPlayers=players.map(p=>({username:p.username,guest:!!p.guest,host:!!p.host,seat:p.seat||null,seatLabel:p.seatLabel||null}));
-  res.json({game:{...row,players:publicPlayers},state:publicGameState(row.game,state,actor)});
+  res.json({game:{...row,players:publicPlayers,minPlayers:GAME_MIN_PLAYERS[row.game]||2},state:publicGameState(row.game,state,actor)});
 });
 app.post("/api/games/:id/action",async(req,res)=>{
   const u=currentUser(req),guestId=String(req.body?.guestId||"").trim(),action=String(req.body?.action||"").trim();
