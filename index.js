@@ -122,6 +122,8 @@ let guildFetchPromise = null;
 let memberSnapshot = null;
 let memberSnapshotAt = 0;
 let memberFetchPromise = null;
+let publicRolesCache = null;
+let publicRolesCacheAt = 0;
 
 const MEMBER_CACHE_TTL = 45_000;
 const GUILD_CACHE_TTL = 15_000;
@@ -163,6 +165,7 @@ async function getGuild() {
 
 function invalidateMemberSnapshot() {
   memberSnapshotAt = 0;
+  publicRolesCacheAt = 0;
 }
 
 async function getAllMembers(guild) {
@@ -229,20 +232,13 @@ function memberJson(member) {
   };
 }
 
-function sortedMemberJson(members) {
-  return [...members]
-    .sort((a, b) => {
-      const aRole = a.roles.cache
-        .filter((role) => leadershipRoleSet.has(role.id))
-        .sort((x, y) => y.position - x.position)
-        .first();
-      const bRole = b.roles.cache
-        .filter((role) => leadershipRoleSet.has(role.id))
-        .sort((x, y) => y.position - x.position)
-        .first();
-      return (bRole?.position || 0) - (aRole?.position || 0);
-    })
-    .map(memberJson);
+function sortedMemberJson(members, limit = members.length) {
+  const ranked = [...members].sort((a,b)=>{
+    const aRole=a.roles.cache.filter(r=>leadershipRoleSet.has(r.id)).sort((x,y)=>y.position-x.position).first();
+    const bRole=b.roles.cache.filter(r=>leadershipRoleSet.has(r.id)).sort((x,y)=>y.position-x.position).first();
+    return (bRole?.position||0)-(aRole?.position||0);
+  });
+  return ranked.slice(0,Math.max(0,limit)).map(memberJson);
 }
 
 
@@ -743,9 +739,8 @@ async function activeGameFor(req){
   return null;
 }
 app.get("/api/games",async(req,res)=>{
-  await pool.query("DELETE FROM game_lobbies WHERE status IN ('waiting','ready') AND created_at < NOW() - make_interval(mins => 5)");
-  await pool.query("DELETE FROM game_lobbies WHERE status IN ('finished','closed') AND created_at < NOW() - make_interval(mins => 2)");
   const q=await pool.query("SELECT id,game,host_username,host_discord_username,max_players,players,status,created_at FROM game_lobbies WHERE status IN ('waiting','ready','playing') ORDER BY id DESC LIMIT 50");
+  res.set("Cache-Control","no-store");
   res.json({games:q.rows});
 });
 app.get("/api/games/:id",async(req,res)=>{
@@ -978,9 +973,10 @@ app.get("/api/public/members", async (req, res) => {
         })
       : allMembers;
 
-    const ranked = sortedMemberJson(filtered);
+    const resultLimit=Math.min(Number(req.query.limit) || (cleanQuery ? 8 : 5), 8);
+    const ranked = sortedMemberJson(filtered,resultLimit);
     res.json({
-      members: ranked.slice(0, Math.min(Number(req.query.limit) || (cleanQuery ? 8 : 5), 8)),
+      members: ranked,
       total: filtered.length,
       totalServerMembers: allMembers.length,
       updatedAt: memberSnapshotAt,
@@ -994,21 +990,16 @@ app.get("/api/public/members", async (req, res) => {
 
 app.get("/api/public/roles", async (req, res) => {
   try {
+    if(publicRolesCache && Date.now()-publicRolesCacheAt<30000) return res.json({roles:publicRolesCache,updatedAt:memberSnapshotAt,cached:true});
     const guild = await getGuild();
     const allMembers = await getAllMembers(guild);
-
     const roles = leadershipRoleIds
       .map((id) => guild.roles.cache.get(id))
       .filter(Boolean)
-      .map((role) => {
-        const count = allMembers.reduce(
-          (total, member) => total + (member.roles.cache.has(role.id) ? 1 : 0),
-          0
-        );
-        return roleJson(role, count);
-      });
-
-    res.json({ roles, updatedAt: memberSnapshotAt });
+      .map((role) => roleJson(role, role.members?.size ?? allMembers.reduce((total,member)=>total+(member.roles.cache.has(role.id)?1:0),0)));
+    publicRolesCache=roles;
+    publicRolesCacheAt=Date.now();
+    res.json({ roles, updatedAt: memberSnapshotAt, cached:false });
   } catch (error) {
     console.error("Roles endpoint:", error);
     res.status(503).json({ error: "Roles are temporarily unavailable" });
