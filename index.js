@@ -1234,10 +1234,7 @@ app.post("/api/public/message",requireAuth,async (req,res) => {
   try{
     const member=await (await getGuild()).members.fetch(targetId).catch(()=>null);
     if(!member)return res.status(404).json({error:"العضو غير موجود"});
-    const embed=new EmbedBuilder().setTitle(title).setDescription(`من حساب الموقع: ${u.username} · Discord: ${u.discordUsername}
-
-${text}`).setColor("#ff9cdc").setFooter({text:"MLD Community"}).setTimestamp();
-    await member.send({embeds:[embed]}); sendHits.set(ip,now);
+    const senderId=String(u.discordUserId||"").replace(/[^0-9]/g,"");\n    const senderLine=senderMode==="show" && senderId ? `المرسل: <@${senderId}>` : "";\n    const embed=new EmbedBuilder().setTitle(title).setDescription(`${senderLine}${senderLine?"\\n\\n":""}${text}`).setColor("#ff9cdc").setFooter({text:"MLD Community"}).setTimestamp();\n    await member.send({embeds:[embed]}); sendHits.set(ip,now);
     await audit(u,"dm_send",`إلى Discord ID ${targetId} · ${title}`);
     res.json({ok:true});
   }catch(error){console.error("DM endpoint:",error);res.status(500).json({error:"تعذر الإرسال؛ قد يكون الخاص مقفلًا"});}
