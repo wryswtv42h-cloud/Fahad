@@ -387,9 +387,10 @@ app.post("/api/tickets",requireAuth,async(req,res)=>{
 app.post("/api/tickets/:id/messages",requireAuth,async(req,res)=>{
   const u=req.session.user,id=Number(req.params.id),message=String(req.body?.message||"").trim();
   if(message.length<1||message.length>3000)return res.status(400).json({error:"الرسالة غير صحيحة"});
-  const t=await pool.query("SELECT id,username FROM tickets WHERE id=$1",[id]);
+  const t=await pool.query("SELECT id,username,status FROM tickets WHERE id=$1",[id]);
   if(!t.rowCount)return res.status(404).json({error:"التيكت غير موجود"});
   if(t.rows[0].username!==u.username&&!["owner","admin"].includes(u.role))return res.status(403).json({error:"لا تملك صلاحية الرد"});
+  if(t.rows[0].status==="closed")return res.status(400).json({error:"التيكت مغلق. افتحه من الإدارة قبل إضافة رد جديد."});
   const q=await pool.query("INSERT INTO ticket_messages(ticket_id,username,discord_username,message) VALUES($1,$2,$3,$4) RETURNING id,created_at",[id,u.username,u.discordUsername,message]);
   await audit(u,"ticket_reply",`#${id} ${message.slice(0,120)}`);
   res.json({ok:true,message:{id:q.rows[0].id,username:u.username,discord_username:u.discordUsername,message,created_at:q.rows[0].created_at}});
