@@ -229,7 +229,7 @@ throw Error("الحركة غير مدعومة")}
 function bot(game,s,p){
  if(game==="DAQSH"&&!s.signal&&Date.now()>=s.readyAt)s.signal=true;
  if(s.phase==="finished"||!p[s.turnIndex]?.bot)return s;
- const a=p[s.turnIndex];
+ const a=p[game==="QAWSAR"?s.qawsarTurn:s.turnIndex];
  if(game==="UNO"){let i=s.turnIndex,h=s.hands[i],n=h.findIndex(c=>c.color==="wild"||c.color===s.color||c.value===s.top.value);if(n<0)return apply(game,s,p,a,"draw",{});return apply(game,s,p,a,"playCard",{index:n,color:C[Math.floor(Math.random()*4)]})}
  if(game==="LUDO"){apply(game,s,p,a,"roll",{});if(s.awaitingMove&&s.legalTokens.length)apply(game,s,p,a,"moveToken",{token:s.legalTokens[0]});return s}
  if(game==="BALOOT"){
