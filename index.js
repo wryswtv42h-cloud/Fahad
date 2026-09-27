@@ -850,6 +850,15 @@ const GAME_SEATS={
 };
 const GAME_MIN_PLAYERS={CODENAMES:4,SPYFALL:3,PICTIONARY:2,CHARADES:2,WHOAMI:2,TABOO:2,WORD_BOMB:2,TRUTH_LIE:2,EMOJI_GUESS:2,TRIVIA:2,CATEGORIES:2,LIAR:3,HOT_SEAT:2,WOULD_YOU_RATHER:2,DRAW_GUESS:2,FASTEST:2,RIDDLE_RUSH:2,SECRET_WORD:2,MIMIC:2,GUESS_PLAYER:3,UNO:2,LUDO:2,BALOOT:4,DAQSH:2,QAWSAR:2};
 function makeDeck32(){const suits=["♠","♥","♦","♣"];const ranks=["7","8","9","10","J","Q","K","A"];const deck=suits.flatMap(s=>ranks.map(r=>({id:"baloot-"+s+"-"+r,color:s,suit:s,value:r,rank:r})));for(let i=deck.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[deck[i],deck[j]]=[deck[j],deck[i]];}return deck;}
+function makeUnoDeck(){const colors=["🔴","🟡","🟢","🔵"],deck=[];for(const color of colors){deck.push({id:color+"-0",color,value:"0"});for(const value of ["1","2","3","4","5","6","7","8","9","Skip","Reverse","+2"])deck.push({id:color+"-"+value+"-a",color,value},{id:color+"-"+value+"-b",color,value})}for(let i=0;i<4;i++)deck.push({id:"wild-"+i,color:"wild",value:"Wild"},{id:"wild4-"+i,color:"wild",value:"+4"});return shuffle(deck)}
+function initUnoState(players){const deck=makeUnoDeck(),hands=Array.from({length:players.length},()=>[]);for(let n=0;n<7;n++)for(let i=0;i<players.length;i++)hands[i].push(deck.pop());let discard=deck.pop();while(discard&&discard.color==="wild"){deck.unshift(discard);discard=deck.pop()}return {version:3,phase:"playing",round:1,hands,drawPile:deck,discardPile:[discard],discardTop:discard,currentColor:discard.color,direction:1,turnPlayerIndex:0,pendingDraw:0,winner:null,lastPlayed:discard,drawCount:deck.length}}
+function initLudoState(players){return {version:3,phase:"rolling",round:1,turnPlayerIndex:0,dice:null,awaitingMove:false,tokens:players.map(()=>[-1,-1,-1,-1]),legalTokens:[],winner:null,lastResult:null}}
+function balootRank(card,trump){const r=String(card?.rank||card?.value||""),order=trump&&card?.suit===trump?["7","8","Q","K","10","A","9","J"]:["7","8","9","J","Q","K","10","A"];return order.indexOf(r)}
+function balootPoints(card,trump){const r=String(card?.rank||card?.value||"");if(trump&&card?.suit===trump)return ({J:20,"9":14,A:11,"10":10,K:4,Q:3,"8":0,"7":0})[r]??0;return ({A:11,"10":10,K:4,Q:3,J:2,"9":0,"8":0,"7":0})[r]??0}
+function balootLegalIndices(state,hand){if(!Array.isArray(hand)||!hand.length)return [];if(!state.trick?.length)return hand.map((_,i)=>i);const led=state.trick[0]?.card?.suit,trump=state.trump,same=hand.map((c,i)=>c.suit===led?i:-1).filter(i=>i>=0);if(same.length)return same;if(state.contract==="hokum"&&trump){const tr=hand.map((c,i)=>c.suit===trump?i:-1).filter(i=>i>=0);if(tr.length)return tr}return hand.map((_,i)=>i)}
+function balootWinner(state){const trick=state.trick||[],trump=state.trump,led=trick[0]?.card?.suit;let best=-1,bestRank=-1;trick.forEach(x=>{const isTrump=trump&&x.card.suit===trump,follows=x.card.suit===led;if(!isTrump&&!follows)return;const rank=balootRank(x.card,trump)+(isTrump?100:50);if(rank>bestRank){bestRank=rank;best=x.playerIndex}});return best}
+function initBalootState(players,dealerIndex=0,matchScores){const deck=makeDeck32(),hands=Array.from({length:4},()=>[]);for(let n=0;n<5;n++)for(let i=0;i<4;i++)hands[i].push(deck.pop());const turnCard=deck.pop();return {version:3,phase:"bidding",round:1,dealerIndex,bidRound:1,bidTurnIndex:(dealerIndex+1)%4,bids:[],turnCard,stock:deck,hands,contract:null,trump:null,trick:[],trickHistory:[],turnPlayerIndex:(dealerIndex+1)%4,teamScores:matchScores||[0,0],handPoints:[0,0],winner:null,lastResult:null}}
+function finishBalootTrick(state,players){const winner=balootWinner(state),points=(state.trick||[]).reduce((n,x)=>n+balootPoints(x.card,state.trump),0)+(state.trickHistory.length===7?10:0),team=winner%2;state.handPoints[team]=(state.handPoints[team]||0)+points;state.trickHistory.push({cards:state.trick,winner});state.trick=[];state.turnPlayerIndex=winner;if(state.trickHistory.length>=8){state.teamScores=[(state.teamScores[0]||0)+(state.handPoints[0]||0),(state.teamScores[1]||0)+(state.handPoints[1]||0)];const a=state.teamScores[0],b=state.teamScores[1];if(a>=152||b>=152){state.winner=a===b?"تعادل — جولة فاصلة":(a>b?"الفريق A":"الفريق B");state.phase="finished"}else Object.assign(state,initBalootState(players,(state.dealerIndex+1)%4,state.teamScores))}}
 function playerKey(p){return p?.guestId?("g:"+p.guestId):("u:"+String(p?.username||"").toLowerCase());}
 function actorFromRequest(players,u,guestId){return u?players.find(p=>!p.bot&&p.username===u.username):players.find(p=>!p.bot&&p.guestId===guestId);}
 function seatOptions(game,max){return (GAME_SEATS[game]||[]).slice(0,Math.max(2,Math.min(max,8)));}
@@ -894,13 +903,17 @@ function publicGameState(game,state,actor){
     out.playerRole=actor?.seatLabel||"لاعب";
     out.privateInfo=secret.privateInfo||null;
     if(game==="BALOOT"||game==="UNO"){
-      const idx=actor?(state.playersOrder||[]).indexOf(playerKey(actor)):-1;
-      const playerIndex=idx>=0?idx:(actor&&Array.isArray(state.playerKeys)?state.playerKeys.indexOf(playerKey(actor)):-1);
-      delete out.hands;
-      if(Array.isArray(state.hands)){
-        const fallbackIndex=actor&&Array.isArray(state.hands)&&state.hands.length===1?0:-1;
-        out.hand=Array.isArray(state.hands[playerIndex>=0?playerIndex:fallbackIndex])?state.hands[playerIndex>=0?playerIndex:fallbackIndex]:[];
-      }else out.hand=[];
+      const idx=actor&&Array.isArray(state.playerKeys)?state.playerKeys.indexOf(playerKey(actor)):-1;
+      delete out.hands;delete out.drawPile;delete out.discardPile;delete out.stock;
+      out.hand=idx>=0&&Array.isArray(state.hands?.[idx])?state.hands[idx]:[];
+      if(game==="BALOOT")out.legalIndices=idx>=0?balootLegalIndices(state,state.hands[idx]||[]):[];
+      if(game==="UNO")out.drawCount=Array.isArray(state.drawPile)?state.drawPile.length:0;
+    }else if(game==="LUDO"){
+      const idx=actor&&Array.isArray(state.playerKeys)?state.playerKeys.indexOf(playerKey(actor)):-1;
+      out.tokens=idx>=0?(state.tokens?.[idx]||[-1,-1,-1,-1]):[];
+      out.legalTokens=idx>=0?(state.legalTokens||[]):[];
+      out.dice=state.dice;out.awaitingMove=!!state.awaitingMove;
+    }
     }
   }
   return out;
@@ -939,28 +952,15 @@ function fillMissingGameBots(game,players,minPlayers,maxPlayers){
   return players;
 }
 function firstHumanPlayer(players){return players.find(p=>!p.bot)||players[0]||null;}
-function simulateBotTurns(game,players,state){
-  if(!state||!Array.isArray(players)||!players.some(p=>p.bot))return state;
-  const humanKeys=new Set(players.filter(p=>!p.bot).map(playerKey));
-  if(game==="BALOOT"||game==="UNO"){
-    if(!Array.isArray(state.hands))return state;
-    for(let guard=0;guard<players.length*2;guard++){
-      const idx=Number(state.turnPlayerIndex);
-      if(!Number.isInteger(idx)||!players[idx])break;
-      if(humanKeys.has(playerKey(players[idx])))break;
-      const hand=Array.isArray(state.hands[idx])?state.hands[idx]:[];
-      if(!hand.length){state.winner=players[idx].username;break;}
-      const card=hand.splice(Math.floor(Math.random()*hand.length),1)[0];
-      state.lastPlayed=card;
-      if(!hand.length){state.winner=players[idx].username;break;}
-      state.turnPlayerIndex=(idx+1)%players.length;
-    }
-  }else if(game!=="CODENAMES" && state.turnPlayerKey && !humanKeys.has(state.turnPlayerKey)){
-    const next=players.find(p=>!p.bot);
-    if(next)state.turnPlayerKey=playerKey(next);
-  }
-  return state;
-}
+function simulateBotTurns(game,players,state){if(!state||!Array.isArray(players)||!players.some(p=>p.bot))return state;const humanKeys=new Set(players.filter(p=>!p.bot).map(playerKey)),humanTurn=i=>Number.isInteger(Number(i))&&humanKeys.has(playerKey(players[Number(i)]));
+if(game==="BALOOT"){let g=0;while(state.phase==="bidding"&&!humanTurn(state.bidTurnIndex)&&g++<8){const i=Number(state.bidTurnIndex),up=state.turnCard,choose=state.bidRound===1?((i%2===0)?{type:"hokum",suit:up?.suit}:{type:"pass"}):((i%2===0)?{type:"sun"}:{type:"pass"});state.bids.push({playerIndex:i,...choose});if(choose.type!=="pass"){state.contract=choose.type;state.trump=choose.type==="hokum"?choose.suit:null;state.phase="playing";for(let p=0;p<4;p++)while((state.hands[p]||[]).length<8)state.hands[p].push(state.stock.pop());state.turnPlayerIndex=(state.dealerIndex+1)%4;break}if(state.bids.length>=4){if(state.bidRound===1){state.bidRound=2;state.bids=[];state.bidTurnIndex=(state.dealerIndex+1)%4}else{Object.assign(state,initBalootState(players,(state.dealerIndex+1)%4,state.teamScores||[0,0]));break}}else state.bidTurnIndex=(state.bidTurnIndex+1)%4}
+let g2=0;while(state.phase==="playing"&&!humanTurn(state.turnPlayerIndex)&&g2++<32){const i=Number(state.turnPlayerIndex),hand=state.hands[i]||[],legal=balootLegalIndices(state,hand);if(!legal.length)break;const pick=legal[Math.floor(Math.random()*legal.length)];state.trick.push({playerIndex:i,card:hand.splice(pick,1)[0]});if(state.trick.length===4)finishBalootTrick(state,players);else state.turnPlayerIndex=(i+1)%4}}
+else if(game==="UNO"){let g=0;while(state.phase==="playing"&&!humanTurn(state.turnPlayerIndex)&&g++<32){const i=Number(state.turnPlayerIndex),hand=state.hands[i]||[],top=state.discardTop,legal=hand.map((c,n)=>({c,n})).filter(x=>x.c.color==="wild"||x.c.color===state.currentColor||x.c.value===top?.value);if(legal.length){const x=legal[Math.floor(Math.random()*legal.length)],card=hand.splice(x.n,1)[0];state.discardPile.push(card);state.discardTop=card;state.currentColor=card.color==="wild"?["🔴","🟡","🟢","🔵"][Math.floor(Math.random()*4)]:card.color;if(card.value==="+2")state.pendingDraw=2;if(card.value==="Skip")state.turnPlayerIndex=(i+2)%players.length;else{if(card.value==="Reverse")state.direction*=-1;state.turnPlayerIndex=(i+state.direction+players.length)%players.length}if(!hand.length){state.winner=players[i].username;state.phase="finished"}}else{const c=state.drawPile.pop();if(c)hand.push(c);state.turnPlayerIndex=(i+state.direction+players.length)%players.length}}}
+else if(game==="LUDO"){let g=0;while(state.phase==="rolling"&&!humanTurn(state.turnPlayerIndex)&&g++<16){const i=Number(state.turnPlayerIndex);state.dice=1+Math.floor(Math.random()*6);const tokens=state.tokens[i]||[],legal=[];tokens.forEach((p,t)=>{if(p===-1&&state.dice===6)legal.push(t);else if(p>=0&&p<57&&p+state.dice<=57)legal.push(t)});if(legal.length){const t=legal[0];tokens[t]=tokens[t]===-1?0:tokens[t]+state.dice;if(tokens.every(x=>x>=57)){state.winner=players[i].username;state.phase="finished";break}}if(state.dice!==6)state.turnPlayerIndex=(i+1)%players.length}}
+else if(game==="CODENAMES"){const bot=players.find(p=>p.bot&&String(state.playerRoles?.[playerKey(p)]||"").startsWith(state.turn||""));if(bot){const role=state.playerRoles[playerKey(bot)]||"";if(role.endsWith("spymaster")&&!state.clue)state.clue={word:"مجموعة",number:1},state.guessesLeft=1;else if(role.endsWith("agent")&&state.clue){const xs=state.words.map((w,i)=>({w,i})).filter(x=>!x.w.revealed);if(xs.length){const x=xs[Math.floor(Math.random()*xs.length)];x.w.revealed=true;if(x.w.role===state.turn){state.scores[state.turn]++;state.guessesLeft--}else if(x.w.role==="assassin")state.winner=state.turn==="red"?"blue":"red";else state.guessesLeft=0;if(!state.guessesLeft){state.turn=state.turn==="red"?"blue":"red";state.clue=null}}}}}
+else if(state.turnPlayerKey&&!humanKeys.has(state.turnPlayerKey)){const next=players.find(p=>!p.bot);if(next)state.turnPlayerKey=playerKey(next)}
+return state}
+
 async function activeGameFor(req){
   const u=currentUser(req),guestId=String(req.body?.guestId||req.query?.guestId||"").trim();
   const q=await pool.query("SELECT id,players,status FROM game_lobbies WHERE status IN ('waiting','ready','playing') ORDER BY id DESC LIMIT 100");
@@ -1036,11 +1036,9 @@ app.post("/api/games/:id/start",async(req,res)=>{
   if(players.length<minPlayers||!allPlayersSeated(players))return res.status(409).json({error:"تعذر تجهيز المقاعد تلقائيًا"});
   const state=g.state&&Object.keys(g.state).length?g.state:makeGameState(g.game);
   state.startedAt=new Date().toISOString();
-  if(g.game==="BALOOT"||g.game==="UNO"){
-    const deck=g.game==="BALOOT"?makeDeck32():shuffle(["🔴","🟡","🟢","🔵"].flatMap(c=>["0","1","2","3","4","5","6","7","8","9","Skip","Reverse","+2"].flatMap(v=>[{id:c+"-"+v+"-a",color:c,value:v},{id:c+"-"+v+"-b",color:c,value:v}])));
-    state.hands=Array.from({length:players.length},()=>[]);
-    deck.forEach((card,i)=>state.hands[i%players.length].push(card));
-  }
+  if(g.game==="BALOOT")Object.assign(state,initBalootState(players,0,state.teamScores||[0,0]));
+  else if(g.game==="UNO")Object.assign(state,initUnoState(players));
+  else if(g.game==="LUDO")Object.assign(state,initLudoState(players));
   state.playerRoles={};
   state.playerSecrets={};
   players.forEach((p,i)=>{
@@ -1053,11 +1051,8 @@ app.post("/api/games/:id/start",async(req,res)=>{
     state.playerSecrets[key]={prompt:engine.prompt||state.prompt||"ابدأ الجولة.",privateInfo:state.playerRoles[key]};
   });
   if(g.game==="CODENAMES")state.turn="red";
-  else if(g.game==="BALOOT"||g.game==="UNO"){
-    const firstHumanIndex=Math.max(0,players.findIndex(p=>!p.bot));
-    state.turnPlayerIndex=firstHumanIndex;
-    state.playerKeys=players.map(playerKey);
-  }else state.turnPlayerKey=playerKey(firstHumanPlayer(players));
+  else if(g.game==="BALOOT"||g.game==="UNO"||g.game==="LUDO"){const firstHumanIndex=Math.max(0,players.findIndex(p=>!p.bot));state.turnPlayerIndex=firstHumanIndex;state.playerKeys=players.map(playerKey)}
+  else state.turnPlayerKey=playerKey(firstHumanPlayer(players));
   const updated=await pool.query("UPDATE game_lobbies SET status='playing',players=$1,state=$2 WHERE id=$3 RETURNING id,game,host_username,host_discord_username,max_players,players,status,created_at",[JSON.stringify(players),JSON.stringify(state),g.id]);
   if(u)await audit(u,"game_start","session "+g.id+" "+g.game+" players="+players.length);
   res.json({ok:true,game:updated.rows[0],state:publicGameState(g.game,state,actorFromRequest(players,u,guestId))});
@@ -1144,20 +1139,20 @@ app.post("/api/games/:id/action",async(req,res)=>{
       if(team!==state.turn)return res.status(403).json({error:"ليس دور فريقك"});
       state.guessesLeft=0;state.turn=state.turn==="red"?"blue":"red";state.turnNumber++;state.clue=null;
     }else return res.status(400).json({error:"حركة غير معروفة"});
-  }else if((g.game==="BALOOT"||g.game==="UNO")&&action==="playCard"){
+  }else if(g.game==="BALOOT"){
     const playerIndex=players.findIndex(p=>playerKey(p)===playerKey(actor));
-    const hand=Array.isArray(state.hands?.[playerIndex])?state.hands[playerIndex]:[];
-    const idx=Number(req.body?.index);
-    if(state.turnPlayerIndex!==playerIndex)return res.status(403).json({error:"ليس دورك الآن"});
-    if(!Number.isInteger(idx)||idx<0||idx>=hand.length)return res.status(400).json({error:"الورقة غير صحيحة"});
-    const card=hand[idx];
-    hand.splice(idx,1);
-    state.lastPlayed=card;
-    if(hand.length===0){
-      state.winner=actor.username||actor.guestId||("لاعب "+(playerIndex+1));
-    }else{
-      state.turnPlayerIndex=(state.turnPlayerIndex+1)%players.length;
-    }
+    if(state.phase==="bidding"&&action==="bid"){if(state.bidTurnIndex!==playerIndex)return res.status(403).json({error:"ليس دورك في الشراء"});const type=String(req.body?.bid||"pass"),suit=String(req.body?.suit||"");if(type==="pass")state.bids.push({playerIndex,type});else if(type==="sun")state.contract="sun";else if(type==="hokum"&&["♠","♥","♦","♣"].includes(suit)){state.contract="hokum";state.trump=suit}else return res.status(400).json({error:"الطلب غير صحيح"});if(state.contract){state.phase="playing";for(let p=0;p<4;p++)while((state.hands[p]||[]).length<8)state.hands[p].push(state.stock.pop());state.turnPlayerIndex=(state.dealerIndex+1)%4}else if(state.bids.length>=4){if(state.bidRound===1){state.bidRound=2;state.bids=[];state.bidTurnIndex=(state.dealerIndex+1)%4}else Object.assign(state,initBalootState(players,(state.dealerIndex+1)%4,state.teamScores||[0,0]))}else state.bidTurnIndex=(state.bidTurnIndex+1)%4}
+    else if(state.phase==="playing"&&action==="playCard"){if(state.turnPlayerIndex!==playerIndex)return res.status(403).json({error:"ليس دورك الآن"});const hand=state.hands?.[playerIndex]||[],idx=Number(req.body?.index),legal=balootLegalIndices(state,hand);if(!Number.isInteger(idx)||!legal.includes(idx))return res.status(400).json({error:"هذه الورقة غير قانونية في هذا الدور"});state.trick.push({playerIndex,card:hand.splice(idx,1)[0]});if(state.trick.length===4)finishBalootTrick(state,players);else state.turnPlayerIndex=(playerIndex+1)%players.length}else return res.status(400).json({error:"الحركة غير مدعومة في البلوت"});
+  }else if(g.game==="UNO"){
+    const playerIndex=players.findIndex(p=>playerKey(p)===playerKey(actor)),hand=state.hands?.[playerIndex]||[];if(state.turnPlayerIndex!==playerIndex)return res.status(403).json({error:"ليس دورك الآن"});
+    if(action==="draw"){const c=state.drawPile.pop();if(c)hand.push(c);state.turnPlayerIndex=(playerIndex+state.direction+players.length)%players.length}
+    else if(action==="playCard"){const idx=Number(req.body?.index),card=hand[idx],top=state.discardTop,playable=card&&(card.color==="wild"||card.color===state.currentColor||card.value===top?.value);if(!playable)return res.status(400).json({error:"هذه الورقة غير صالحة الآن"});hand.splice(idx,1);state.discardPile.push(card);state.discardTop=card;state.currentColor=card.color==="wild"?["🔴","🟡","🟢","🔵"][Math.floor(Math.random()*4)]:card.color;if(card.value==="+2")state.pendingDraw=2;if(card.value==="Skip")state.turnPlayerIndex=(playerIndex+2)%players.length;else{if(card.value==="Reverse")state.direction*=-1;state.turnPlayerIndex=(playerIndex+state.direction+players.length)%players.length}if(!hand.length){state.winner=actor.username||actor.guestId||("لاعب "+(playerIndex+1));state.phase="finished"}}
+    else return res.status(400).json({error:"الحركة غير مدعومة في UNO"});
+  }else if(g.game==="LUDO"){
+    const playerIndex=players.findIndex(p=>playerKey(p)===playerKey(actor));if(state.turnPlayerIndex!==playerIndex)return res.status(403).json({error:"ليس دورك الآن"});
+    if(action==="roll"){if(state.awaitingMove)return res.status(409).json({error:"اختر القطعة أولًا"});state.dice=1+Math.floor(Math.random()*6);state.awaitingMove=true;state.legalTokens=[];const tokens=state.tokens[playerIndex]||[];tokens.forEach((p,t)=>{if(p===-1&&state.dice===6)state.legalTokens.push(t);else if(p>=0&&p<57&&p+state.dice<=57)state.legalTokens.push(t)});if(!state.legalTokens.length){state.awaitingMove=false;state.turnPlayerIndex=(playerIndex+1)%players.length}}
+    else if(action==="moveToken"){if(!state.awaitingMove)return res.status(409).json({error:"ارمِ النرد أولًا"});const token=Number(req.body?.token),tokens=state.tokens[playerIndex]||[];if(!state.legalTokens.includes(token))return res.status(400).json({error:"هذه القطعة لا تستطيع الحركة"});tokens[token]=tokens[token]===-1?0:tokens[token]+state.dice;state.awaitingMove=false;if(tokens.every(x=>x>=57)){state.winner=actor.username||actor.guestId||("لاعب "+(playerIndex+1));state.phase="finished"}else if(state.dice!==6)state.turnPlayerIndex=(playerIndex+1)%players.length}
+    else return res.status(400).json({error:"الحركة غير مدعومة في لودو"});
   }else if(action==="round"||action==="answer"||action==="choose"){
     const engine=GAME_ENGINE[g.game]||{kind:"text",prompt:"ابدأ الجولة واكتب إجابتك.",choices:[],answer:""};
     if(state.turnPlayerKey && state.turnPlayerKey!==playerKey(actor))return res.status(403).json({error:"انتظر دور اللاعب الآخر"});
