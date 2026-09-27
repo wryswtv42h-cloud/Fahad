@@ -271,7 +271,7 @@ async function initAppDatabase() {
     ALTER TABLE app_users ADD COLUMN IF NOT EXISTS role VARCHAR(20) DEFAULT 'user';
     ALTER TABLE app_users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
     ALTER TABLE app_users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ; ALTER TABLE app_users ADD COLUMN IF NOT EXISTS banned BOOLEAN NOT NULL DEFAULT false;
-    CREATE TABLE IF NOT EXISTS password_resets (id BIGSERIAL PRIMARY KEY, username VARCHAR(32), discord_username VARCHAR(100), temp_password_hash TEXT, expires_at TIMESTAMPTZ, used_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+    CREATE TABLE IF NOT EXISTS password_resets (id BIGSERIAL PRIMARY KEY, username VARCHAR(32), discord_username VARCHAR(100), temp_password_hash TEXT, expires_at TIMESTAMPTZ, used_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()); CREATE TABLE IF NOT EXISTS registration_verifications (id BIGSERIAL PRIMARY KEY, username VARCHAR(32) NOT NULL, password_hash TEXT NOT NULL, discord_username VARCHAR(100) NOT NULL, discord_user_id VARCHAR(32) NOT NULL, code VARCHAR(12) NOT NULL, expires_at TIMESTAMPTZ NOT NULL, used_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()); CREATE INDEX IF NOT EXISTS registration_verifications_lookup_idx ON registration_verifications(discord_user_id,created_at DESC);
     ALTER TABLE password_resets ADD COLUMN IF NOT EXISTS username VARCHAR(32);
     ALTER TABLE password_resets ADD COLUMN IF NOT EXISTS discord_username VARCHAR(100);
     ALTER TABLE password_resets ADD COLUMN IF NOT EXISTS temp_password_hash TEXT;
@@ -443,13 +443,20 @@ app.post("/api/auth/register",authLimiter,async(req,res)=>{
     if(!/^[a-z0-9_.-]{3,32}$/.test(username)) return res.status(400).json({error:"اليوزر يجب أن يكون 3-32 حرفًا إنجليزيًا أو أرقامًا"});
     if(password.length<6||password.length>100) return res.status(400).json({error:"كلمة المرور يجب أن تكون 6 أحرف على الأقل"});
     if(discordUsername.length<2||discordUsername.length>100) return res.status(400).json({error:"أدخل يوزرك في Discord"});
-    if(!process.env.DATABASE_URL) return res.status(503).json({error:"قاعدة البيانات غير متاحة"});
-    const member=await findGuildMemberByUsername(discordUsername); if(!member) return res.status(403).json({error:"لازم تكون داخل سيرفر MLD في Discord قبل إنشاء الحساب"});
+    const member=await findGuildMemberByUsername(discordUsername);
+    if(!member) return res.status(403).json({error:"لازم تكون داخل سيرفر MLD في Discord قبل إنشاء الحساب"});
     if((await pool.query("SELECT id FROM app_users WHERE username=$1",[username])).rowCount) return res.status(409).json({error:"اسم المستخدم مستخدم مسبقًا"});
-    if((await pool.query("SELECT id FROM app_users WHERE lower(trim(discord_username))=lower(trim($1))",[discordUsername])).rowCount) return res.status(409).json({error:"حساب موقع موجود مسبقًا لهذا Discord username"});
-    const hash=await bcrypt.hash(password,12); await pool.query("INSERT INTO app_users(username,password_hash,discord_username,discord_user_id) VALUES($1,$2,$3,$4)",[username,hash,member.user.username,member.user.id]);
-    req.session.user={username,discordUsername:member.user.username,discordUserId:member.user.id,role:"user"}; await new Promise((resolve,reject)=>req.session.save(err=>err?reject(err):resolve())); await audit(req.session.user,"register","إنشاء حساب").catch(()=>{}); res.json({ok:true,user:req.session.user});
-  }catch(e){console.error("Register:",e);res.status(500).json({error:"تعذر إنشاء الحساب"});}
+    if((await pool.query("SELECT id FROM app_users WHERE lower(trim(discord_username))=lower(trim($1))",[member.user.username])).rowCount) return res.status(409).json({error:"حساب موقع موجود مسبقًا لهذا Discord"});
+    const hash=await bcrypt.hash(password,12);
+    const crypto=require("crypto"),code=crypto.randomBytes(3).toString("hex").toUpperCase();
+    await pool.query("UPDATE registration_verifications SET used_at=NOW() WHERE (username=$1 OR discord_user_id=$2) AND used_at IS NULL",[username,member.user.id]);
+    await pool.query("INSERT INTO registration_verifications(username,password_hash,discord_username,discord_user_id,code,expires_at) VALUES($1,$2,$3,$4,$5,NOW()+INTERVAL '10 minutes')",[username,hash,member.user.username,member.user.id,code]);
+    try{
+      await member.send({embeds:[new EmbedBuilder().setTitle("تأكيد إنشاء حساب MLD").setDescription("وصلنا طلب إنشاء حساب للموقع باسم **"+username+"**. إذا كان الطلب منك، أرسل في هذا الخاص:\n\n**تأكيد "+code+"**\n\nينتهي الرمز خلال 10 دقائق. إذا لم تطلب إنشاء الحساب، تجاهل الرسالة.").setColor("#ff9cdc").setTimestamp()]});
+    }catch(e){await pool.query("UPDATE registration_verifications SET used_at=NOW() WHERE code=$1 AND used_at IS NULL",[code]);return res.status(400).json({error:"تعذر إرسال رسالة التأكيد في Discord. افتح الخاص مع الزاجل ثم حاول مرة أخرى."});}
+    await audit({username,discordUsername:member.user.username},"register_pending","طلب إنشاء حساب بانتظار تأكيد Discord").catch(()=>{});
+    res.json({ok:true,pending:true,message:"تم إرسال رسالة تأكيد إلى الخاص في Discord. أرسل كلمة تأكيد الرمز هناك، ثم سجل دخولك من الموقع."});
+  }catch(e){console.error("Register:",e);res.status(500).json({error:"تعذر إنشاء طلب الحساب"});}
 });
 app.post("/api/auth/login",authLimiter,async(req,res)=>{
   try{
@@ -1212,9 +1219,25 @@ client.on("guildMemberRemove", async (member) => {
 });
 client.on("guildMemberUpdate", invalidateMemberSnapshot);
 
+async function handleRegistrationDM(message){
+  const text=String(message.content||"").trim();
+  const m=text.match(/^(?:تأكيد|confirm)\\s+([A-Z0-9]{6,12})$/i);
+  if(!m) return false;
+  const code=m[1].toUpperCase();
+  const q=await pool.query("SELECT * FROM registration_verifications WHERE discord_user_id=$1 AND code=$2 AND used_at IS NULL AND expires_at>NOW() ORDER BY id DESC LIMIT 1",[message.author.id,code]);
+  if(!q.rowCount){await message.author.send("رمز التأكيد غير صحيح أو منتهي.");return true;}
+  const v=q.rows[0];
+  if((await pool.query("SELECT id FROM app_users WHERE username=$1",[v.username])).rowCount){await pool.query("UPDATE registration_verifications SET used_at=NOW() WHERE id=$1",[v.id]);await message.author.send("هذا الحساب موجود بالفعل.");return true;}
+  await pool.query("INSERT INTO app_users(username,password_hash,discord_username,discord_user_id,role) VALUES($1,$2,$3,$4,'user')",[v.username,v.password_hash,v.discord_username,v.discord_user_id]);
+  await pool.query("UPDATE registration_verifications SET used_at=NOW() WHERE id=$1",[v.id]);
+  await audit({username:v.username,discordUsername:v.discord_username},"register_confirmed","تم تأكيد إنشاء الحساب من Discord").catch(()=>{});
+  await message.author.send("تم تأكيد حسابك وإنشاؤه بنجاح. الآن تقدر تسجل الدخول من الموقع.");
+  return true;
+}
+
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
-  if (!message.guildId) { try { await handleGroupDMApproval(message); } catch(e) { console.error("group DM handler:",e.message); } return; }
+  if (!message.guildId) { try { if (await handleRegistrationDM(message)) return; await handleGroupDMApproval(message); } catch(e) { console.error("DM handler:",e.message); } return; }
 
   const sender = getActivity(message.author.id);
   sender.messages += 1;
