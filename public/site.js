@@ -222,7 +222,7 @@ window.adminPanel=async function(){
     body.innerHTML="<article class='feature-card'><button id='admin-ticket-back'>رجوع</button><h3>🎫 تيكت #"+id+"</h3><div class='log-list'>"+(d.messages||[]).map(m=>"<div class='log-item'><b>"+esc(m.username)+" · Discord: "+esc(m.discord_username)+"</b><small>"+new Date(m.created_at).toLocaleString("ar-SA")+"</small><p>"+esc(m.message)+"</p></div>").join("")||"<p class='muted'>لا توجد رسائل.</p>"+"</div><div class='game-lobby-actions'><button class='primary' id='admin-ticket-close'>إغلاق وحفظ المحادثة</button><button id='admin-ticket-open'>فتح</button></div></article>";
     $("#admin-ticket-back").onclick=loadTickets;
     $("#admin-ticket-close").onclick=async()=>{const rr=await fetch("/api/owner/tickets/"+id+"/status",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({status:"closed"})}),x=await rr.json();if(!rr.ok)return alert(x.error||"تعذر الإغلاق");openAdminTicket(id)};
-    $("#admin-ticket-open").onclick=async()=>{const rr=await fetch("/api/owner/tickets/"+id+"/status",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({status:"open"}));if(!rr.ok)return alert((await rr.json()).error||"تعذر الفتح");openAdminTicket(id)};
+    $("#admin-ticket-open").onclick=async()=>{const rr=await fetch("/api/owner/tickets/"+id+"/status",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({status:"open"})});if(!rr.ok)return alert((await rr.json()).error||"تعذر الفتح");openAdminTicket(id)};
   }
   document.querySelectorAll("[data-admin-tab]").forEach(b=>b.onclick=()=>b.dataset.adminTab==="apps"?loadApps():loadTickets());
   await loadApps();
