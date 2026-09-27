@@ -250,32 +250,79 @@ applyView=async function(){
 };
 
 
-// MLD GAMES — stable, self-contained
+// MLD GAMES — lobby + session client
 async function renderGames(){
   searchWrap.style.display="none";
   title.textContent="مركز الألعاب";
-  subtitle.textContent="ألعاب خفيفة تعمل مباشرة من الموقع.";
+  subtitle.textContent="جلسات ألعاب حقيقية مرتبطة بالخادم — إنشاء، انضمام، مقاعد، مشاهدة، ولعب.";
   content.className="feature-grid";
-  content.innerHTML=`
-    <article class="feature-card"><div class="feature-icon">🎯</div><h3>اضغط بسرعة</h3><p class="muted">اجمع أكبر عدد خلال 10 ثوانٍ.</p><div class="game-score" id="click-score">0</div><button class="primary wide" id="click-start">ابدأ الجولة</button></article>
-    <article class="feature-card"><div class="feature-icon">🎲</div><h3>رمي النرد</h3><div class="dice-result" id="dice-result">🎲 🎲</div><button class="primary wide" id="dice-roll">ارمِ النرد</button></article>
-    <article class="feature-card"><div class="feature-icon">🪙</div><h3>عملة الحظ</h3><div class="dice-result" id="coin-result">—</div><button class="primary wide" id="coin-flip">اقلب العملة</button></article>`;
-  let score=0,end=0,timer=null;
-  $("#click-start").onclick=()=>{
-    if(end>Date.now()) return;
-    score=0; end=Date.now()+10000; $("#click-score").textContent="0"; $("#click-start").textContent="اضغط الآن!";
-    clearInterval(timer); timer=setInterval(()=>{
-      if(Date.now()>=end){clearInterval(timer);timer=null;$("#click-start").textContent="انتهت الجولة — "+score;setTimeout(()=>{if(view==="games")$("#click-start").textContent="ابدأ الجولة"},1200)}
-    },100);
+  const guestId=localStorage.getItem("mld_guest_id")||("g_"+crypto.randomUUID());
+  localStorage.setItem("mld_guest_id",guestId);
+  let sessionTimer=null,sessionId=null;
+  const names={CODENAMES:"Codenames",SPYFALL:"Spyfall",PICTIONARY:"Pictionary",CHARADES:"Charades",WHOAMI:"Who Am I?",TABOO:"Taboo",WORD_BOMB:"Word Bomb",TRUTH_LIE:"Truth or Lie",EMOJI_GUESS:"Emoji Guess",TRIVIA:"Trivia",CATEGORIES:"Categories",LIAR:"Liar",HOT_SEAT:"Hot Seat",WOULD_YOU_RATHER:"Would You Rather",DRAW_GUESS:"Draw & Guess",FASTEST:"Fastest",RIDDLE_RUSH:"Riddle Rush",SECRET_WORD:"Secret Word",MIMIC:"Mimic",GUESS_PLAYER:"Guess Player",UNO:"UNO",LUDO:"Ludo",BALOOT:"Baloot",DAQSH:"Daqsh",QAWSAR:"Qawsar"};
+  const escGame=x=>esc(x);
+  const api=async(url,opt)=>{const r=await fetch(url,opt);let d={};try{d=await r.json()}catch{}if(!r.ok)throw Error(d.error||"تعذر تنفيذ العملية");return d};
+  const guestPayload=()=>({guestId,guestName:"زائر"});
+  const stop=()=>{if(sessionTimer){clearInterval(sessionTimer);sessionTimer=null}sessionId=null};
+  const gamesList=async()=>{
+    stop();
+    let d;try{d=await api("/api/games")}catch(e){content.innerHTML="<article class='feature-card'><h3>الألعاب</h3><p class='muted'>"+escGame(e.message)+"</p></article>";return}
+    const games=d.games||[];
+    content.innerHTML=
+      "<article class='feature-card'><div class='feature-icon'>🎮</div><h3>إنشاء جلسة</h3><div class='form-stack'><label>اللعبة<select id='game-kind' class='full'>"+Object.entries(names).map(([k,v])=>"<option value='"+k+"'>"+escGame(v)+"</option>").join("")+"</select></label><label>عدد المقاعد<input id='game-max' class='full' type='number' min='2' max='8' value='4'></label><button class='primary wide' id='game-create'>إنشاء الجلسة</button><p id='game-create-status' class='muted'></p></div></article>"+
+      "<article class='feature-card'><h3>الجلسات الحالية</h3><div id='game-lobbies' class='log-list'>"+(games.length?games.map(g=>"<div class='group-item'><span><b>#"+g.id+" · "+escGame(names[g.game]||g.game)+"</b><small>"+escGame(g.host_username)+" · "+(g.players||[]).length+"/"+g.max_players+" · "+escGame(g.status)+"</small></span><div class='game-lobby-actions'><button class='primary' data-game-join='"+g.id+"'>انضمام</button><button data-game-watch='"+g.id+"'>مشاهدة</button></div></div>").join(""):"<p class='muted'>لا توجد جلسات مفتوحة حاليًا.</p>")+"</div></article>";
+    $("#game-create").onclick=async()=>{
+      const game=$("#game-kind").value,maxPlayers=Number($("#game-max").value)||4;
+      try{const d=await api("/api/games",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({game,maxPlayers,...guestPayload()})});openGameSession(d.game.id,false)}
+      catch(e){$("#game-create-status").textContent=e.message}
+    };
+    document.querySelectorAll("[data-game-join]").forEach(b=>b.onclick=async()=>{try{await api("/api/games/"+b.dataset.gameJoin+"/join",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(guestPayload())});openGameSession(Number(b.dataset.gameJoin),false)}catch(e){alert(e.message)}});
+    document.querySelectorAll("[data-game-watch]").forEach(b=>b.onclick=()=>openGameSession(Number(b.dataset.gameWatch),true));
   };
-  content.onclick=e=>{
-    if(e.target.id==="click-start" && end>Date.now()){score++;$("#click-score").textContent=String(score)}
-    if(e.target.id==="dice-roll"){const a=1+Math.floor(Math.random()*6),b=1+Math.floor(Math.random()*6);$("#dice-result").textContent=a+" + "+b+" = "+(a+b)}
-    if(e.target.id==="coin-flip")$("#coin-result").textContent=Math.random()<.5?"وجه 🪙":"كتابة ✨";
+  const openGameSession=async(id,spectator)=>{
+    stop();sessionId=id;
+    const renderState=async()=>{
+      try{
+        const d=await api("/api/games/"+id+"/state?guestId="+encodeURIComponent(guestId));
+        const g=d.game,s=d.state||{},players=g.players||[];
+        const active=players.find(p=>p.guestId===guestId);
+        const seats=(players.map(p=>"<div class='log-item'><b>"+escGame(p.seatLabel||p.username)+"</b><small>"+(p.host?"👑 صاحب الجلسة · ":"")+((p.guest)?"زائر":"عضو")+"</small></div>").join("")||"<p class='muted'>لاعبون سيظهرون هنا.</p>");
+        let action="";
+        if(spectator) action="<p class='muted'>وضع مشاهدة — لا يمكنك تنفيذ حركات.</p>";
+        else if(g.status!=="playing"){
+          const seatOptions=(["CODENAMES","SPYFALL","PICTIONARY","CHARADES","WHOAMI","TABOO","WORD_BOMB","TRUTH_LIE","EMOJI_GUESS","TRIVIA","CATEGORIES","LIAR","HOT_SEAT","WOULD_YOU_RATHER","DRAW_GUESS","FASTEST","RIDDLE_RUSH","SECRET_WORD","MIMIC","GUESS_PLAYER","UNO","LUDO","BALOOT","DAQSH","QAWSAR"].includes(g.game)?["المقعد 1","المقعد 2","المقعد 3","المقعد 4"]:[]);
+          action="<p class='muted'>اختر مقعدك ثم انتظر اكتمال اللاعبين.</p><div class='game-lobby-actions'>"+seatOptions.map((x,i)=>"<button data-game-seat='"+i+"'>"+escGame(x)+"</button>").join("")+"</div>";
+          if(active?.host)action+="<button class='primary wide' id='game-start' "+(g.status!=="ready"?"disabled":"")+">ابدأ اللعبة</button>";
+        }else{
+          if(g.game==="CODENAMES"){
+            if(s.canGiveClue) action="<div class='form-stack'><input id='game-clue' class='full' maxlength='30' placeholder='التلميح'><input id='game-clue-num' class='full' type='number' min='1' max='9' value='1'><button class='primary wide' data-game-action='clue'>إعطاء التلميح</button></div>";
+            if(s.canGuess) action+="<div class='game-word-grid'>"+(s.words||[]).map((w,i)=>"<button data-game-guess='"+i+"'>"+escGame(w.word||"؟")+"</button>").join("")+"</div>";
+          }else if(s.kind==="choice"&&Array.isArray(s.choices)) action="<p>"+escGame(s.prompt||"")+"</p><div class='game-lobby-actions'>"+s.choices.map((x,i)=>"<button data-game-choice='"+i+"'>"+escGame(x)+"</button>").join("")+"</div>";
+          else action="<p>"+escGame(s.prompt||"ابدأ الجولة.")+"</p><textarea id='game-answer' class='full' rows='4' placeholder='إجابتك'></textarea><button class='primary wide' data-game-action='answer'>إرسال الإجابة</button>";
+          action+="<button data-game-action='round'>جولة جديدة</button>";
+        }
+        content.innerHTML="<article class='feature-card'><button id='game-back'>رجوع للجلسات</button><div class='feature-icon'>🎮</div><h3>#"+id+" · "+escGame(names[g.game]||g.game)+"</h3><p class='muted'>الحالة: "+escGame(g.status)+" · "+players.length+"/"+g.max_players+" لاعبين</p><div class='log-list'>"+seats+"</div><div class='game-lobby-actions'>"+action+"<button id='game-leave'>"+(spectator?"خروج من المشاهدة":"مغادرة الجلسة")+"</button>"+(active?.host&&!spectator?"<button id='game-finish'>إنهاء الجلسة</button>":"")+"</div><p id='game-state-status' class='muted'>"+escGame(s.lastResult?.message||"")+"</p></article>";
+        $("#game-back").onclick=gamesList;
+        $("#game-leave").onclick=async()=>{try{if(!spectator)await api("/api/games/"+id+"/leave",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(guestPayload())});gamesList()}catch(e){alert(e.message)}};
+        $("#game-finish")?.addEventListener("click",async()=>{try{await api("/api/games/"+id+"/finish",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(guestPayload())});renderState()}catch(e){alert(e.message)}});
+        document.querySelectorAll("[data-game-seat]").forEach(b=>b.onclick=async()=>{try{const seats=["المقعد 1","المقعد 2","المقعد 3","المقعد 4"];await api("/api/games/"+id+"/seat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...guestPayload(),seat:seats[Number(b.dataset.gameSeat)]})});renderState()}catch(e){alert(e.message)}});
+        $("#game-start")?.addEventListener("click",async()=>{try{await api("/api/games/"+id+"/start",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(guestPayload())});renderState()}catch(e){alert(e.message)}});
+        document.querySelectorAll("[data-game-choice]").forEach(b=>b.onclick=()=>doAction("choose",{choice:Number(b.dataset.gameChoice)}));
+        document.querySelectorAll("[data-game-guess]").forEach(b=>b.onclick=()=>doAction("guess",{index:Number(b.dataset.gameGuess)}));
+        document.querySelectorAll("[data-game-action]").forEach(b=>b.onclick=()=>doAction(b.dataset.gameAction));
+      }catch(e){content.innerHTML="<article class='feature-card'><button id='game-back'>رجوع</button><h3>الجلسة</h3><p class='muted'>"+escGame(e.message)+"</p></article>";$("#game-back").onclick=gamesList}
+    };
+    const doAction=async(action,extra={})=>{
+      const body={...guestPayload(),action,...extra};
+      if(action==="clue"){body.word=$("#game-clue")?.value.trim();body.number=Number($("#game-clue-num")?.value)||1}
+      if(action==="answer")body.answer=$("#game-answer")?.value.trim()||"";
+      try{await api("/api/games/"+id+"/action",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});renderState()}catch(e){$("#game-state-status").textContent=e.message}
+    };
+    await renderState();sessionTimer=setInterval(renderState,1200);
   };
-  setStatus("الألعاب جاهزة");
+  await gamesList();setStatus("الألعاب والجلسات جاهزة");
 }
-function renderGroups(){ return groupsReal(); }
+
 
 
 // MLD NAVIGATION POLICY
