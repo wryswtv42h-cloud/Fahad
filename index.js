@@ -622,26 +622,50 @@ app.post("/api/owner/applications/:id/status",requireAdmin,async(req,res)=>{
     const q=await pool.query("SELECT * FROM applications WHERE id=$1",[id]);
     if(!q.rowCount)return res.status(404).json({error:"التقديم غير موجود"});
     const appRow=q.rows[0];
+
     if(status==="approved"){
-      const member=await findGuildMemberByUsername(appRow.discord_username);
-      if(!member)return res.status(400).json({error:"صاحب التقديم لم يعد داخل السيرفر"});
+      let member=await findGuildMemberByUsername(appRow.discord_username);
+      if(!member){
+        const au=await pool.query("SELECT discord_user_id,discord_username FROM app_users WHERE username=$1",[appRow.username]);
+        const did=au.rows[0]?.discord_user_id;
+        if(did){ try{ member=await (await getGuild()).members.fetch(did); }catch{} }
+      }
+      if(!member)return res.status(400).json({error:"صاحب التقديم لم يعد داخل السيرفر أو لم يتم ربط Discord بالحساب"});
       const guild=await getGuild();
       const roles=leadershipRoleIds.map(rid=>guild.roles.cache.get(rid)).filter(Boolean).sort((a,b)=>a.position-b.position);
       const adminRole=roles[0];
       if(!adminRole)return res.status(500).json({error:"لم يتم العثور على رتبة الإدارة الأدنى"});
-      await member.roles.add(adminRole.id,"قبول التقديم من إدارة MLD");
+      let roleError="";
+      try{ await member.roles.add(adminRole.id,"قبول التقديم من إدارة MLD"); }catch(e){ roleError=e.message; console.error("Application role grant:",e.message); }
       await pool.query("UPDATE app_users SET role=CASE WHEN role='owner' THEN role ELSE 'admin' END,discord_username=$2,discord_user_id=$3 WHERE username=$1",[appRow.username,member.user.username,member.user.id]);
-      try{await member.send({embeds:[new EmbedBuilder().setTitle("🎉 تم قبول تقديمك في MLD").setDescription("تم قبول تقديمك بنجاح.\n\nتمت إضافتك إلى الإدارة ومنحك رتبة الإدارة الأدنى في السيرفر.\nحساب الموقع: **"+appRow.username+"**\nDiscord: **"+member.user.username+"**").setColor("#8b5cf6").setTimestamp()]});}catch(dmErr){console.warn("Application acceptance DM:",dmErr.message);}
+      try{await member.send({embeds:[new EmbedBuilder().setTitle("🎉 تم قبول تقديمك في MLD").setDescription("تم قبول تقديمك بنجاح.\n\nتم تحديث صلاحية حسابك إلى الإدارة."+ (roleError?"\nملاحظة: تعذر إعطاء رتبة Discord تلقائيًا وسيحتاج الأونر لإعطائها يدويًا.":"\nتمت إضافة رتبة الإدارة في السيرفر.") +"\nحساب الموقع: **"+appRow.username+"**\nDiscord: **"+member.user.username+"**").setColor("#8b5cf6").setTimestamp()]});}catch{}
     }else if(status==="rejected"){
       const member=await findGuildMemberByUsername(appRow.discord_username).catch(()=>null);
-      if(member){try{await member.send({embeds:[new EmbedBuilder().setTitle("MLD — نتيجة التقديم").setDescription("تم رفض تقديمك حاليًا. يمكنك التقديم مرة أخرى لاحقًا إذا فُتح التقديم من جديد.").setColor("#ef4444").setTimestamp()]});}catch{}}
+      if(member){try{await member.send({embeds:[new EmbedBuilder().setTitle("MLD — نتيجة التقديم").setDescription("تم رفض تقديمك حاليًا. يمكنك التقديم مرة أخرى لاحقًا.").setColor("#ef4444").setTimestamp()]});}catch{}}
     }
     const updated=await pool.query("UPDATE applications SET status=$1 WHERE id=$2 RETURNING id,status",[status,id]);
     await audit(req.session.user,"application_status","#"+id+" => "+status+" · الموقع="+appRow.username+" · Discord="+appRow.discord_username);
     res.json({ok:true,application:updated.rows[0]});
-  }catch(e){console.error("Application status:",e);res.status(500).json({error:"تعذر تحديث التقديم"});}
+  }catch(e){console.error("Application status:",e);res.status(500).json({error:"تعذر تحديث التقديم: "+(e.message||"خطأ غير معروف")});}
 });
 
+
+// OWNER FULL CONTROL — destructive actions are owner-only and audited.
+app.delete("/api/owner/applications/:id",requireOwner,async(req,res)=>{const id=Number(req.params.id);const q=await pool.query("DELETE FROM applications WHERE id=$1 RETURNING id",[id]);if(!q.rowCount)return res.status(404).json({error:"التقديم غير موجود"});await audit(req.session.user,"application_delete","#"+id);res.json({ok:true});});
+app.delete("/api/owner/tickets/:id",requireOwner,async(req,res)=>{const id=Number(req.params.id);const q=await pool.query("DELETE FROM tickets WHERE id=$1 RETURNING id",[id]);if(!q.rowCount)return res.status(404).json({error:"التيكت غير موجود"});await audit(req.session.user,"ticket_delete","#"+id);res.json({ok:true});});
+app.delete("/api/owner/groups/:id",requireOwner,async(req,res)=>{
+  const id=Number(req.params.id),g=await pool.query("SELECT * FROM community_groups WHERE id=$1",[id]);
+  if(!g.rowCount)return res.status(404).json({error:"القروب غير موجود"});
+  const row=g.rows[0];
+  if(row.group_conversation_id){await pool.query("DELETE FROM chat_messages WHERE conversation_id=$1",[row.group_conversation_id]).catch(()=>{});await pool.query("DELETE FROM chat_participants WHERE conversation_id=$1",[row.group_conversation_id]).catch(()=>{});await pool.query("DELETE FROM chat_conversations WHERE id=$1",[row.group_conversation_id]).catch(()=>{});}
+  if(row.discord_role_id){try{const guild=await getGuild();const role=guild.roles.cache.get(row.discord_role_id)||await guild.roles.fetch(row.discord_role_id).catch(()=>null);if(role)await role.delete("حذف قروب MLD بواسطة الأونر");}catch(e){console.error("group role delete:",e.message);}}
+  if(row.discord_channel_id){try{const guild=await getGuild();const ch=guild.channels.cache.get(row.discord_channel_id)||await guild.channels.fetch(row.discord_channel_id).catch(()=>null);if(ch)await ch.delete("حذف قروب MLD بواسطة الأونر");}catch(e){console.error("group channel delete:",e.message);}}
+  await pool.query("DELETE FROM community_groups WHERE id=$1",[id]);await audit(req.session.user,"group_delete","#"+id+" "+row.name);res.json({ok:true});
+});
+app.delete("/api/owner/group-requests/:id",requireOwner,async(req,res)=>{const id=Number(req.params.id);const q=await pool.query("DELETE FROM group_join_requests WHERE id=$1 RETURNING id,group_id,username",[id]);if(!q.rowCount)return res.status(404).json({error:"طلب القروب غير موجود"});await audit(req.session.user,"group_request_delete","#"+id);res.json({ok:true});});
+app.delete("/api/owner/reviews/:id",requireOwner,async(req,res)=>{const id=Number(req.params.id);const q=await pool.query("DELETE FROM reviews WHERE id=$1 RETURNING id",[id]);if(!q.rowCount)return res.status(404).json({error:"الرأي غير موجود"});await audit(req.session.user,"review_delete","#"+id);res.json({ok:true});});
+app.delete("/api/owner/games/:id",requireOwner,async(req,res)=>{const id=Number(req.params.id);const q=await pool.query("DELETE FROM game_lobbies WHERE id=$1 RETURNING id",[id]);if(!q.rowCount)return res.status(404).json({error:"جلسة اللعبة غير موجودة"});await audit(req.session.user,"game_delete","#"+id);res.json({ok:true});});
+app.post("/api/owner/games/:id/finish",requireOwner,async(req,res)=>{const id=Number(req.params.id);const q=await pool.query("UPDATE game_lobbies SET status='finished',state=COALESCE(state,'{}'::jsonb)||jsonb_build_object('finishedAt',NOW()::text,'ownerFinished',true) WHERE id=$1 RETURNING id,status",[id]);if(!q.rowCount)return res.status(404).json({error:"جلسة اللعبة غير موجودة"});await audit(req.session.user,"game_finish_owner","#"+id);res.json({ok:true,game:q.rows[0]});});
 app.get("/api/reviews",async(req,res)=>{const q=await pool.query("SELECT id,username,rating,message,created_at FROM reviews WHERE status='visible' ORDER BY id DESC LIMIT 30");res.json({reviews:q.rows});});
 app.post("/api/reviews",requireAuth,async(req,res)=>{const u=req.session.user,message=String(req.body?.message||"").trim(),rating=Math.max(1,Math.min(5,Number(req.body?.rating)||5));if(message.length<3||message.length>1000)return res.status(400).json({error:"الرأي يجب أن يكون بين 3 و1000 حرف"});const q=await pool.query("INSERT INTO reviews(username,discord_username,rating,message) VALUES($1,$2,$3,$4) RETURNING id",[u.username,u.discordUsername,rating,message]);await audit(u,"review_create",`#${q.rows[0].id}`);res.json({ok:true,id:q.rows[0].id});});
 app.get("/api/announcements",async(req,res)=>{const q=await pool.query("SELECT id,text,link FROM announcements WHERE active=true ORDER BY id DESC LIMIT 5");res.json({announcements:q.rows});});
