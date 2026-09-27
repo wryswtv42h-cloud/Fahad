@@ -8,3 +8,15 @@ test.describe("MLD public UI",()=>{
   test("mobile menu rebuilds and routes",async({page})=>{await page.setViewportSize({width:390,height:844});await page.goto(BASE,{waitUntil:"networkidle"});await page.locator("#menu").click();await expect(page.locator("#mobile-menu")).toHaveClass(/open/);await page.locator('#mobile-menu [data-view="games"]').click();await expect(page.locator("#game-create")).toBeVisible();});
 });
 test.describe("MLD public API",()=>{for(const path of ["/api/public/server","/api/public/roles","/api/public/members","/api/public/top","/api/games","/api/site/stats","/api/site/settings","/api/reviews"]){test(path+" returns JSON",async({request})=>{const r=await request.get(BASE+path);expect(r.status()).toBeLessThan(500);expect(r.headers()["content-type"]||"").toContain("application/json");});}});
+
+test("mobile menu opens, navigates, and closes", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(BASE + "?v=fix22", { waitUntil: "networkidle", timeout: 30000 });
+  const menu = page.locator("#menu");
+  await expect(menu).toBeVisible();
+  await menu.click();
+  await expect(page.locator("#mobile-menu")).toHaveClass(/open/);
+  await page.locator('#mobile-menu [data-view="members"]').click();
+  await expect(page.locator("#mobile-menu")).not.toHaveClass(/open/);
+  await expect(page.locator("#view-title")).toContainText("الأعضاء");
+});
