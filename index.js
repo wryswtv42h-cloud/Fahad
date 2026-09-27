@@ -852,9 +852,9 @@ app.post("/api/games/:id/start",async(req,res)=>{
   });
   if(g.game==="CODENAMES")state.turn="red";
   else state.turnPlayerKey=playerKey(players[0]);
-  const updated=await pool.query("UPDATE game_lobbies SET status='playing',state=$1 WHERE id=$2 RETURNING *",[JSON.stringify(state),g.id]);
+  const updated=await pool.query("UPDATE game_lobbies SET status='playing',state=$1 WHERE id=$2 RETURNING id,game,host_username,host_discord_username,max_players,players,status,created_at",[JSON.stringify(state),g.id]);
   if(u)await audit(u,"game_start","session "+g.id+" "+g.game+" players="+players.length);
-  res.json({ok:true,game:updated.rows[0]});
+  res.json({ok:true,game:updated.rows[0],state:publicGameState(g.game,state,actorFromRequest(players,u,guestId))});
 });
 app.post("/api/games/:id/finish",async(req,res)=>{
   const u=currentUser(req),guestId=String(req.body?.guestId||"").trim(),q=await pool.query("SELECT * FROM game_lobbies WHERE id=$1",[req.params.id]);
