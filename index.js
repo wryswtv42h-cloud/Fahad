@@ -11,6 +11,7 @@ const { Pool } = require("pg");
 const helmet = require("helmet");
 const compression = require("compression");
 const GAME_ENGINE_V4 = require("./game-engines");
+const GAME_RESULT_TTL_MS = 5*60*1000;
 
 const token = process.env.DISCORD_BOT_TOKEN;
 const guildId = process.env.DISCORD_GUILD_ID;
@@ -1060,6 +1061,15 @@ app.post("/api/games/:id/leave",async(req,res)=>{
   res.json({ok:true,closed:false});
 });
 app.get("/api/games/:id/state",async(req,res)=>{
+  // Finished games remain viewable for five minutes as a results room.
+  if(row?.status==="finished"){
+    const endedAt=Date.parse(row.state?.endedAt||row.updated_at||row.updatedAt||0)||0;
+    if(endedAt && Date.now()-endedAt>GAME_RESULT_TTL_MS){
+      await pool.query("DELETE FROM game_lobbies WHERE id=$1",[row.id]);
+      return res.status(404).json({error:"انتهت جلسة اللعبة"});
+    }
+  }
+
   const u=currentUser(req),guestId=String(req.query?.guestId||"").trim();
   const q=await pool.query("SELECT id,game,players,status,state FROM game_lobbies WHERE id=$1",[req.params.id]);
   if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة"});
