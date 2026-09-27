@@ -1058,7 +1058,7 @@ app.post("/api/games/:id/start",async(req,res)=>{
     state.turnPlayerIndex=firstHumanIndex;
     state.playerKeys=players.map(playerKey);
   }else state.turnPlayerKey=playerKey(firstHumanPlayer(players));
-  const updated=await pool.query("UPDATE game_lobbies SET status='playing',state=$1 WHERE id=$2 RETURNING id,game,host_username,host_discord_username,max_players,players,status,created_at",[JSON.stringify(state),g.id]);
+  const updated=await pool.query("UPDATE game_lobbies SET status='playing',players=$1,state=$2 WHERE id=$3 RETURNING id,game,host_username,host_discord_username,max_players,players,status,created_at",[JSON.stringify(players),JSON.stringify(state),g.id]);
   if(u)await audit(u,"game_start","session "+g.id+" "+g.game+" players="+players.length);
   res.json({ok:true,game:updated.rows[0],state:publicGameState(g.game,state,actorFromRequest(players,u,guestId))});
 });
