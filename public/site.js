@@ -189,3 +189,58 @@ async function openGroupChat(id){
 ticketView=enhancedTicketView;
 groupsReal=enhancedGroupsReal;async function loadOwnerPrivateChats(){const el=$("#owner-private-chats");if(!el)return;const d=await fetch("/api/owner/chat/conversations").then(r=>r.json()).catch(()=>({conversations:[]}));el.innerHTML=(d.conversations||[]).map(x=>`<button class="group-item" data-owner-chat="${x.id}"><span><b>${esc(x.title||"محادثة خاصة")}</b><small>${esc(x.owner_username)} · ${x.participants} أعضاء · ${esc(x.last_message||"لا رسائل")}</small></span><span>فتح ↗</span></button>`).join("")||"<p class='muted'>لا توجد محادثات خاصة.</p>";document.querySelectorAll("[data-owner-chat]").forEach(b=>b.onclick=async()=>{const d=await fetch("/api/owner/chat/conversations/"+b.dataset.ownerChat).then(r=>r.json());openModal();box.innerHTML="<div class='message-box'><p class='eyebrow'>مراجعة المحادثة #"+b.dataset.ownerChat+"</p><div class='log-list'>"+(d.messages||[]).map(m=>"<div class='log-item'><b>"+esc(m.display_name)+" · @"+esc(m.sender_username)+"</b><small>"+new Date(m.created_at).toLocaleString("ar-SA")+"</small><p>"+esc(m.body)+"</p></div>").join("")+"</div></div>"})}
 
+
+/* MLD Owner Control Center */
+ownerPanel=async function(){
+  await mldMe();
+  if(!mldUser||mldUser.role!=="owner")return authView();
+  searchWrap.style.display="none"; title.textContent="لوحة الأونر"; subtitle.textContent="التقديمات · التذاكر · الزاجل · الحسابات · كل اللوقات"; content.className="feature-grid";
+  content.innerHTML="<article class='feature-card'><div class='feature-icon'>👑</div><h3>مركز الأونر</h3><p class='muted'>كل عمليات الإدارة من مكان واحد.</p><div class='game-lobby-actions'><button class='primary' data-owner-tab='apps'>📝 التقديمات</button><button data-owner-tab='tickets'>🎫 التذاكر</button><button data-owner-tab='logs'>📜 اللوقات</button><button data-owner-tab='users'>👥 الحسابات</button><button data-owner-tab='dms'>💬 الزاجل</button></div></article><div id='owner-panel-body' class='feature-grid'></div>";
+  const body=$("#owner-panel-body");
+  async function loadApps(){
+    const r=await fetch("/api/owner/applications"),d=await r.json();
+    body.innerHTML="<article class='feature-card'><h3>التقديمات</h3><div class='log-list'>"+(d.applications||[]).map(a=>"<div class='log-item'><b>#"+a.id+" · "+esc(a.type)+"</b><span>حساب الموقع: "+esc(a.username)+" · Discord: "+esc(a.discord_username)+"</span><small>"+new Date(a.created_at).toLocaleString("ar-SA")+" · الحالة: "+esc(a.status)+"</small><p>"+esc(JSON.stringify(a.answers||{},null,2))+"</p><div class='game-lobby-actions'>"+(a.status==="pending"?"<button class='primary' data-app-ok='"+a.id+"'>قبول</button><button data-app-no='"+a.id+"'>رفض</button>":"<b>"+(a.status==="approved"?"✅ مقبول":"❌ مرفوض")+"</b>")+"</div></div>").join("")||"<p class='muted'>لا توجد تقديمات.</p>"+"</div></article>";
+    document.querySelectorAll("[data-app-ok]").forEach(b=>b.onclick=async()=>{const rr=await fetch("/api/owner/applications/"+b.dataset.appOk+"/status",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({status:"approved"})}),x=await rr.json();if(!rr.ok)return alert(x.error||"تعذر القبول");loadApps()});
+    document.querySelectorAll("[data-app-no]").forEach(b=>b.onclick=async()=>{const rr=await fetch("/api/owner/applications/"+b.dataset.appNo+"/status",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({status:"rejected"})}),x=await rr.json();if(!rr.ok)return alert(x.error||"تعذر الرفض");loadApps()});
+  }
+  async function loadTickets(){
+    const r=await fetch("/api/owner/tickets"),d=await r.json();
+    body.innerHTML="<article class='feature-card'><h3>التذاكر</h3><div class='log-list'>"+(d.tickets||[]).map(t=>"<button class='group-item' data-owner-ticket='"+t.id+"'><span><b>#"+t.id+" · "+esc(t.subject)+"</b><small>"+esc(t.username)+" · Discord: "+esc(t.discord_username)+" · "+esc(t.status)+"</small></span><span>فتح ↗</span></button>").join("")||"<p class='muted'>لا توجد تذاكر.</p>"+"</div></article>";
+    document.querySelectorAll("[data-owner-ticket]").forEach(b=>b.onclick=()=>openOwnerTicket(Number(b.dataset.ownerTicket)));
+  }
+  async function openOwnerTicket(id){
+    const r=await fetch("/api/tickets/"+id+"/messages"),d=await r.json();
+    const lg=await fetch("/api/owner/tickets/"+id+"/log").then(x=>x.json()).catch(()=>({log:null}));
+    body.innerHTML="<article class='feature-card'><button id='owner-ticket-back'>رجوع</button><h3>🎫 تيكت #"+id+"</h3><div class='log-list'>"+(d.messages||[]).map(m=>"<div class='log-item'><b>"+esc(m.username)+" · Discord: "+esc(m.discord_username)+"</b><small>"+new Date(m.created_at).toLocaleString("ar-SA")+"</small><p>"+esc(m.message)+"</p></div>").join("")+"</div><div class='game-lobby-actions'><button class='primary' id='close-owner-ticket'>إغلاق وحفظ المحادثة</button><button id='owner-ticket-open'>فتح</button></div><h4>سجل الإغلاق</h4><div class='log-list'>"+(lg.log?(lg.log.transcript||[]).map(m=>"<div class='log-item'><b>"+esc(m.username)+" · Discord: "+esc(m.discord_username)+"</b><small>"+new Date(m.created_at).toLocaleString("ar-SA")+"</small><p>"+esc(m.message)+"</p></div>").join(""):"<p class='muted'>لم يتم إغلاقه بعد.</p>")+"</div></article>";
+    $("#owner-ticket-back").onclick=loadTickets;
+    $("#close-owner-ticket").onclick=async()=>{const rr=await fetch("/api/owner/tickets/"+id+"/status",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({status:"closed"})}),x=await rr.json();if(!rr.ok)return alert(x.error||"تعذر الإغلاق");openOwnerTicket(id)};
+    $("#owner-ticket-open").onclick=async()=>{await fetch("/api/owner/tickets/"+id+"/status",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({status:"open"}));openOwnerTicket(id)};
+  }
+  async function loadLogs(){
+    const r=await fetch("/api/owner/logs"),d=await r.json();
+    body.innerHTML="<article class='feature-card'><h3>كل اللوقات</h3><p class='muted'>ومنها الزاجل: الرسائل الخاصة تسجل صاحب الحساب وDiscord والمحادثة.</p><div class='log-list'>"+(d.logs||[]).map(x=>"<div class='log-item'><b>"+esc(x.action)+"</b><span>الموقع: "+esc(x.username||"النظام")+" · Discord: "+esc(x.discord_username||"")+"</span><small>"+new Date(x.created_at).toLocaleString("ar-SA")+"</small><p>"+esc(x.details||"")+"</p></div>").join("")||"<p class='muted'>لا توجد لوقات.</p>"+"</div></article>";
+  }
+  async function loadUsers(){
+    const r=await fetch("/api/owner/users"),d=await r.json();
+    body.innerHTML="<article class='feature-card'><h3>حسابات الأعضاء</h3><div class='log-list'>"+(d.users||[]).map(u=>"<button class='group-item' data-owner-user='"+esc(u.username)+"'><span><b>"+esc(u.display_name||u.username)+"</b><small>الموقع: "+esc(u.username)+" · Discord: "+esc(u.discord_username)+" · "+esc(u.role)+"</small></span><span>"+(u.avatar_url?"🖼️":"👤")+" فتح ↗</span></button>").join("")||"<p class='muted'>لا توجد حسابات.</p>"+"</div></article>";
+    document.querySelectorAll("[data-owner-user]").forEach(b=>b.onclick=()=>openOwnerUser(b.dataset.ownerUser));
+  }
+  async function openOwnerUser(username){
+    const r=await fetch("/api/owner/users/"+encodeURIComponent(username)+"/messages"),d=await r.json();
+    body.innerHTML="<article class='feature-card'><button id='owner-user-back'>رجوع</button><h3>💬 الزاجل · "+esc(username)+"</h3><p class='muted'>جميع الرسائل الخاصة التي يملك هذا الحساب صلاحية رؤيتها.</p><div class='log-list'>"+(d.messages||[]).map(m=>"<div class='log-item'><b>"+esc(m.display_name)+" · @"+esc(m.sender_username)+"</b><small>محادثة #"+esc(m.id)+" · "+new Date(m.created_at).toLocaleString("ar-SA")+"</small><p>"+esc(m.body)+"</p></div>").join("")||"<p class='muted'>لا توجد رسائل خاصة.</p>"+"</div></article>";
+    $("#owner-user-back").onclick=loadUsers;
+  }
+  async function tab(t){if(t==="apps")return loadApps();if(t==="tickets")return loadTickets();if(t==="logs")return loadLogs();if(t==="users"||t==="dms")return loadUsers();}
+  document.querySelectorAll("[data-owner-tab]").forEach(b=>b.onclick=()=>tab(b.dataset.ownerTab));
+  await loadApps(); setStatus("لوحة الأونر جاهزة");
+};
+
+applyView=async function(){
+  await mldMe(); searchWrap.style.display="none"; title.textContent="التقديم"; subtitle.textContent="التقديمات الجديدة وتقديماتي"; content.className="feature-grid";
+  content.innerHTML="<article class='feature-card'><div class='feature-icon'>📝</div><h3>تقديم جديد</h3><div id='dynamic-questions' class='form-stack'><div class='loading'>جاري التحميل...</div></div><button class='primary wide' id='app-send'>إرسال التقديم</button><p id='app-status' class='muted'></p></article><article class='feature-card'><h3>تقديماتي</h3><div id='my-applications' class='log-list'>جاري التحميل...</div></article>";
+  if(!mldUser){$("#app-send").textContent="سجّل دخولك أولًا";$("#app-send").onclick=()=>change("login");return}
+  const q=await fetch("/api/application-questions").then(r=>r.json()).catch(()=>({questions:[]})),qs=q.questions||[];
+  $("#dynamic-questions").innerHTML=(qs.length?qs:[{key:"experience",label:"خبرتك أو نبذة عنك",required:true},{key:"why",label:"ليش مناسب للتقديم؟",required:true}]).map(x=>"<label class='form-label'>"+esc(x.label)+(x.required?" *":"")+"<textarea class='full app-q' data-q='"+esc(x.key)+"' rows='4' maxlength='2000' placeholder='"+esc(x.label)+"'></textarea></label>").join("");
+  const my=await fetch("/api/my/applications").then(r=>r.json()).catch(()=>({applications:[]}));$("#my-applications").innerHTML=(my.applications||[]).map(a=>"<div class='log-item'><b>#"+a.id+" · "+esc(a.type)+"</b><small>"+new Date(a.created_at).toLocaleString("ar-SA")+" · "+esc(a.status)+"</small></div>").join("")||"<p class='muted'>ما عندك تقديمات.</p>";
+  $("#app-send").onclick=async()=>{const answers={};document.querySelectorAll(".app-q").forEach(x=>answers[x.dataset.q]=x.value.trim());const rr=await fetch("/api/applications",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({type:"إدارة",answers})}),dd=await rr.json();$("#app-status").textContent=rr.ok?"تم إرسال التقديم ✓":(dd.error||"تعذر الإرسال");if(rr.ok)applyView()};
+};
