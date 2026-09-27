@@ -11,5 +11,19 @@ function check(game){
  for(let i=0;i<3;i++){E.bot(game,s,p); E.pub(s,p,p[0]);}
  total++;
 }
+
+function checkQawsarRules(){
+ const p=players(4),s=E.create("QAWSAR",p);
+ assert.equal(s.hands.length,4); assert.ok(s.hands.every(h=>h.length===4));
+ assert.ok(s.revealed.every(v=>v.length===4&&v[0]&&v[1]&&!v[2]&&!v[3]));
+ assert.ok(s.deck.length>0);
+ const before=s.qawsarTurn; E.apply("QAWSAR",s,p,p[before],"draw",{});
+ assert.equal(s.qawsarPhase,"choice");
+ const old=s.hands[before][0]; E.apply("QAWSAR",s,p,p[before],"playCard",{index:0,mode:"swap"});
+ assert.notDeepEqual(s.hands[before][0],old);
+ assert.equal(s.qawsarPhase,"draw");
+}
+checkQawsarRules();
+
 for(let round=0;round<40000;round++)for(const g of games)check(g);
 console.log("GAME_SIMULATION_OK",JSON.stringify({games:games.length,rounds:40000,total,failures:0}));
