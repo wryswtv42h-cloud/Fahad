@@ -416,6 +416,7 @@ app.get("/api/owner/tickets/:id/log",requireAdmin,async(req,res)=>{
   res.json({log:q.rows[0]||null});
 });
 
+app.get("/api/my/applications",requireAuth,async(req,res)=>{const q=await pool.query("SELECT id,type,status,answers,created_at FROM applications WHERE username=$1 ORDER BY id DESC LIMIT 100",[req.session.user.username]);res.json({applications:q.rows});});
 app.get("/api/applications",async(req,res)=>{const q=await pool.query("SELECT type,status,created_at FROM applications ORDER BY id DESC LIMIT 30");res.json({applications:q.rows,public:true,canSubmit:Boolean(currentUser(req))});});
 app.get("/api/application-questions",requireAuth,async(req,res)=>{const q=await pool.query("SELECT id,label,key,type,required,position FROM application_questions WHERE active=true ORDER BY position,id");res.json({questions:q.rows});});
 app.post("/api/applications",requireAuth,async(req,res)=>{const type=String(req.body?.type||"تقديم").trim(),answers=req.body?.answers||{},u=req.session.user;if(type.length>60||JSON.stringify(answers).length>8000)return res.status(400).json({error:"بيانات التقديم غير صحيحة"});const q=await pool.query("INSERT INTO applications(username,discord_username,type,answers) VALUES($1,$2,$3,$4) RETURNING id",[u.username,u.discordUsername,type,JSON.stringify(answers)]);await audit(u,"application_create",`#${q.rows[0].id} ${type}`);res.json({ok:true,id:q.rows[0].id});});
