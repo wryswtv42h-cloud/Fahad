@@ -268,7 +268,13 @@ async function initAppDatabase() {
     ALTER TABLE app_users ADD COLUMN IF NOT EXISTS role VARCHAR(20) DEFAULT 'user';
     ALTER TABLE app_users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
     ALTER TABLE app_users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ; ALTER TABLE app_users ADD COLUMN IF NOT EXISTS banned BOOLEAN NOT NULL DEFAULT false;
-    CREATE TABLE IF NOT EXISTS password_resets (id BIGSERIAL PRIMARY KEY, username VARCHAR(32) NOT NULL REFERENCES app_users(username) ON DELETE CASCADE, discord_username VARCHAR(100) NOT NULL, temp_password_hash TEXT NOT NULL, expires_at TIMESTAMPTZ NOT NULL, used_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+    CREATE TABLE IF NOT EXISTS password_resets (id BIGSERIAL PRIMARY KEY, username VARCHAR(32), discord_username VARCHAR(100), temp_password_hash TEXT, expires_at TIMESTAMPTZ, used_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+    ALTER TABLE password_resets ADD COLUMN IF NOT EXISTS username VARCHAR(32);
+    ALTER TABLE password_resets ADD COLUMN IF NOT EXISTS discord_username VARCHAR(100);
+    ALTER TABLE password_resets ADD COLUMN IF NOT EXISTS temp_password_hash TEXT;
+    ALTER TABLE password_resets ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
+    ALTER TABLE password_resets ADD COLUMN IF NOT EXISTS used_at TIMESTAMPTZ;
+    ALTER TABLE password_resets ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
     CREATE INDEX IF NOT EXISTS password_resets_lookup_idx ON password_resets(username, created_at DESC);
     UPDATE app_users SET username=COALESCE(NULLIF(username,''),'user_'||id::text) WHERE username IS NULL;
     UPDATE app_users SET discord_username=COALESCE(NULLIF(discord_username,''),'MLD') WHERE discord_username IS NULL;
