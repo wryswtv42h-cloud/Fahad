@@ -10,6 +10,7 @@ const pgSession = require("connect-pg-simple")(session);
 const { Pool } = require("pg");
 const helmet = require("helmet");
 const compression = require("compression");
+const GAME_ENGINE_V4 = require("./game-engines");
 
 const token = process.env.DISCORD_BOT_TOKEN;
 const guildId = process.env.DISCORD_GUILD_ID;
@@ -834,15 +835,7 @@ const GAME_ENGINE={
   DAQSH:{kind:"choice",prompt:"إشارة السرعة ظهرت الآن! اختر رد الفعل الصحيح.",choices:["اضغط فورًا","انتظر","اخرج من الجولة"],answer:0},
   QAWSAR:{kind:"choice",prompt:"لديك ورقتان قويتان. هل تحفظ القوة أم تستخدمها الآن؟",choices:["أحفظها","أستخدم الأقوى الآن","أرمي عشوائيًا"],answer:1}
 };
-function makeGameState(game){
-  if(game==="CODENAMES"){
-    const words=shuffle(CODE_WORDS).slice(0,25);
-    const roles=shuffle(["red","red","red","red","red","red","red","red","red","blue","blue","blue","blue","blue","blue","blue","blue","blue","neutral","neutral","neutral","neutral","neutral","neutral","assassin"]);
-    return {version:2,game,words:words.map((word,i)=>({word,role:roles[i],revealed:false})),turn:"red",clue:null,guessesLeft:0,scores:{red:0,blue:0},winner:null,turnNumber:1};
-  }
-  const e=GAME_ENGINE[game]||{kind:"text",prompt:"ابدأ الجولة واكتب إجابتك.",answer:""};
-  return {version:2,game,round:1,score:0,turn:"player",prompt:e.prompt,choices:e.choices||[],kind:e.kind,answer:e.answer??"",winner:null,lastResult:null};
-}
+function makeGameState(game,players=[]){ return GAME_ENGINE_V4.create(game,players); }
 const GAME_SEATS={
   CODENAMES:["قائد الأحمر","عميل الأحمر","قائد الأزرق","عميل الأزرق"],
   SPYFALL:["المحقق 1","المحقق 2","المحقق 3","الجاسوس"],
@@ -890,54 +883,11 @@ function makePlayerSecret(game,player,state){
   return secret;
 }
 function publicGameState(game,state,actor){
-  if(!state)return {};
-  const out={...state};
-  delete out.answer;
-  delete out.playerSecrets;
-  if(game==="CODENAMES"){
-    const role=actor?state.playerRoles?.[playerKey(actor)]:"spectator";
-    const isSpymaster=role==="red_spymaster"||role==="blue_spymaster";
-    const isAgent=role==="red_agent"||role==="blue_agent";
-    out.playerRole=role||"spectator";
-    out.words=(state.words||[]).map(card=>{
-      const copy={...card};
-      if(!copy.revealed)delete copy.role;
-      if(!isSpymaster&&!isAgent&&!copy.revealed)delete copy.word;
-      return copy;
-    });
-    if(isSpymaster){
-      out.words=(state.words||[]).map(card=>({...card}));
-      out.secretMapVisible=true;
-    }else if(isAgent){
-      out.words=(state.words||[]).map(card=>({word:card.word,revealed:!!card.revealed,role:card.revealed?card.role:undefined}));
-      out.words.forEach(x=>{if(x.role===undefined)delete x.role;});
-      out.secretMapVisible=false;
-    }else{
-      out.words=[];
-      out.clue=null;
-      out.secretMapVisible=false;
-    }
-    out.canGiveClue=isSpymaster&&state.turn===(role.startsWith("red")?"red":"blue");
-    out.canGuess=isAgent&&state.turn===(role.startsWith("red")?"red":"blue");
-  }else{
-    const secret=makePlayerSecret(game,actor,state);
-    if(secret.prompt)out.prompt=secret.prompt;
-    out.playerRole=actor?.seatLabel||"لاعب";
-    out.privateInfo=secret.privateInfo||null;
-    if(game==="BALOOT"||game==="UNO"){
-      const idx=actor&&Array.isArray(state.playerKeys)?state.playerKeys.indexOf(playerKey(actor)):-1;
-      delete out.hands;delete out.drawPile;delete out.discardPile;delete out.stock;
-      out.hand=idx>=0&&Array.isArray(state.hands?.[idx])?state.hands[idx]:[];
-      if(game==="BALOOT")out.legalIndices=idx>=0?balootLegalIndices(state,state.hands[idx]||[]):[];
-      if(game==="UNO")out.drawCount=Array.isArray(state.drawPile)?state.drawPile.length:0;
-    }else if(game==="LUDO"){
-      const idx=actor&&Array.isArray(state.playerKeys)?state.playerKeys.indexOf(playerKey(actor)):-1;
-      out.tokens=idx>=0?(state.tokens?.[idx]||[-1,-1,-1,-1]):[];
-      out.legalTokens=idx>=0?(state.legalTokens||[]):[];
-      out.dice=state.dice;out.awaitingMove=!!state.awaitingMove;
-    }
+  if(state?.version>=4){
+    const players=Array.isArray(state.__players)?state.__players:[];
+    return GAME_ENGINE_V4.pub(state,players,actor);
   }
-  return out;
+  const out={...state}; delete out.answer; delete out.playerSecrets; return out;
 }
 function allPlayersSeated(players){return players.length>0&&players.every(p=>p.seat);}
 function fillMissingGameBots(game,players,minPlayers,maxPlayers){
@@ -1055,25 +1005,20 @@ app.post("/api/games/:id/start",async(req,res)=>{
   const minPlayers=GAME_MIN_PLAYERS[g.game]||2;
   fillMissingGameBots(g.game,players,minPlayers,g.max_players);
   if(players.length<minPlayers||!allPlayersSeated(players))return res.status(409).json({error:"تعذر تجهيز المقاعد تلقائيًا"});
-  const state=g.state&&Object.keys(g.state).length?g.state:makeGameState(g.game);
+  const state=g.state&&Object.keys(g.state).length?g.state:makeGameState(g.game,players);
   state.startedAt=new Date().toISOString();
-  if(g.game==="BALOOT")Object.assign(state,initBalootState(players,0,state.teamScores||[0,0]));
-  else if(g.game==="UNO")Object.assign(state,initUnoState(players));
-  else if(g.game==="LUDO")Object.assign(state,initLudoState(players));
-  state.playerRoles={};
-  state.playerSecrets={};
-  players.forEach((p,i)=>{
+  state.__players=players.map(p=>({username:p.username,guest:!!p.guest,bot:!!p.bot,guestId:p.guestId,seat:p.seat,seatLabel:p.seatLabel,host:!!p.host}));
+  if(state.version<4){ if(g.game==="BALOOT")Object.assign(state,initBalootState(players,0,state.teamScores||[0,0])); else if(g.game==="UNO")Object.assign(state,initUnoState(players)); else if(g.game==="LUDO")Object.assign(state,initLudoState(players)); }
+  if(!state.playerRoles) state.playerRoles={};
+  if(!state.playerSecrets) state.playerSecrets={};
+  if(state.version<4) players.forEach((p,i)=>{
     const key=playerKey(p);
-    if(g.game==="CODENAMES"){
-      const role=i===0?"red_spymaster":i===1?"red_agent":i===2?"blue_spymaster":"blue_agent";
-      state.playerRoles[key]=role;
-    }else state.playerRoles[key]=(g.game==="BALOOT"||g.game==="UNO")?i:(p.seatLabel||("لاعب "+(i+1)));
-    const engine=GAME_ENGINE[g.game]||{};
-    state.playerSecrets[key]={prompt:engine.prompt||state.prompt||"ابدأ الجولة.",privateInfo:state.playerRoles[key]};
+    if(g.game==="CODENAMES") state.playerRoles[key]=i===0?"red_spymaster":i===1?"red_agent":i===2?"blue_spymaster":"blue_agent";
+    else state.playerRoles[key]=(g.game==="BALOOT"||g.game==="UNO")?i:(p.seatLabel||("لاعب "+(i+1)));
   });
   if(g.game==="CODENAMES")state.turn="red";
-  else if(g.game==="BALOOT"||g.game==="UNO"||g.game==="LUDO"){const firstHumanIndex=Math.max(0,players.findIndex(p=>!p.bot));state.turnPlayerIndex=firstHumanIndex;state.playerKeys=players.map(playerKey)}
-  else state.turnPlayerKey=playerKey(firstHumanPlayer(players));
+  else if(["BALOOT","UNO","LUDO","SPYFALL"].includes(g.game)){state.turnPlayerIndex=Number.isInteger(state.turnIndex)?state.turnIndex:Math.max(0,players.findIndex(p=>!p.bot));state.playerKeys=players.map(playerKey)}
+  else if(state.turnPlayerKey==null)state.turnPlayerKey=playerKey(firstHumanPlayer(players));
   const updated=await pool.query("UPDATE game_lobbies SET status='playing',players=$1,state=$2 WHERE id=$3 RETURNING id,game,host_username,host_discord_username,max_players,players,status,created_at",[JSON.stringify(players),JSON.stringify(state),g.id]);
   if(u)await audit(u,"game_start","session "+g.id+" "+g.game+" players="+players.length);
   res.json({ok:true,game:updated.rows[0],state:publicGameState(g.game,state,actorFromRequest(players,u,guestId))});
@@ -1122,7 +1067,11 @@ app.get("/api/games/:id/state",async(req,res)=>{
   if(row.status==="finished"||row.status==="closed")return res.status(410).json({error:"انتهت الجلسة وتم إغلاقها",closed:true});
   let state=row.state&&Object.keys(row.state).length?row.state:null;
   if(row.status==="playing"&&!state){state=makeGameState(row.game);}
-  if(row.status==="playing"){state=simulateBotTurns(row.game,players,state);await pool.query("UPDATE game_lobbies SET state=$1,status=$2 WHERE id=$3",[JSON.stringify(state),state.winner?"finished":"playing",row.id]);}
+  if(row.status==="playing"){
+    if(state.version>=4){ state.__players=players.map(p=>({username:p.username,guest:!!p.guest,bot:!!p.bot,guestId:p.guestId,seat:p.seat,seatLabel:p.seatLabel,host:!!p.host})); state=GAME_ENGINE_V4.bot(row.game,state,players); }
+    else state=simulateBotTurns(row.game,players,state);
+    await pool.query("UPDATE game_lobbies SET state=$1,status=$2 WHERE id=$3",[JSON.stringify(state),state.winner?"finished":"playing",row.id]);
+  }
   const publicPlayers=players.map(p=>({username:p.username,guest:!!p.guest,host:!!p.host,seat:p.seat||null,seatLabel:p.seatLabel||null}));
   res.json({game:{...row,players:publicPlayers,minPlayers:GAME_MIN_PLAYERS[row.game]||2},state:publicGameState(row.game,state,actor)});
 });
@@ -1133,6 +1082,15 @@ app.post("/api/games/:id/action",async(req,res)=>{
   if(g.status!=="playing")return res.status(409).json({error:"الجلسة لم تبدأ"});
   const actor=actorFromRequest(players,u,guestId);if(!actor)return res.status(403).json({error:"لست داخل الجلسة"});
   const role=state.playerRoles?.[playerKey(actor)]||"";
+  if(state.version>=4){
+    try{
+      state.__players=players.map(p=>({username:p.username,guest:!!p.guest,bot:!!p.bot,guestId:p.guestId,seat:p.seat,seatLabel:p.seatLabel,host:!!p.host}));
+      GAME_ENGINE_V4.apply(g.game,state,players,actor,action,req.body||{});
+      const finished=!!state.winner;
+      const up=await pool.query("UPDATE game_lobbies SET state=$1,status=$2 WHERE id=$3 RETURNING state,status,players",[JSON.stringify(state),finished?"finished":"playing",g.id]);
+      return res.json({ok:true,state:publicGameState(g.game,up.rows[0].state,actor),status:up.rows[0].status,players:up.rows[0].players.map(p=>({username:p.username,guest:!!p.guest,host:!!p.host,seat:p.seat||null,seatLabel:p.seatLabel||null}))});
+    }catch(e){return res.status(400).json({error:e.message||"الحركة غير صحيحة"});}
+  }
   if(g.game==="CODENAMES"){
     const team=role.startsWith("red")?"red":role.startsWith("blue")?"blue":null;
     if(action==="clue"){
