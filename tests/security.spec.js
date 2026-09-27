@@ -3,7 +3,7 @@ const BASE=process.env.BASE_URL||"https://discord-community-platform-production-
 test.describe("MLD authorization and security smoke",()=>{
   for(const path of ["/api/owner/logs","/api/owner/users","/api/owner/applications","/api/owner/tickets","/api/owner/settings"]){
     test("unauthenticated access blocked: "+path,async({request})=>{
-      const r=await request.get(BASE+path);
+      const r=path==="/api/owner/settings"?await request.post(BASE+path,{data:{}}):await request.get(BASE+path);
       expect([401,403]).toContain(r.status());
     });
   }
