@@ -80,3 +80,15 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 #welcome-sound{transition:transform .16s ease,filter .16s ease,box-shadow .16s ease;}#welcome-sound:hover{transform:scale(1.08);filter:brightness(1.08);box-shadow:0 8px 24px rgba(255,156,222,.22);}#welcome-sound:active{transform:scale(.94);}
 
 .review-card{padding:16px;border:1px solid rgba(255,255,255,.08);border-radius:16px;margin:10px 0}.review-card small{display:block;margin-top:8px;opacity:.65}.review-stars{letter-spacing:2px;margin-bottom:6px}
+
+/* MLD polish */
+button,.primary,.group-item,.feature-card,.role,.auth-chip{transition:transform .18s ease,box-shadow .18s ease,background .18s ease,border-color .18s ease}
+button:hover,.group-item:hover{transform:translateY(-2px)}
+button:active,.group-item:active{transform:scale(.97)}
+.feature-card:hover{box-shadow:0 14px 38px rgba(0,0,0,.16)}
+.primary{box-shadow:0 8px 22px rgba(139,92,246,.16)}
+.log-item{transition:background .18s ease,transform .18s ease;border-radius:14px}
+.log-item:hover{transform:translateX(-2px)}
+input,textarea{transition:border-color .18s ease,box-shadow .18s ease}
+input:focus,textarea:focus{box-shadow:0 0 0 3px rgba(139,92,246,.13);outline:none}
+.group-item{cursor:pointer}
