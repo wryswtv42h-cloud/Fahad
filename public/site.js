@@ -322,6 +322,7 @@ async function renderGames(){
         const d=await api("/api/games/"+id+"/state?guestId="+encodeURIComponent(guestId));
         const g=d.game,s=d.state||{},players=g.players||[];
         const active=players.find(p=>p.guestId===guestId);
+        const activeIndex=players.findIndex(p=>p.guestId===guestId);
         const seats=(players.map(p=>"<div class='log-item'><b>"+escGame(p.seatLabel||p.username)+"</b><small>"+(p.host?"👑 صاحب الجلسة · ":"")+((p.guest)?"زائر":"عضو")+"</small></div>").join("")||"<p class='muted'>لاعبون سيظهرون هنا.</p>");
         let action="";
         if(spectator) action="<p class='muted'>وضع مشاهدة — لا يمكنك تنفيذ حركات.</p>";
@@ -333,6 +334,9 @@ async function renderGames(){
           if(g.game==="CODENAMES"){
             if(s.canGiveClue) action="<div class='form-stack'><input id='game-clue' class='full' maxlength='30' placeholder='التلميح'><input id='game-clue-num' class='full' type='number' min='1' max='9' value='1'><button class='primary wide' data-game-action='clue'>إعطاء التلميح</button></div>";
             if(s.canGuess) action+="<div class='game-word-grid'>"+(s.words||[]).map((w,i)=>"<button data-game-guess='"+i+"'>"+escGame(w.word||"؟")+"</button>").join("")+"</div>";
+          }else if(g.game==="BALOOT"||g.game==="UNO"){
+            const myTurn=activeIndex===Number(s.turnPlayerIndex);
+            action="<p>"+(myTurn?"دورك الآن":"انتظر دور اللاعب الآخر")+"</p><div class='game-lobby-actions'>"+(s.hand||[]).map((card,i)=>"<button data-game-card='"+i+"' "+(myTurn?"":"disabled")+">"+escGame(card.rank?card.suit+" "+card.rank:(card.color||"")+" "+(card.value||"ورقة"))+"</button>").join("")+"</div>";
           }else if(s.kind==="choice"&&Array.isArray(s.choices)) action="<p>"+escGame(s.prompt||"")+"</p><div class='game-lobby-actions'>"+s.choices.map((x,i)=>"<button data-game-choice='"+i+"'>"+escGame(x)+"</button>").join("")+"</div>";
           else action="<p>"+escGame(s.prompt||"ابدأ الجولة.")+"</p><textarea id='game-answer' class='full' rows='4' placeholder='إجابتك'></textarea><button class='primary wide' data-game-action='answer'>إرسال الإجابة</button>";
           action+="<button data-game-action='round'>جولة جديدة</button>";
@@ -344,6 +348,7 @@ async function renderGames(){
         document.querySelectorAll("[data-game-seat]").forEach(b=>b.onclick=async()=>{try{const seats=seatNames[g.game]||[];await api("/api/games/"+id+"/seat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...guestPayload(),seat:seats[Number(b.dataset.gameSeat)]})});renderState()}catch(e){alert(e.message)}});
         $("#game-start")?.addEventListener("click",async()=>{try{await api("/api/games/"+id+"/start",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(guestPayload())});renderState()}catch(e){alert(e.message)}});
         document.querySelectorAll("[data-game-choice]").forEach(b=>b.onclick=()=>doAction("choose",{choice:Number(b.dataset.gameChoice)}));
+        document.querySelectorAll("[data-game-card]").forEach(b=>b.onclick=()=>doAction("playCard",{index:Number(b.dataset.gameCard)}));
         document.querySelectorAll("[data-game-guess]").forEach(b=>b.onclick=()=>doAction("guess",{index:Number(b.dataset.gameGuess)}));
         document.querySelectorAll("[data-game-action]").forEach(b=>b.onclick=()=>doAction(b.dataset.gameAction));
       }catch(e){content.innerHTML="<article class='feature-card'><button id='game-back'>رجوع</button><h3>الجلسة</h3><p class='muted'>"+escGame(e.message)+"</p></article>";$("#game-back").onclick=gamesList}
