@@ -651,6 +651,10 @@ app.post("/api/owner/applications/:id/status",requireAdmin,async(req,res)=>{
 
 
 // OWNER FULL CONTROL — destructive actions are owner-only and audited.
+app.get("/api/owner/groups",requireOwner,async(req,res)=>{const q=await pool.query("SELECT id,name,description,username,discord_username,status,created_at FROM community_groups ORDER BY id DESC LIMIT 300");res.json({groups:q.rows});});
+app.get("/api/owner/group-requests",requireOwner,async(req,res)=>{const q=await pool.query("SELECT r.id,r.group_id,r.username,r.discord_username,r.status,r.created_at,g.name AS group_name FROM group_join_requests r JOIN community_groups g ON g.id=r.group_id ORDER BY r.id DESC LIMIT 300");res.json({requests:q.rows});});
+app.get("/api/owner/games",requireOwner,async(req,res)=>{const q=await pool.query("SELECT id,game,host_username,max_players,players,status,created_at FROM game_lobbies ORDER BY id DESC LIMIT 200");res.json({games:q.rows});});
+app.get("/api/owner/reviews",requireOwner,async(req,res)=>{const q=await pool.query("SELECT id,username,discord_username,rating,message,status,created_at FROM reviews ORDER BY id DESC LIMIT 200");res.json({reviews:q.rows});});
 app.delete("/api/owner/applications/:id",requireOwner,async(req,res)=>{const id=Number(req.params.id);const q=await pool.query("DELETE FROM applications WHERE id=$1 RETURNING id",[id]);if(!q.rowCount)return res.status(404).json({error:"التقديم غير موجود"});await audit(req.session.user,"application_delete","#"+id);res.json({ok:true});});
 app.delete("/api/owner/tickets/:id",requireOwner,async(req,res)=>{const id=Number(req.params.id);const q=await pool.query("DELETE FROM tickets WHERE id=$1 RETURNING id",[id]);if(!q.rowCount)return res.status(404).json({error:"التيكت غير موجود"});await audit(req.session.user,"ticket_delete","#"+id);res.json({ok:true});});
 app.delete("/api/owner/groups/:id",requireOwner,async(req,res)=>{
