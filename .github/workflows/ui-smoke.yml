@@ -21,7 +21,7 @@ jobs:
       - name: Wait for Railway deployment
         run: |
           for i in {1..30}; do
-            if curl -fsS https://discord-community-platform-production-9348.up.railway.app/ | grep -q "site.js?v=20260927-fix19"; then
+            if curl -fsS https://discord-community-platform-production-9348.up.railway.app/ | grep -q "site.js?v=fix22"; then
               echo "Railway deployment is live"
               exit 0
             fi
