@@ -56,6 +56,8 @@ test("four-player card lobby isolates each player's hand", async ({ request }) =
     expect(s.hands).toBeUndefined();
     expect(s.playerSecrets).toBeUndefined();
   }
+  const play=await request.post(BASE+"/api/games/"+id+"/action",{data:{...payload(0),action:"playCard",index:0}});
+  expect(play.ok()).toBeTruthy();
   const firstIds=states[0].hand.map(c=>c.id);
   const secondIds=states[1].hand.map(c=>c.id);
   expect(firstIds.some(x=>secondIds.includes(x))).toBeFalsy();
