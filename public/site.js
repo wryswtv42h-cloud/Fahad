@@ -441,4 +441,4 @@ if(mobile){
 
 // INITIAL BOOT: never show the old static homepage before the new one is ready
 document.body.classList.add("mld-booting");
-mldMe().then(()=>window.change("home")).catch(()=>window.change("home"));
+Promise.race([mldMe(),new Promise(r=>setTimeout(r,1500))]).catch(()=>null).then(()=>window.change("home")).catch(()=>window.change("home"));
