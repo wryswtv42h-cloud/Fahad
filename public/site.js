@@ -374,6 +374,16 @@ window.updateAuthBar=function(){
   if(mldUser?.mustChangePassword) setTimeout(()=>window.change("password"),0);
 };
 
+// GLOBAL NAV DELEGATION — keeps every data-view button working even after dynamic rerenders
+document.addEventListener("click",e=>{
+  const b=e.target.closest("[data-view],[data-home-go]");
+  if(!b)return;
+  const target=b.dataset.view||b.dataset.homeGo;
+  if(!target)return;
+  e.preventDefault();
+  window.change(target);
+},true);
+
 // INITIAL BOOT: never show the old static homepage before the new one is ready
 document.body.classList.add("mld-booting");
 mldMe().then(()=>window.change("home")).catch(()=>window.change("home"));
