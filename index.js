@@ -810,7 +810,7 @@ function makeGameState(game){
   return {version:2,game,round:1,score:0,turn:"player",prompt:e.prompt,choices:e.choices||[],kind:e.kind,answer:e.answer??"",winner:null,lastResult:null};
 }
 const GAME_SEATS={
-  CODENAMES:["🔴 قائد الأحمر","🔴 عميل الأحمر","🔵 قائد الأزرق","🔵 عميل الأزرق"],
+  CODENAMES:["قائد الأحمر","عميل الأحمر","قائد الأزرق","عميل الأزرق"],
   SPYFALL:["المحقق 1","المحقق 2","المحقق 3","الجاسوس"],
   PICTIONARY:["الرسام","المخمن 1","المخمن 2","المخمن 3"],
   CHARADES:["الممثل","المخمن 1","المخمن 2","المخمن 3"],
@@ -951,7 +951,7 @@ app.post("/api/games/:id/seat",async(req,res)=>{
   const g=q.rows[0],players=Array.isArray(g.players)?g.players:[],actor=actorFromRequest(players,u,guestId);
   if(!actor)return res.status(403).json({error:"انضم للجلسة أولًا"});
   if(g.status!=="waiting"&&g.status!=="ready")return res.status(409).json({error:"لا يمكن تغيير المقعد بعد بدء اللعبة"});
-  const seats=seatOptions(g.game,g.max_players);if(!seats.includes(seat))return res.status(400).json({error:"المقعد غير موجود"});
+  const seats=seatOptions(g.game,g.max_players);const requestedSeatIndex=/^\d+$/.test(seat)?Number(seat):-1;const normalizedSeat=requestedSeatIndex>=0?seats[requestedSeatIndex] : seat;if(!normalizedSeat||!seats.includes(normalizedSeat))return res.status(400).json({error:"المقعد غير موجود"});
   if(players.some(p=>p.seat===seat&&playerKey(p)!==playerKey(actor)))return res.status(409).json({error:"هذا المكان محجوز"});
   actor.seat=seat;actor.seatLabel=seat;
   const ready=allPlayersSeated(players)&&players.length>=(GAME_MIN_PLAYERS[g.game]||2);
