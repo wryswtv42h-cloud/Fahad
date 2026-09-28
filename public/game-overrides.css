@@ -6,3 +6,65 @@ html.mld-game-fullscreen,body.mld-game-fullscreen{overflow:hidden!important}.mld
 @media(max-width:430px){.table-shell{min-height:620px}.felt{width:92%;min-height:450px}.player-seat{width:105px;padding:6px;font-size:9px}.player-seat.p1{top:45%}.player-seat.p3{top:45%}.player-seat.p4,.player-seat.p5{top:11%}.player-seat.p0{bottom:8px}.player-seat.p2{top:8px}.playing-card{width:55px;height:82px}.hand-cards .playing-card,.jack-hand .playing-card{flex-basis:48px;width:48px;height:69px}.hand-cards{gap:4px}.room-name b{font-size:16px}.game-room{padding:6px}.table-shell{border-radius:18px}.code-board{grid-template-columns:repeat(2,1fr)}.code-tile{min-height:53px!important}.center-piles{transform:scale(.9)}}
 @media(orientation:landscape) and (max-height:600px){.table-shell{min-height:calc(100dvh - 125px)}.felt{min-height:430px}.my-hand{bottom:5px}.player-seat{min-height:45px}.room-controls{margin-top:6px}}
 .game-live-pill{width:auto;height:auto;padding:4px 8px;border-radius:999px;font-size:9px;display:inline-flex;align-items:center;gap:5px;background:rgba(255,93,114,.12);color:#ff8a99;box-shadow:none}.game-live-pill:before{content:'';width:6px;height:6px;border-radius:50%;background:#ff5d72;box-shadow:0 0 9px #ff5d72}.ludo-physical,.codenames-physical,.qawsar-physical,.jackaroo-physical,.uno-physical,.baloot-physical{width:100%;height:100%}
+
+/* Fullscreen game shell: fit the actual visible device viewport and safe areas. */
+.game-room,.game-room.fallback-fullscreen,.mld-game-fullscreen .game-room{
+  min-height:100vh;
+  min-height:100dvh;
+  padding-top:max(8px,env(safe-area-inset-top));
+  padding-right:max(8px,env(safe-area-inset-right));
+  padding-bottom:max(8px,env(safe-area-inset-bottom));
+  padding-left:max(8px,env(safe-area-inset-left));
+}
+.game-room.fallback-fullscreen{
+  position:fixed;
+  inset:0;
+  width:100vw;
+  width:100dvw;
+  height:100vh;
+  height:100dvh;
+  min-height:0;
+  max-height:none;
+  margin:0;
+  border-radius:0;
+  overflow:hidden;
+  overscroll-behavior:none;
+}
+.game-room:fullscreen{
+  width:100vw;
+  width:100dvw;
+  height:100vh;
+  height:100dvh;
+  min-height:0;
+  max-height:none;
+  border-radius:0;
+  overflow:hidden;
+}
+.game-room:fullscreen .table-shell,
+.mld-game-fullscreen .table-shell{
+  min-height:0;
+  height:calc(100dvh - 168px);
+  max-height:calc(100dvh - 168px);
+}
+.game-room:fullscreen .felt,
+.mld-game-fullscreen .felt{
+  min-height:min(68dvh,720px);
+  max-height:calc(100dvh - 235px);
+}
+.game-room:fullscreen .my-hand,
+.mld-game-fullscreen .my-hand{
+  bottom:max(10px,env(safe-area-inset-bottom));
+}
+.game-fullscreen-fab{display:none!important}
+.q-selected{padding:8px 11px;border-radius:11px;background:rgba(255,156,220,.07);color:#e8dbea;font-size:11px;margin-bottom:9px}
+.hand-card.is-hidden{background:repeating-linear-gradient(45deg,#20283b 0 7px,#2b3550 7px 14px);color:#fff;border:4px solid #e7eaf1}
+@media(max-width:700px){
+  .game-room:fullscreen .table-shell,.mld-game-fullscreen .table-shell{height:calc(100dvh - 145px);max-height:calc(100dvh - 145px)}
+  .game-room:fullscreen .felt,.mld-game-fullscreen .felt{max-height:calc(100dvh - 210px)}
+  .game-room:fullscreen .room-controls,.mld-game-fullscreen .room-controls{max-height:24dvh;overflow:auto;padding-bottom:env(safe-area-inset-bottom)}
+}
+@media(orientation:landscape) and (max-height:600px){
+  .game-room:fullscreen .table-shell,.mld-game-fullscreen .table-shell{height:calc(100dvh - 92px);max-height:none}
+  .game-room:fullscreen .felt,.mld-game-fullscreen .felt{min-height:0;height:calc(100dvh - 150px);max-height:none}
+  .game-room:fullscreen .my-hand,.mld-game-fullscreen .my-hand{left:8px;right:8px;bottom:4px}
+}
