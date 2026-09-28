@@ -232,3 +232,10 @@ body.mld-game-fullscreen .game-fullscreen-fab{z-index:2147483647!important}
 .face-mini{background:transparent}
 .mini-back{width:22px;height:32px;border-radius:5px;display:grid;place-items:center;background:repeating-linear-gradient(45deg,#20283b 0 4px,#2b3550 4px 8px);border:1px solid rgba(255,255,255,.45);font-size:8px}
 @media(max-width:700px){.seat-mini-cards{top:-21px}.seat-mini-cards .playing-card{width:21px;height:30px;min-width:21px}.mini-back{width:19px;height:27px}}
+
+/* SESSION TABLE FINISH POLISH */
+.game-room .physical-table{box-shadow:0 30px 80px rgba(0,0,0,.38),inset 0 0 0 1px rgba(255,255,255,.05)}
+.game-room .physical-table:before{content:"";position:absolute;inset:7%;border:1px solid rgba(255,255,255,.06);border-radius:50%;pointer-events:none}
+.game-room .table-own-hand .hand-card{animation:dealIn .24s ease both}
+@keyframes dealIn{from{opacity:0;transform:translateY(18px) rotate(-3deg) scale(.94)}to{opacity:1;transform:none}}
+.q-target-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0}.q-target-row label{display:grid;gap:5px;font-size:11px;color:var(--muted)}.q-target-row select{min-height:42px;border-radius:11px;border:1px solid var(--line);background:#111827;color:#fff;padding:0 10px}@media(max-width:600px){.q-target-row{grid-template-columns:1fr}}
