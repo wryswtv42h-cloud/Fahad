@@ -224,3 +224,11 @@ body.mld-game-fullscreen .game-fullscreen-fab{z-index:2147483647!important}
  .mobile-menu-logout{border-color:#ff687f55!important;color:#ffb1bd!important;background:#ff687f0c!important}
  .mobile-menu .invite{min-height:50px!important;margin-top:2px}
 }
+
+/* Qawsar face-up cards around the table */
+.seat-mini-cards{display:flex;align-items:center;gap:3px;position:absolute;top:-26px;left:8px;z-index:2}
+.seat-mini-cards .playing-card{width:25px;height:36px;min-width:25px;border-radius:5px;padding:1px;font-size:7px;gap:0;box-shadow:0 4px 10px rgba(0,0,0,.3);pointer-events:none}
+.seat-mini-cards .playing-card strong{font-size:10px}.seat-mini-cards .playing-card span,.seat-mini-cards .playing-card small{font-size:6px}
+.face-mini{background:transparent}
+.mini-back{width:22px;height:32px;border-radius:5px;display:grid;place-items:center;background:repeating-linear-gradient(45deg,#20283b 0 4px,#2b3550 4px 8px);border:1px solid rgba(255,255,255,.45);font-size:8px}
+@media(max-width:700px){.seat-mini-cards{top:-21px}.seat-mini-cards .playing-card{width:21px;height:30px;min-width:21px}.mini-back{width:19px;height:27px}}
