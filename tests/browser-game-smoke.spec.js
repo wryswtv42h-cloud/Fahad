@@ -46,7 +46,7 @@ test("every game opens a real multiplayer room", async ({ page, request }) => {
     await page.evaluate((id) => window.openEnhancedGameSession(id, false), id);
     expect(pageErrors, game + " browser JavaScript errors").toEqual([]);
     await expect(page.locator(".game-room")).toBeVisible({ timeout: 10000 });
-    await expect(page.locator(".game-table")).toBeVisible();
+    await expect(page.locator(".game-table"), game+" game-table missing. room="+(await page.locator(".game-room").innerText()).catch(()=>"<no room>")).toBeVisible();
     await expect(page.locator("#eg-fullscreen")).toBeVisible();
     await expect(page.locator("#eg-fullscreen-fab")).toHaveCount(1);
     await expect(page.locator("#eg-leave")).toBeVisible();
