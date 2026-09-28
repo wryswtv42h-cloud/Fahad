@@ -1096,6 +1096,7 @@ app.post("/api/games/:id/leave",async(req,res)=>{
   res.json({ok:true,closed:false});
 });
 app.get("/api/games/:id/state",async(req,res)=>{
+  res.set("Cache-Control","no-store");
   const u=currentUser(req),guestId=String(req.query?.guestId||"").trim();
   const q=await pool.query("SELECT id,game,host_username,host_discord_username,max_players,players,status,state,created_at FROM game_lobbies WHERE id=$1",[req.params.id]);
   if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة"});
