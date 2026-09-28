@@ -21,14 +21,14 @@ jobs:
       - name: Wait for Railway deployment
         run: |
           for i in {1..30}; do
-            if curl -fsS https://discord-community-platform-production-9348.up.railway.app/ | grep -q "site.js?v=20260927-stable1"; then
+            if curl -fsS https://discord-community-platform-production-9348.up.railway.app/health | grep -q '"ok":true'; then
               echo "Railway deployment is live"
               exit 0
             fi
             echo "Waiting for Railway deployment ($i/30)"
             sleep 5
           done
-          echo "Timed out waiting for the new Railway deployment"
+          echo "Timed out waiting for the Railway deployment"
           exit 1
 
       - name: JavaScript syntax check
