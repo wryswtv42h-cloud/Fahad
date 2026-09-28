@@ -79,15 +79,15 @@ async function renderGames(){
     });
   }
   function socket(){return new WebSocket((location.protocol==="https:"?"wss://":"ws://")+location.host)}
-  function save(msg,name){sessionStorage.setItem("roomId",msg.roomId);sessionStorage.setItem("playerIndex",String(msg.playerIndex??0));sessionStorage.setItem("game",msg.game);if(msg.resumeToken)sessionStorage.setItem("resumeToken",msg.resumeToken);if(name)sessionStorage.setItem("mldGamePlayerName",name)}
-  function openGame(roomId,name,mode){
-    const old=document.querySelector(".mld-game-stage");if(old)old.remove();
+  function save(msg,name,spectator){sessionStorage.setItem("roomId",msg.roomId);sessionStorage.setItem("playerIndex",spectator?"-1":String(msg.playerIndex??0));sessionStorage.setItem("game",msg.game);sessionStorage.setItem("mldGameSpectator",spectator?"1":"0");if(msg.resumeToken)sessionStorage.setItem("resumeToken",msg.resumeToken);if(name)sessionStorage.setItem("mldGamePlayerName",name)}
+  function openGame(roomId,name,mode,sessionCode,spectator){
+    const old=document.querySelector(".mld-game-stage");if(old)old.remove(); if(spectator)sessionStorage.setItem("mldGameSpectator","1");
     const s=document.createElement("section");s.className="mld-game-stage";
-    s.innerHTML='<div class="mld-game-stage-head"><div><span>MLD LIVE ROOM</span><b>'+esc(name)+' · '+esc(roomId)+'</b></div><div class="mld-game-stage-actions"><button id="game-fullscreen">⛶ ملء الشاشة</button><button id="game-close">رجوع</button></div></div><div class="mld-game-frame-wrap"><iframe id="mld-game-frame" src="/mld-games/game.html" allow="fullscreen; autoplay; clipboard-write" title="MLD Game"></iframe></div>';
+    s.innerHTML='<div class="mld-game-stage-head"><div><span>MLD LIVE ROOM</span><b>'+esc(name)+' · '+esc(roomId)+(spectator?' · 👁️ مشاهد':'')+'</b></div><div class="mld-game-stage-actions"><button id="game-fullscreen">⛶ ملء الشاشة</button><button id="game-close">رجوع</button></div></div><div class="mld-game-frame-wrap"><iframe id="mld-game-frame" src="/mld-games/game.html" allow="fullscreen; autoplay; clipboard-write" title="MLD Game"></iframe></div>';
     content.prepend(s);
     $("#game-close").onclick=()=>s.remove();
     $("#game-fullscreen").onclick=async()=>{try{await s.querySelector(".mld-game-frame-wrap").requestFullscreen()}catch{const f=s.querySelector("iframe");if(f.requestFullscreen)f.requestFullscreen()}};
-    s.querySelector("iframe").addEventListener("load",()=>{try{const f=s.querySelector("iframe"),d=f.contentDocument,n=d&&d.getElementById("nameInput"),name=sessionStorage.getItem("mldGamePlayerName")||"";if(n&&name){n.value=name;n.dispatchEvent(new Event("change",{bubbles:true}))}}catch(e){console.warn("MLD game name sync",e)}});
+    s.querySelector("iframe").addEventListener("load",()=>{try{const f=s.querySelector("iframe"),d=f.contentDocument,n=d&&d.getElementById("nameInput"),name=sessionStorage.getItem("mldGamePlayerName")||"";if(n&&name){n.value=name;n.dispatchEvent(new Event("change",{bubbles:true}))}if(spectator&&d){const bar=d.querySelector(".game-actions-fixed");if(bar)bar.style.display="none";const st=d.getElementById("status");if(st)st.textContent="👁️ وضع المشاهدة — للعرض فقط";}if(sessionCode&&!spectator&&d){const start=d.getElementById("startGameBtn");if(start&&!start.dataset.mldBound){start.dataset.mldBound="1";start.addEventListener("click",()=>{fetch("/api/games/sessions/"+encodeURIComponent(sessionCode)+"/start",{method:"POST",headers:{"Content-Type":"application/json"}}).catch(()=>{})},{capture:true});}}}catch(e){console.warn("MLD game sync",e)}});
     s.scrollIntoView({behavior:"smooth",block:"start"});
   }
   async function createRoom(){
@@ -99,17 +99,17 @@ async function renderGames(){
     ws.onmessage=async e=>{let m;try{m=JSON.parse(e.data)}catch{return}
       if(m.type==="room_created"){
         save(m,name);
-        await fetch("/api/games/sessions",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({gameId:selected.id+"::"+m.roomId,gameName:selected.name,maxPlayers:max,playerName:name})}).catch(()=>{});
-        st.textContent="تم إنشاء الغرفة "+m.roomId; ws.close(); openGame(m.roomId,selected.name,"player"); refreshSessions();
+        const sr=await fetch("/api/games/sessions",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({gameId:selected.id+"::"+m.roomId,gameName:selected.name,maxPlayers:max,playerName:name})}).catch(()=>null); const sd=sr&&sr.ok?await sr.json().catch(()=>null):null;
+        st.textContent="تم إنشاء الغرفة "+m.roomId; ws.close(); openGame(m.roomId,selected.name,"player",sd&&sd.session?sd.session.code:null,false); refreshSessions();
       }else if(m.type==="error")st.textContent=m.message||"تعذر إنشاء الغرفة.";
     };
   }
   async function joinRoom(s){
-    const name=await askName("join"),roomId=String(s.game_id||"").split("::")[1]||s.code,ws=socket();
+    const spectator=s.status==="playing"; const name=await askName("join"),roomId=String(s.game_id||"").split("::")[1]||s.code,ws=socket();
     ws.onopen=()=>ws.send(JSON.stringify({type:"join_room",data:{roomId,lang:"en",name:name}}));
     ws.onerror=()=>alert("تعذر الاتصال بمحرك الألعاب");
     ws.onmessage=async e=>{let m;try{m=JSON.parse(e.data)}catch{return}
-      if(m.type==="room_joined"){save(m,name);await fetch("/api/games/sessions/"+encodeURIComponent(s.code)+"/join",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({playerName:name})}).catch(()=>{});ws.close();openGame(m.roomId,byId(m.game).name,"player");refreshSessions()}
+      if(m.type==="room_joined"){save(m,name,spectator);if(!spectator)await fetch("/api/games/sessions/"+encodeURIComponent(s.code)+"/join",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({playerName:name})}).catch(()=>{});ws.close();openGame(m.roomId,byId(m.game).name,spectator?"spectator":"player",s.code,spectator);refreshSessions()}
       else if(m.type==="error")alert(m.message||"تعذر الدخول");
     };
   }
