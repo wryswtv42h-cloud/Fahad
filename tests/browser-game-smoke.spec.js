@@ -9,7 +9,7 @@ const GAMES = [
   "QAWSAR","JAKAROO"
 ];
 
-test.describe.configure({ mode: "serial" });
+test.describe.configure({ mode: "parallel" });
 
 test("every game opens a real multiplayer room", async ({ page, request }) => {
   await page.goto(BASE + "/#games", { waitUntil: "domcontentloaded" });
@@ -66,7 +66,8 @@ for (const project of [
   { name: "pixel-chrome", use: { ...devices["Pixel 5"] } }
 ]) {
   test.describe(project.name, () => {
-    test.use(project.use);
+    const { defaultBrowserType, ...use } = project.use;
+    test.use(use);
     test("responsive game room shell", async ({ page }) => {
       await page.goto(BASE + "/#games", { waitUntil: "domcontentloaded" });
       await expect(page.locator("body")).toBeVisible();
