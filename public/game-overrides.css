@@ -122,3 +122,21 @@ html.mld-game-fullscreen,body.mld-game-fullscreen{overflow:hidden!important}.mld
 .game-room:fullscreen{z-index:2147483000!important}.game-room:fullscreen .table-shell{height:auto!important;min-height:0!important;flex:1 1 auto!important}.game-room:fullscreen{display:flex!important;flex-direction:column}.game-room:fullscreen .room-top,.game-room:fullscreen .perspective,.game-room:fullscreen .room-controls{flex:0 0 auto}.game-room:fullscreen .table-shell{width:100%!important;max-height:none!important}
 @media(max-width:700px){.game-menu-toggle{min-height:48px!important}.game-menu-panel.open{max-height:34vh;overflow:auto}.game-room.fallback-fullscreen .table-shell,.game-room:fullscreen .table-shell{min-height:0!important}.game-room.fallback-fullscreen .my-hand,.game-room:fullscreen .my-hand{bottom:4px!important}.game-room.fallback-fullscreen .room-controls,.game-room:fullscreen .room-controls{max-height:28vh!important}}
 @media(orientation:landscape) and (max-height:600px){.game-room.fallback-fullscreen .room-controls,.game-room:fullscreen .room-controls{max-height:22vh!important}.game-room.fallback-fullscreen .game-menu-panel.open,.game-room:fullscreen .game-menu-panel.open{max-height:20vh}}
+
+/* FINAL GAME INTERACTION SAFETY */
+.game-room{isolation:isolate;touch-action:manipulation}
+.game-room button,.game-room input,.game-room select,.game-room textarea{pointer-events:auto;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.game-room .room-top,.game-room .perspective,.game-room .room-controls{position:relative;z-index:40}
+.game-room .players-ring{z-index:15;pointer-events:none}
+.game-room .player-seat{pointer-events:none}
+.game-room .felt{z-index:10}
+.game-room .my-hand{z-index:35;pointer-events:auto}
+.game-room .my-hand .playing-card{pointer-events:auto}
+.game-room .room-controls{z-index:50}
+.game-room .room-controls button{position:relative;z-index:51}
+.game-room .game-menu-panel.open{position:relative;z-index:52}
+@media(max-width:700px){
+ .game-room .room-actions{position:relative;z-index:60}
+ .game-room .room-actions button{flex:0 0 auto}
+ .game-room .game-fullscreen-fab{z-index:2147483000!important;pointer-events:auto!important}
+}
