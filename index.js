@@ -274,7 +274,7 @@ function sortedMemberJson(members, limit = members.length) {
 async function initAppDatabase() {
   if (!process.env.DATABASE_URL) return;
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS app_users (id SERIAL PRIMARY KEY, username VARCHAR(32) UNIQUE NOT NULL, password_hash TEXT NOT NULL, discord_username VARCHAR(100) NOT NULL, role VARCHAR(20) NOT NULL DEFAULT 'user', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), last_login_at TIMESTAMPTZ);
+    CREATE TABLE IF NOT EXISTS app_users (id SERIAL PRIMARY KEY, username VARCHAR(32) UNIQUE NOT NULL, password_hash TEXT NOT NULL, discord_username VARCHAR(100) NOT NULL, role VARCHAR(20) NOT NULL DEFAULT 'user', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), last_login_at TIMESTAMPTZ); ALTER TABLE app_users ADD COLUMN IF NOT EXISTS discord_user_id VARCHAR(32);
     ALTER TABLE app_users ADD COLUMN IF NOT EXISTS username VARCHAR(32);
     ALTER TABLE app_users ADD COLUMN IF NOT EXISTS password_hash TEXT;
     ALTER TABLE app_users ADD COLUMN IF NOT EXISTS discord_username VARCHAR(100);
@@ -1360,18 +1360,27 @@ client.on("interactionCreate", async (interaction) => {
   const id=Number(idText);
   if (!Number.isInteger(id)) return interaction.reply({content:"طلب غير صالح.",ephemeral:true});
   try{
-    const q=await pool.query("SELECT * FROM registration_verifications WHERE id=$1 AND discord_user_id=$2 AND used_at IS NULL AND expires_at>NOW()",[id,interaction.user.id]);
-    if(!q.rowCount) return interaction.reply({content:"هذا الطلب غير صالح أو انتهت مدته أو تم استخدامه مسبقًا.",ephemeral:true});
+    if(!interaction.deferred && !interaction.replied) await interaction.deferUpdate();
+    const q=await pool.query("SELECT * FROM registration_verifications WHERE id=$1 AND discord_user_id=$2 AND used_at IS NULL AND expires_at>NOW() FOR UPDATE",[id,interaction.user.id]);
+    if(!q.rowCount) return interaction.editReply({content:"⚠️ هذا الطلب غير صالح أو انتهت مدته أو تم استخدامه مسبقًا.",embeds:[],components:[]});
     const v=q.rows[0];
-    if(action==="register_no"){await pool.query("UPDATE registration_verifications SET used_at=NOW() WHERE id=$1",[id]);await interaction.update({content:"❌ تم إلغاء إنشاء الحساب. لن يتم إنشاء أي حساب.",embeds:[],components:[]});await audit({username:v.username,discordUsername:v.discord_username},"register_cancelled","إلغاء إنشاء الحساب من زر Discord").catch(()=>{});return;}
-    const exists=await pool.query("SELECT id FROM app_users WHERE username=$1 OR lower(trim(discord_username))=lower(trim($2))",[v.username,v.discord_username]);
-    if(exists.rowCount){await pool.query("UPDATE registration_verifications SET used_at=NOW() WHERE id=$1",[id]);return interaction.update({content:"⚠️ الحساب موجود مسبقًا أو Discord مرتبط بحساب آخر. لم يتم إنشاء حساب جديد.",embeds:[],components:[]});}
+    if(action==="register_no"){
+      await pool.query("UPDATE registration_verifications SET used_at=NOW() WHERE id=$1 AND used_at IS NULL",[id]);
+      await interaction.editReply({content:"❌ تم إلغاء إنشاء الحساب نهائيًا. لم يتم إنشاء أي حساب.",embeds:[],components:[]});
+      await audit({username:v.username,discordUsername:v.discord_username},"register_cancelled","إلغاء إنشاء الحساب من زر Discord").catch(()=>{});
+      return;
+    }
+    const exists=await pool.query("SELECT id FROM app_users WHERE username=$1 OR lower(trim(discord_username))=lower(trim($2)) OR discord_user_id=$3",[v.username,v.discord_username,v.discord_user_id]);
+    if(exists.rowCount){
+      await pool.query("UPDATE registration_verifications SET used_at=NOW() WHERE id=$1 AND used_at IS NULL",[id]);
+      return interaction.editReply({content:"⚠️ الحساب موجود مسبقًا أو Discord مرتبط بحساب آخر. لم يتم إنشاء حساب جديد.",embeds:[],components:[]});
+    }
     await pool.query("INSERT INTO app_users(username,password_hash,discord_username,discord_user_id,role) VALUES($1,$2,$3,$4,'user')",[v.username,v.password_hash,v.discord_username,v.discord_user_id]);
-    await pool.query("UPDATE registration_verifications SET used_at=NOW() WHERE id=$1",[id]);
+    await pool.query("UPDATE registration_verifications SET used_at=NOW() WHERE id=$1 AND used_at IS NULL",[id]);
     await audit({username:v.username,discordUsername:v.discord_username},"register_confirmed","تم تأكيد إنشاء الحساب من زر Discord").catch(()=>{});
-    await interaction.update({content:"✅ تم إنشاء حساب MLD بنجاح.",embeds:[],components:[]});
+    await interaction.editReply({content:"✅ تم إنشاء حساب MLD بنجاح.",embeds:[],components:[]});
     await interaction.user.send({content:"بيانات حسابك في MLD:\nاسم المستخدم: **"+v.username+"**\nDiscord: **"+v.discord_username+"**\nكلمة المرور: هي كلمة المرور التي اخترتها في الموقع، ولا يمكنني إظهارها أو استعادتها كنص.\n\nتقدر الآن تسجل الدخول من الموقع."}).catch(()=>{});
-  }catch(e){console.error("Registration button:",e.message);if(!interaction.replied&&!interaction.deferred) await interaction.reply({content:"تعذر تنفيذ الطلب، حاول مرة أخرى.",ephemeral:true});}
+  }catch(e){console.error("Registration button:",e.message);if(!interaction.replied&&!interaction.deferred) await interaction.reply({content:"تعذر تنفيذ الطلب، حاول مرة أخرى.",ephemeral:true});else if(interaction.deferred) await interaction.editReply({content:"تعذر تنفيذ الطلب، حاول مرة أخرى.",embeds:[],components:[]}).catch(()=>{});}
 });
 client.on("guildMemberAdd", invalidateMemberSnapshot);
 client.on("guildMemberRemove", async (member) => {
