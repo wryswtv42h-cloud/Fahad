@@ -2,9 +2,9 @@
 "use strict";
 const $=s=>document.querySelector(s);
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const N={UNO:"UNO",LUDO:"لودو",BALOOT:"بلوت",JAKAROO:"جاكارو",QAWSAR:"قوصر"};
-const ICON={UNO:"UNO",LUDO:"●",BALOOT:"♠",JAKAROO:"♟",QAWSAR:"♜"};
-const CAP=g=>g==="UNO"?12:g==="QAWSAR"?4:4;
+const N={CODENAMES:"كود نيمز",SPYFALL:"سباي فول",PICTIONARY:"بيكشنري",CHARADES:"تمثيل",WHOAMI:"من أنا؟",TABOO:"تابو",WORD_BOMB:"قنبلة الكلمات",TRUTH_LIE:"صدق أو كذب",EMOJI_GUESS:"خمن بالإيموجي",TRIVIA:"معلومات عامة",CATEGORIES:"التصنيفات",LIAR:"الكذاب",HOT_SEAT:"المقعد الساخن",WOULD_YOU_RATHER:"ماذا تفضل؟",DRAW_GUESS:"ارسم وخمن",FASTEST:"الأسرع",RIDDLE_RUSH:"سباق الألغاز",SECRET_WORD:"الكلمة السرية",MIMIC:"المقلد",GUESS_PLAYER:"خمن اللاعب",UNO:"UNO",LUDO:"لودو",BALOOT:"بلوت",DAQSH:"دقش",QAWSAR:"قوصر",JAKAROO:"جاكارو"};
+const ICON={CODENAMES:"▦",SPYFALL:"🕵️",PICTIONARY:"✏️",CHARADES:"🎭",WHOAMI:"❓",TABOO:"🚫",WORD_BOMB:"💣",TRUTH_LIE:"⚖️",EMOJI_GUESS:"😀",TRIVIA:"🧠",CATEGORIES:"🗂️",LIAR:"🤥",HOT_SEAT:"🔥",WOULD_YOU_RATHER:"↔️",DRAW_GUESS:"🎨",FASTEST:"⚡",RIDDLE_RUSH:"🧩",SECRET_WORD:"🔐",MIMIC:"🪞",GUESS_PLAYER:"🔎",UNO:"UNO",LUDO:"🎲",BALOOT:"♠",DAQSH:"⚡",JAKAROO:"♟",QAWSAR:"♜"};
+const CAP=g=>g==="CODENAMES"?16:g==="UNO"?12:g==="QAWSAR"?4:4;
 const RULES={
 CODENAMES:"القائد يعطي تلميحًا ورقمًا، والعملاء يكشفون الكلمات التابعة لفريقهم. تجنبوا المحايد والقاتل.",
 UNO:"7 أوراق لكل لاعب. طابق اللون أو الرمز، استخدم الأوراق الخاصة، وتخلّص من يدك أولًا.",
@@ -160,6 +160,7 @@ async function games(){
  if(typeof subtitle!=="undefined")subtitle.textContent="أنشئ جلسة حقيقية — تدخل للطاولة، تختار مقعدك، وتلعب من منظور جهازك.";
  const d=await api("/api/games").catch(()=>({games:[]})),gs=d.games||[];
  if(typeof content==="undefined")return;
+ const gameOptions=gameOptions;
  content.className="feature-grid game-page";
  content.innerHTML="<section class='game-create'><div class='create-copy'><span>LIVE GAME ROOMS</span><h2>ابنِ طاولتك وابدأ اللعب</h2><p>كل لعبة لها جلسة مستقلة. بعد البداية تتحول الشاشة إلى طاولة لعب فعلية.</p></div><div class='create-form'><label>اللعبة<select id='eg-kind'>"+Object.entries(N).map(([k,v])=>"<option value='"+k+"'>"+esc(v)+"</option>").join("")+"</select></label><label>عدد اللاعبين<input id='eg-max' type='number' min='2' max='16' value='4'></label><button id='eg-create' class='primary huge'>إنشاء طاولة</button></div></section><section class='lobbies'><header><div><span>OPEN TABLES</span><h2>الجلسات المفتوحة</h2></div><button id='refresh-games'>تحديث</button></header><div id='eg-list' class='lobby-grid'>"+(gs.length?gs.map(g=>"<article class='lobby-card'><div class='lobby-icon'>"+esc(ICON[g.game]||"✦")+"</div><div><b>"+esc(N[g.game]||g.game)+"</b><small>جلسة #"+g.id+" · "+(g.players||[]).length+"/"+g.max_players+" · "+esc(g.host_username||"زائر")+"</small></div><div><button class='primary' data-join='"+g.id+"'>انضمام</button><button data-watch='"+g.id+"'>مشاهدة</button></div></article>").join(""):"<div class='empty-games'>لا توجد طاولات مفتوحة الآن.</div>")+"</div></section>";
  const sync=()=>{$("#eg-max").max=String(CAP($("#eg-kind").value));if(Number($("#eg-max").value)>CAP($("#eg-kind").value))$("#eg-max").value=CAP($("#eg-kind").value)};
