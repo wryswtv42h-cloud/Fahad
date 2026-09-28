@@ -1392,14 +1392,14 @@ client.on("interactionCreate", async (interaction) => {
       }
       const exists=await db.query("SELECT id FROM app_users WHERE username=$1 OR lower(trim(discord_username))=lower(trim($2)) OR discord_user_id=$3",[v.username,v.discord_username,v.discord_user_id]);
       if(exists.rowCount){
-        await db.query("UPDATE registration_verifications SET used_at=NOW(),decision='confirmed' WHERE id=$1 AND used_at IS NULL AND decision='pending'",[id]);
+        await db.query("UPDATE registration_verifications SET used_at=NOW(),decision='rejected' WHERE id=$1 AND used_at IS NULL AND decision='pending",[id]);
         await db.query("COMMIT");
         await interaction.message.edit({content:"⚠️ هذا الحساب أو Discord مرتبط بحساب موجود مسبقًا. لم يتم إنشاء حساب جديد.",embeds:[],components:[]}).catch(()=>{});
         await interaction.followUp({content:"لم يتم إنشاء حساب جديد لأن البيانات مرتبطة بحساب موجود.",ephemeral:true}).catch(()=>{});
         return;
       }
       await db.query("INSERT INTO app_users(username,password_hash,discord_username,discord_user_id,role) VALUES($1,$2,$3,$4,'user')",[v.username,v.password_hash,v.discord_username,v.discord_user_id]);
-      await db.query("UPDATE registration_verifications SET used_at=NOW() WHERE id=$1 AND used_at IS NULL",[id]);
+      await db.query("UPDATE registration_verifications SET used_at=NOW(),decision='confirmed' WHERE id=$1 AND used_at IS NULL AND decision='pending'",[id]);
       await db.query("COMMIT");
     }catch(e){
       await db.query("ROLLBACK").catch(()=>{});
