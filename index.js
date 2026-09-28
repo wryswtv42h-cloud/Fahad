@@ -1021,6 +1021,9 @@ app.post("/api/games/:id/start",async(req,res)=>{
   if(g.status==="playing")return res.json({ok:true,game:g});
   if(g.status!=="waiting"&&g.status!=="ready")return res.status(409).json({error:"لا يمكن بدء هذه الجلسة الآن"});
   const minPlayers=GAME_MIN_PLAYERS[g.game]||2;
+  const gameSeats=seatOptions(g.game,g.max_players);
+  const freeHostSeat=gameSeats.find(seat=>!players.some(p=>p.seat===seat));
+  if(!actor.seat&&freeHostSeat){ actor.seat=freeHostSeat; actor.seatLabel=freeHostSeat; }
   fillMissingGameBots(g.game,players,minPlayers,g.max_players);
   if(players.length<minPlayers||!allPlayersSeated(players))return res.status(409).json({error:"تعذر تجهيز المقاعد تلقائيًا"});
   const state=g.state&&Object.keys(g.state).length?g.state:makeGameState(g.game,players);
