@@ -2,9 +2,9 @@
 "use strict";
 const $=s=>document.querySelector(s);
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const N={CODENAMES:"كود نيمز",SPYFALL:"سباي فول",PICTIONARY:"بيكشنري",CHARADES:"تمثيل",WHOAMI:"من أنا؟",TABOO:"تابو",WORD_BOMB:"قنبلة الكلمات",TRUTH_LIE:"صدق أو كذب",EMOJI_GUESS:"تخمين الإيموجي",TRIVIA:"معلومات عامة",CATEGORIES:"التصنيفات",LIAR:"الكذاب",HOT_SEAT:"المقعد الساخن",WOULD_YOU_RATHER:"تفضّل",DRAW_GUESS:"ارسم وخمّن",FASTEST:"الأسرع",RIDDLE_RUSH:"سباق الألغاز",SECRET_WORD:"الكلمة السرية",MIMIC:"المقلد",GUESS_PLAYER:"خمن اللاعب",UNO:"UNO",LUDO:"لودو",BALOOT:"بلوت",DAQSH:"دقش",QAWSAR:"قوصر",JAKAROO:"جاكارو"};
-const ICON={CODENAMES:"▦",SPYFALL:"◉",PICTIONARY:"✎",CHARADES:"✦",WHOAMI:"?",TABOO:"⊘",WORD_BOMB:"◈",TRUTH_LIE:"✓",EMOJI_GUESS:"☺",TRIVIA:"?",CATEGORIES:"A",LIAR:"!",HOT_SEAT:"◉",WOULD_YOU_RATHER:"↔",DRAW_GUESS:"✎",FASTEST:"⚡",RIDDLE_RUSH:"?",SECRET_WORD:"◆",MIMIC:"◌",GUESS_PLAYER:"◎",UNO:"UNO",LUDO:"●",BALOOT:"♠",DAQSH:"◆",QAWSAR:"♜",JAKAROO:"♟"};
-const CAP=g=>g==="CODENAMES"?16:g==="UNO"?12:g==="QAWSAR"?4:g==="JAKAROO"?4:4;
+const N={UNO:"UNO",LUDO:"لودو",BALOOT:"بلوت",JAKAROO:"جاكارو",QAWSAR:"قوصر"};
+const ICON={UNO:"UNO",LUDO:"●",BALOOT:"♠",JAKAROO:"♟",QAWSAR:"♜"};
+const CAP=g=>g==="UNO"?12:g==="QAWSAR"?4:4;
 const RULES={
 CODENAMES:"القائد يعطي تلميحًا ورقمًا، والعملاء يكشفون الكلمات التابعة لفريقهم. تجنبوا المحايد والقاتل.",
 UNO:"7 أوراق لكل لاعب. طابق اللون أو الرمز، استخدم الأوراق الخاصة، وتخلّص من يدك أولًا.",
