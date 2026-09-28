@@ -1394,13 +1394,25 @@ client.on("interactionCreate", async (interaction) => {
     await db.query("BEGIN");
 
     const q=await db.query(
-      "SELECT * FROM registration_verifications WHERE id=$1 AND discord_user_id=$2 AND used_at IS NULL AND decision='pending' AND expires_at>NOW() FOR UPDATE",
-      [id,interaction.user.id]
+      "SELECT * FROM registration_verifications WHERE id=$1 AND discord_user_id=$2 AND used_at IS NULL AND decision='pending' AND expires_at>NOW() AND (message_id IS NULL OR message_id=$3) FOR UPDATE",
+      [id,interaction.user.id,String(interaction.message?.id||"")]
     );
 
     if(!q.rowCount){
       await db.query("ROLLBACK");
-      await interaction.message.edit({content:"⚠️ طلب التسجيل انتهى أو تم استخدامه مسبقًا. لم يتم إنشاء حساب من هذا الطلب."}).catch(()=>{});
+      // Never turn a Discord button failure into an ambiguous "session ended" state.
+      // If the same request was already consumed, show its terminal decision and never create an account.
+      const previous=await pool.query(
+        "SELECT decision FROM registration_verifications WHERE id=$1 AND discord_user_id=$2 LIMIT 1",
+        [id,interaction.user.id]
+      ).catch(()=>({rowCount:0,rows:[]}));
+      const decision=previous.rows?.[0]?.decision;
+      const message=decision==="cancelled"
+        ?"❌ تم إلغاء إنشاء الحساب مسبقًا. لم يتم إنشاء حساب."
+        :decision==="confirmed"
+          ?"✅ تم تأكيد إنشاء الحساب مسبقًا. لا يوجد حساب إضافي سيتم إنشاؤه."
+          :"⚠️ طلب التأكيد غير صالح أو انتهت مدته. لم يتم إنشاء حساب من هذا الطلب.";
+      await interaction.message.edit({content:message,embeds:[],components:[]}).catch(()=>{});
       return;
     }
 
