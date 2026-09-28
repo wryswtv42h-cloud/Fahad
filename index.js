@@ -1361,41 +1361,39 @@ client.on("interactionCreate", async (interaction) => {
   if(!["register_yes","register_no"].includes(action)) return;
   if(!Number.isInteger(id)) return interaction.reply({content:"طلب غير صالح.",ephemeral:true});
   try{
-    // Acknowledge the Discord interaction immediately so mobile/desktop Discord never shows
-    // the misleading "interaction/session expired" state while the database work runs.
-    if(!interaction.deferred&&!interaction.replied) await interaction.deferUpdate();
-
+    // Use an ephemeral reply instead of relying on a message edit as the acknowledgement.
+    // This prevents Discord mobile/desktop from showing an expired/ended interaction state.
+    if(!interaction.deferred&&!interaction.replied) await interaction.deferReply({ephemeral:true});
     const db=await pool.connect();
     try{
       await db.query("BEGIN");
       const q=await db.query("SELECT * FROM registration_verifications WHERE id=$1 AND discord_user_id=$2 AND used_at IS NULL AND expires_at>NOW() FOR UPDATE",[id,interaction.user.id]);
       if(!q.rowCount){
         await db.query("ROLLBACK");
-        await interaction.message.edit({content:"⚠️ هذا الطلب غير صالح أو انتهت مدته أو تم استخدامه مسبقًا.",embeds:[],components:[]}).catch(()=>{});
+        await interaction.editReply({content:"⚠️ هذا الطلب غير صالح أو انتهت مدته أو تم استخدامه مسبقًا."}).catch(()=>{});
         return;
       }
       const v=q.rows[0];
-
       if(action==="register_no"){
         await db.query("UPDATE registration_verifications SET used_at=NOW() WHERE id=$1 AND used_at IS NULL",[id]);
         await db.query("COMMIT");
-        await interaction.message.edit({content:"❌ تم إلغاء إنشاء الحساب نهائيًا. لم يتم إنشاء أي حساب.",embeds:[],components:[]}).catch(()=>{});
+        await interaction.editReply({content:"❌ تم إلغاء إنشاء الحساب نهائيًا. لم يتم إنشاء أي حساب."}).catch(()=>{});
+        await interaction.message.edit({content:"❌ تم إلغاء إنشاء الحساب — لم يتم إنشاء أي حساب.",embeds:[],components:[]}).catch(()=>{});
         await audit({username:v.username,discordUsername:v.discord_username},"register_cancelled","إلغاء إنشاء الحساب من زر Discord").catch(()=>{});
         return;
       }
-
       const exists=await db.query("SELECT id FROM app_users WHERE username=$1 OR lower(trim(discord_username))=lower(trim($2)) OR discord_user_id=$3",[v.username,v.discord_username,v.discord_user_id]);
       if(exists.rowCount){
         await db.query("UPDATE registration_verifications SET used_at=NOW() WHERE id=$1 AND used_at IS NULL",[id]);
         await db.query("COMMIT");
-        await interaction.message.edit({content:"⚠️ الحساب موجود مسبقًا أو Discord مرتبط بحساب آخر. لم يتم إنشاء حساب جديد.",embeds:[],components:[]}).catch(()=>{});
+        await interaction.editReply({content:"⚠️ الحساب موجود مسبقًا أو Discord مرتبط بحساب آخر. لم يتم إنشاء حساب جديد."}).catch(()=>{});
+        await interaction.message.edit({content:"⚠️ تم استخدام طلب التسجيل، والحساب موجود مسبقًا.",embeds:[],components:[]}).catch(()=>{});
         return;
       }
-
       await db.query("INSERT INTO app_users(username,password_hash,discord_username,discord_user_id,role) VALUES($1,$2,$3,$4,'user')",[v.username,v.password_hash,v.discord_username,v.discord_user_id]);
       await db.query("UPDATE registration_verifications SET used_at=NOW() WHERE id=$1 AND used_at IS NULL",[id]);
       await db.query("COMMIT");
-
+      await interaction.editReply({content:"✅ تم إنشاء حساب MLD بنجاح. أرسلت لك بيانات الحساب في الخاص."}).catch(()=>{});
       await interaction.message.edit({content:"✅ تم إنشاء حساب MLD بنجاح.",embeds:[],components:[]}).catch(()=>{});
       await audit({username:v.username,discordUsername:v.discord_username},"register_confirmed","تم تأكيد إنشاء الحساب من زر Discord").catch(()=>{});
       await interaction.user.send({content:"بيانات حسابك في MLD:\nاسم المستخدم: **"+v.username+"**\nDiscord: **"+v.discord_username+"**\nكلمة المرور: هي كلمة المرور التي اخترتها في الموقع، ولا يمكنني إظهارها أو استعادتها كنص.\n\nتقدر الآن تسجل الدخول من الموقع."}).catch(()=>{});
@@ -1405,7 +1403,8 @@ client.on("interactionCreate", async (interaction) => {
     }finally{db.release();}
   }catch(e){
     console.error("Registration button:",e.message);
-    await interaction.message?.edit({content:"⚠️ تعذر تنفيذ الطلب حاليًا. لم يتم إنشاء الحساب تلقائيًا؛ حاول الضغط مرة أخرى.",embeds:[],components:[]}).catch(()=>{});
+    if(interaction.deferred||interaction.replied) await interaction.editReply({content:"⚠️ تعذر تنفيذ الطلب حاليًا. لم يتم إنشاء الحساب تلقائيًا؛ حاول مرة أخرى من نفس رسالة التأكيد إذا كانت ما زالت فعالة."}).catch(()=>{});
+    else await interaction.reply({content:"⚠️ تعذر تنفيذ الطلب حاليًا. لم يتم إنشاء الحساب تلقائيًا.",ephemeral:true}).catch(()=>{});
   }
 });
 client.on("guildMemberAdd", invalidateMemberSnapshot);
