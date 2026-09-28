@@ -30,8 +30,23 @@ const applyFullscreen=()=>{
  const b=$("#eg-fullscreen"),f=$("#eg-fullscreen-fab");
  [b,f].forEach(x=>{if(x){x.innerHTML=on?"⤢ <span>خروج من تكبير الطاولة</span>":"⛶ <span>تكبير الطاولة</span>";x.setAttribute("aria-label",on?"الخروج من تكبير الطاولة":"تكبير طاولة اللعب")}});
 };
-const fs=async()=>{gameFullscreen=!gameFullscreen;applyFullscreen();tone(gameFullscreen?760:420,.06);};
-document.addEventListener("fullscreenchange",()=>{});
+const fs=async()=>{
+ const room=$(".game-room");
+ try{
+   if(!gameFullscreen && room?.requestFullscreen){
+     await room.requestFullscreen({navigationUI:"hide"}).catch(()=>{});
+   }else if(gameFullscreen && document.fullscreenElement){
+     await document.exitFullscreen().catch(()=>{});
+   }
+ }catch{}
+ gameFullscreen=!gameFullscreen;
+ applyFullscreen();
+ tone(gameFullscreen?760:420,.06);
+};
+document.addEventListener("fullscreenchange",()=>{
+ const native=!!document.fullscreenElement;
+ if(native!==gameFullscreen){gameFullscreen=native;applyFullscreen();}
+});
 const card=(c,back=false,extra="")=>{if(back)return "<div class='playing-card back'><i>MLD</i><b>✦</b></div>";c=c||{};const suit=esc(c.suit||"");const rank=esc(c.rank??c.value??"");const red=["♥","♦"].includes(c.suit)||c.color==="red";return "<button type='button' class='playing-card "+(red?"red ":"")+" "+extra+"'><span>"+suit+"</span><strong>"+rank+"</strong><small>"+suit+"</small></button>"};
 const seatName=(g,i)=>{if(g==="CODENAMES"){if(i===0)return"قائد الأحمر";if(i===1)return"قائد الأزرق";return i%2?"عميل أزرق "+Math.ceil((i-1)/2):"عميل أحمر "+Math.ceil((i-1)/2)}return"مقعد "+(i+1)};
 const renderSeats=(g,players,current,me)=>players.map((p,i)=>"<div class='player-seat p"+Math.min(i,5)+" "+(i===current?"turn ":"")+(i===me?"self ":"")+(p.bot?"bot":"")+"'><div class='seat-avatar'>"+(p.bot?"BOT":esc((p.username||"لاعب").slice(0,2)))+"</div><div><b>"+esc(i===me?"أنت":p.username||"لاعب")+"</b><small>"+esc(p.seatLabel||seatName(g,i))+(i===current?" · دورك الآن":"")+"</small></div></div>").join("");
