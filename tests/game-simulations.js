@@ -27,7 +27,8 @@ checkQawsarRules();
 function checkJackarooRules(){
  const p=players(4),s=E.create("JAKAROO",p);
  assert.equal(s.hands.length,4);assert.ok(s.hands.every(h=>h.length===4));
- const pub=E.pub(s,p,p[0]);assert.ok(pub.private.hand.length===4);\n s.hands[0][0]={suit:"♠",rank:"A"};
+ const pub=E.pub(s,p,p[0]);assert.ok(pub.private.hand.length===4);
+ s.hands[0][0]={suit:"♠",rank:"A"};
  let chosen=-1;
  for(let i=0;i<s.hands[0].length;i++){try{E.apply("JAKAROO",s,p,p[0],"playCard",{index:i});chosen=i;break}catch{}}
  assert.ok(chosen>=0);
