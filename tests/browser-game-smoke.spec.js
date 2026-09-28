@@ -18,7 +18,7 @@ test("every game opens a real multiplayer room", async ({ page, request }) => {
   await page.goto(BASE + "/#games", { waitUntil: "domcontentloaded" });
   await expect(page.locator("body")).toBeVisible();
 
-  await expect.poll(() => typeof page.evaluate(() => typeof window.openEnhancedGameSession)).toBe("function");
+  await expect.poll(async () => await page.evaluate(() => typeof window.openEnhancedGameSession)).toBe("function");
   expect(consoleErrors, "game room script errors before session").toEqual([]);
 
   for (const game of GAMES) {
