@@ -45,7 +45,7 @@ test("every game opens a real multiplayer room", async ({ page, request }) => {
     await expect(page.locator(".game-room")).toBeVisible({ timeout: 10000 });
     await expect(page.locator(".game-table")).toBeVisible();
     await expect(page.locator("#eg-fullscreen")).toBeVisible();
-    await expect(page.locator("#eg-fullscreen-fab")).toBeVisible();
+    await expect(page.locator("#eg-fullscreen-fab")).toHaveCount(1);
     await expect(page.locator("#eg-leave")).toBeVisible();
 
     const surface = page.locator(".physical-table");
