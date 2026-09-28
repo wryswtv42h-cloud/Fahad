@@ -48,6 +48,7 @@ test("every game opens a real multiplayer room", async ({ page, request }) => {
     await start.click();
     await expect(page.locator(".game-live-pill")).toHaveText("LIVE");
     await expect(page.locator(".game-table").first(), game+" game-table missing. room="+await page.locator(".game-room").innerText()).toBeVisible();
+    if (["UNO","BALOOT","JAKAROO","QAWSAR"].includes(game)) { const handCount=await page.evaluate(async id=>{const guestId=localStorage.getItem("mld_guest_id"); const r=await fetch("/api/games/"+id+"/state?guestId="+encodeURIComponent(guestId),{cache:"no-store"}); const d=await r.json(); return d.state?.hand?.length||d.state?.private?.hand?.length||0;},id); expect(handCount,game+" private hand API").toBeGreaterThan(0); }
     await expect(page.locator("#eg-fullscreen")).toBeVisible();
     await expect(page.locator("#eg-fullscreen-fab")).toHaveCount(1);
     await expect(page.locator("#eg-leave")).toBeVisible();
