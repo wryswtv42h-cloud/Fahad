@@ -32,16 +32,29 @@ const applyFullscreen=()=>{
 };
 const fs=async()=>{
  const room=$(".game-room");
+ if(!room)return;
  try{
-   if(!gameFullscreen && room?.requestFullscreen){
-     await room.requestFullscreen({navigationUI:"hide"}).catch(()=>{});
-   }else if(gameFullscreen && document.fullscreenElement){
-     await document.exitFullscreen().catch(()=>{});
+   if(!gameFullscreen){
+     let native=false;
+     if(room.requestFullscreen){
+       try{await room.requestFullscreen({navigationUI:"hide"});native=!!document.fullscreenElement}catch{}
+     }
+     // iOS Safari and a few embedded browsers do not expose Element.requestFullscreen.
+     // The CSS fallback keeps the table full-screen on those devices.
+     gameFullscreen=true;
+     applyFullscreen();
+     if(native)document.body.classList.add("mld-native-game-fullscreen");
+   }else{
+     if(document.fullscreenElement){try{await document.exitFullscreen()}catch{}}
+     gameFullscreen=false;
+     document.body.classList.remove("mld-native-game-fullscreen");
+     applyFullscreen();
    }
- }catch{}
- gameFullscreen=!gameFullscreen;
- applyFullscreen();
- tone(gameFullscreen?760:420,.06);
+   tone(gameFullscreen?760:420,.06);
+ }catch(e){
+   gameFullscreen=!gameFullscreen;
+   applyFullscreen();
+ } 
 };
 document.addEventListener("fullscreenchange",()=>{
  const native=!!document.fullscreenElement;
