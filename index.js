@@ -983,7 +983,7 @@ app.post("/api/games",async(req,res)=>{
   if(max<min)return res.status(400).json({error:"هذه اللعبة تحتاج على الأقل "+min+" لاعبين"});
   if(!u&&!guestId)return res.status(400).json({error:"معرّف الزائر مفقود"});
   const hostName=u?.username||guestName||"زائر",discordName=u?.discordUsername||guestName;
-  const players=[{username:hostName,discordUsername:discordName,guest:!u,guestId:u?undefined:guestId,bot:false,host:true,seat:null,seatLabel:null}];
+  const firstSeat=seatOptions(game,max)[0]||"مقعد 1"; const players=[{username:hostName,discordUsername:discordName,guest:!u,guestId:u?undefined:guestId,bot:false,host:true,seat:firstSeat,seatLabel:firstSeat}];
   const q=await pool.query("INSERT INTO game_lobbies(game,host_username,host_discord_username,max_players,players,status) VALUES($1,$2,$3,$4,$5,'waiting') RETURNING *",[game,hostName,discordName,max,JSON.stringify(players)]);
   if(u)await audit(u,"game_create",game);res.json({ok:true,game:q.rows[0],seats:seatOptions(game,max)});
 });
