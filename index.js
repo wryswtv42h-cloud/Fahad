@@ -1413,12 +1413,7 @@ client.on("interactionCreate", async (interaction) => {
       );
       await db.query("COMMIT");
 
-      await interaction.message.edit({content:"❌ تم إلغاء إنشاء الحساب. لم يتم إنشاء أي حساب."}).catch(()=>{});
-      await interaction.message.edit({
-        content:"❌ تم إلغاء إنشاء الحساب. لم يتم إنشاء أي حساب.",
-        embeds:[],
-        components:[]
-      }).catch(()=>{});
+      await interaction.message.edit({content:"❌ تم إلغاء إنشاء الحساب. لم يتم إنشاء أي حساب.",embeds:[],components:[]}).catch(()=>{});
       await audit(
         {username:v.username,discordUsername:v.discord_username},
         "register_cancelled",
@@ -1439,12 +1434,7 @@ client.on("interactionCreate", async (interaction) => {
         [id]
       );
       await db.query("COMMIT");
-      await interaction.message.edit({content:"⚠️ الحساب أو Discord مرتبط بحساب موجود مسبقًا. لم يتم إنشاء حساب جديد."}).catch(()=>{});
-      await interaction.message.edit({
-        content:"⚠️ لم يتم إنشاء حساب جديد لأن البيانات مرتبطة بحساب موجود.",
-        embeds:[],
-        components:[]
-      }).catch(()=>{});
+      await interaction.message.edit({content:"⚠️ لم يتم إنشاء حساب جديد لأن البيانات مرتبطة بحساب موجود.",embeds:[],components:[]}).catch(()=>{});
       return;
     }
 
@@ -1465,8 +1455,10 @@ client.on("interactionCreate", async (interaction) => {
     await db.query("COMMIT");
 
     // Everything above is committed before any Discord presentation work.
-    await interaction.editReply({
-      content:"✅ تم إنشاء حساب MLD بنجاح. كلمة المرور هي التي اخترتها في الموقع."
+    await interaction.message.edit({
+      content:"✅ تم تأكيد إنشاء حساب MLD بنجاح.",
+      embeds:[],
+      components:[]
     }).catch(()=>{});
     await interaction.message.edit({
       content:"✅ تم تأكيد إنشاء حساب MLD بنجاح.",
