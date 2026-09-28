@@ -352,3 +352,19 @@ body.mld-booting #mld-welcome{opacity:1;visibility:visible}
 #menu .menu-bars i{display:block;height:2px;border-radius:99px;background:currentColor;box-shadow:0 0 8px rgba(255,156,222,.28)}
 #menu .menu-close{display:block;font-size:30px;line-height:1;font-weight:300;transform:translateY(-1px)}
 #menu[aria-expanded="true"]{background:linear-gradient(145deg,#ff9cde22,#ffffff0c);border-color:#ff9cde66}
+
+/* FINAL MOBILE NAV + GAME TAP SAFETY */
+#menu{display:none;place-items:center;align-items:center;justify-content:center;width:48px!important;height:48px!important;padding:0!important;line-height:1!important;box-sizing:border-box!important}
+#menu .menu-bars{width:22px!important;height:18px!important;margin:0!important;display:flex!important;flex-direction:column!important;justify-content:space-between!important;align-items:stretch!important}
+#menu .menu-bars i{width:100%!important;height:2px!important;margin:0!important;display:block!important}
+@media(max-width:820px){
+  #menu{display:grid!important;flex:0 0 48px!important}
+  .mobile-menu{top:78px!important;gap:4px!important;padding:8px 10px 12px!important;grid-template-columns:1fr!important}
+  .mobile-menu button,.mobile-menu .invite{width:100%!important;min-height:44px!important;height:44px!important;margin:0!important;padding:9px 12px!important;box-sizing:border-box!important;display:flex!important;align-items:center!important;justify-content:flex-start!important}
+  .mobile-menu.open{display:grid!important;row-gap:4px!important;column-gap:0!important}
+  .mobile-menu .invite{justify-content:center!important}
+}
+@media(max-width:560px){
+  .nav{min-height:74px!important}
+  .mobile-menu{top:74px!important;max-height:calc(100dvh - 74px)!important}
+}
