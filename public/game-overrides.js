@@ -66,7 +66,7 @@ async function openSession(id,watch=false){
    $("#game-leave").onclick=async()=>{if(!spectator)await api("/api/games/"+id+"/leave",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body())});list()};
    $("#game-finish")?.addEventListener("click",async()=>{await api("/api/games/"+id+"/finish",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body())});list()});
    document.querySelectorAll("[data-seat]").forEach(b=>b.onclick=async()=>{await api("/api/games/"+id+"/seat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...body(),seat:b.dataset.seat})});render()});
-   $("#game-start")?.addEventListener("click",async()=>{const b=$("#game-start");b.disabled=true;try{await api("/api/games/"+id+"/start",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body())});render()}catch(e){b.disabled=false;alert(e.message)}});
+   $("#eg-start")?.addEventListener("click",async()=>{const b=$("#game-start");b.disabled=true;try{await api("/api/games/"+id+"/start",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body())});render()}catch(e){b.disabled=false;alert(e.message)}});
    document.querySelectorAll("[data-card]").forEach(b=>b.onclick=()=>act("playCard",{index:Number(b.dataset.card)}));
    document.querySelectorAll("[data-choice]").forEach(b=>b.onclick=()=>act("choose",{choice:Number(b.dataset.choice)}));
    document.querySelectorAll("[data-token]").forEach(b=>b.onclick=()=>act("moveToken",{token:Number(b.dataset.token)}));
