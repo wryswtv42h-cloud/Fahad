@@ -118,3 +118,14 @@ body.mld-game-fullscreen{position:fixed!important;inset:0!important}
 @media(max-width:700px){.mld-game-fullscreen .game-table,.game-room.game-focus-mode .game-table,.game-room:fullscreen .game-table{height:calc(100dvh - 128px)!important;height:calc(100vh - 128px)!important}.mld-game-fullscreen .game-controls,.game-room.game-focus-mode .game-controls,.game-room:fullscreen .game-controls{max-height:30dvh}}
 @media(orientation:landscape) and (max-height:600px){.mld-game-fullscreen .game-table,.game-room.game-focus-mode .game-table,.game-room:fullscreen .game-table{height:calc(100dvh - 78px)!important;height:calc(100vh - 78px)!important}.mld-game-fullscreen .game-controls,.game-room.game-focus-mode .game-controls,.game-room:fullscreen .game-controls{position:absolute;left:8px;right:8px;bottom:8px;max-height:34dvh;z-index:50}.mld-game-fullscreen .game-room-top,.game-room.game-focus-mode .game-room-top,.game-room:fullscreen .game-room-top{min-height:42px;padding-bottom:4px}}
 @supports not (height:100dvh){.mld-game-fullscreen .game-room,.game-room.game-focus-mode,.game-room:fullscreen{height:100vh!important}.mld-game-fullscreen .game-table,.game-room.game-focus-mode .game-table,.game-room:fullscreen .game-table{height:calc(100vh - 150px)!important}}
+
+.jackaroo-physical{padding:18px;gap:18px}
+.jackaroo-board{position:relative;display:grid;grid-template-columns:repeat(13,minmax(28px,1fr));grid-template-rows:repeat(4,minmax(34px,1fr));gap:5px;width:min(92vw,900px);aspect-ratio:1.7/1;margin:auto;padding:18px;border-radius:28px;background:radial-gradient(circle,#24364a 0,#101a28 70%);box-shadow:0 24px 70px rgba(0,0,0,.35)}
+.jack-cell{display:grid;place-items:center;border:1px solid rgba(255,255,255,.1);border-radius:9px;background:rgba(255,255,255,.055);font-style:normal;font-size:11px;color:rgba(255,255,255,.55)}
+.jackaroo-center{position:absolute;inset:30% 35%;display:grid;place-items:center;text-align:center;border-radius:50%;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);font-weight:900;z-index:2}
+.jackaroo-center small{font-weight:600;opacity:.75}
+.jackaroo-hand{width:100%}
+.jackaroo-pieces{display:flex;justify-content:center;gap:10px;flex-wrap:wrap}
+.jack-piece{display:grid;place-items:center;min-width:48px;height:42px;border-radius:14px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);font-weight:900}
+.jackaroo-control-row{display:flex;justify-content:center;flex-wrap:wrap;gap:10px}
+@media(max-width:700px){.jackaroo-board{grid-template-columns:repeat(13,minmax(20px,1fr));gap:3px;padding:10px;border-radius:20px}.jack-cell{font-size:8px}.jackaroo-center{inset:31% 31%;font-size:12px}}
