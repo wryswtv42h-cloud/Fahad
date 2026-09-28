@@ -196,19 +196,24 @@ JAKAROO:"لكل لاعب 4 قطع و4 أوراق. استخدم A أو K لإخر
     window.__mldGameRouteGuard=true;
     window.change=async function(route){
       const leavingGame=!!activeId && route!=="games";
+      const id=activeId, wasSpectator=spectator;
+      const result=await originalRouteChange(route);
       if(leavingGame){
-        const id=activeId, wasSpectator=spectator;
-        stop();
-        clearActive();
-        if(!wasSpectator){
-          try{await api("/api/games/"+id+"/leave",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload())});}catch(e){}
+        const actualHash=String(location.hash||"").replace(/^#/,"").split("?")[0]||"home";
+        if(actualHash!=="games" && activeId===id){
+          stop();
+          clearActive();
+          if(!wasSpectator){
+            try{await api("/api/games/"+id+"/leave",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload())});}catch(e){}
+          }
+          setImmersive(false);
+          document.body.style.overflow="";
         }
-        setImmersive(false);
-        document.body.style.overflow="";
       }
-      return originalRouteChange(route);
+      return result;
     };
   }
   if(typeof renderGames==="function")renderGames=enhancedGames;
-  window.addEventListener("pagehide",()=>{if(activeId&&!spectator){try{navigator.sendBeacon("/api/games/"+activeId+"/leave",new Blob([JSON.stringify(payload())],{type:"application/json"}))}catch{}}});
+  // Do not use pagehide to leave: mobile Safari and reloads can fire it during normal
+  // route/render transitions. Explicit SPA navigation/back handling above is authoritative.
 })();
