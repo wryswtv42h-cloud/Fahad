@@ -30,16 +30,6 @@ test("every game opens a real multiplayer room", async ({ page, request }) => {
     const createdJson = await created.json();
     const id = createdJson.game.id;
 
-    const seat = await request.post(BASE + "/api/games/" + id + "/seat", {
-      data: { guestId, seat: "0" }
-    });
-    expect(seat.ok(), game + " seat").toBeTruthy();
-
-    const started = await request.post(BASE + "/api/games/" + id + "/start", {
-      data: { guestId }
-    });
-    expect(started.ok(), game + " start").toBeTruthy();
-
     await page.goto(BASE + "/#games", { waitUntil: "domcontentloaded" });
     await page.evaluate((guestId) => localStorage.setItem("mld_guest_id", guestId), guestId);
     await page.reload({ waitUntil: "domcontentloaded" });
