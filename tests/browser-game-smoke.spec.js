@@ -41,7 +41,7 @@ test("every game opens a real multiplayer room", async ({ page, request }) => {
     await expect(mySeat).toBeEnabled();
     await mySeat.click();
     await expect(mySeat).toHaveClass(/selected/);
-    await expect(page.locator(".game-perspective-banner")).toContainText(/قائد|عميل|مقعد|أنت/);
+    await expect(page.locator(".game-perspective-banner")).toContainText(/منظورك|وضع المشاهدة/);
     const start = page.locator("#eg-start");
     await expect(start).toBeVisible();
     await expect(start).toBeEnabled();
