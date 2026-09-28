@@ -10,8 +10,6 @@ const pgSession = require("connect-pg-simple")(session);
 const { Pool } = require("pg");
 const helmet = require("helmet");
 const compression = require("compression");
-const GAME_ENGINE_V4 = require("./game-engines");
-const GAME_RESULT_TTL_MS = 5*60*1000;
 // game host cleanup hardening v2
 
 const token = process.env.DISCORD_BOT_TOKEN;
@@ -311,9 +309,6 @@ async function initAppDatabase() {
     ALTER TABLE group_join_requests ADD COLUMN IF NOT EXISTS discord_username VARCHAR(100);
     ALTER TABLE group_join_requests ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'pending';
     ALTER TABLE group_join_requests ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
-    CREATE TABLE IF NOT EXISTS game_scores (id SERIAL PRIMARY KEY, username VARCHAR(32) UNIQUE NOT NULL, discord_username VARCHAR(100) NOT NULL, wins INTEGER NOT NULL DEFAULT 0, points INTEGER NOT NULL DEFAULT 0, guest BOOLEAN NOT NULL DEFAULT false, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
-    CREATE TABLE IF NOT EXISTS game_lobbies (id SERIAL PRIMARY KEY, game VARCHAR(30) NOT NULL, host_username VARCHAR(32) NOT NULL, host_discord_username VARCHAR(100) NOT NULL, max_players INTEGER NOT NULL DEFAULT 4, players JSONB NOT NULL DEFAULT '[]'::jsonb, status VARCHAR(20) NOT NULL DEFAULT 'waiting', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
-    ALTER TABLE game_lobbies ADD COLUMN IF NOT EXISTS state JSONB NOT NULL DEFAULT '{}'::jsonb;
     ALTER TABLE community_groups ADD COLUMN IF NOT EXISTS group_conversation_id BIGINT; ALTER TABLE community_groups ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'pending'; ALTER TABLE community_groups ADD COLUMN IF NOT EXISTS discord_role_id VARCHAR(32); ALTER TABLE community_groups ADD COLUMN IF NOT EXISTS discord_channel_id VARCHAR(32);
     CREATE TABLE IF NOT EXISTS reviews (id SERIAL PRIMARY KEY, username VARCHAR(32) NOT NULL DEFAULT 'زائر مجهول', discord_username VARCHAR(100) NOT NULL DEFAULT 'غير مسجل', rating INTEGER NOT NULL DEFAULT 5, message VARCHAR(1000) NOT NULL DEFAULT '', status VARCHAR(20) NOT NULL DEFAULT 'visible', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
     ALTER TABLE reviews ADD COLUMN IF NOT EXISTS username VARCHAR(32);
@@ -354,8 +349,6 @@ async function initAppDatabase() {
     ALTER TABLE community_groups ADD COLUMN IF NOT EXISTS group_conversation_id BIGINT;
     CREATE TABLE IF NOT EXISTS anonymous_posts (id BIGSERIAL PRIMARY KEY, author_username VARCHAR(32), body VARCHAR(2000) NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
     CREATE TABLE IF NOT EXISTS anonymous_replies (id BIGSERIAL PRIMARY KEY, post_id BIGINT NOT NULL REFERENCES anonymous_posts(id) ON DELETE CASCADE, author_username VARCHAR(32), body VARCHAR(2000) NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
-    ALTER TABLE game_scores ADD COLUMN IF NOT EXISTS username VARCHAR(32);
-    ALTER TABLE game_scores ADD COLUMN IF NOT EXISTS discord_username VARCHAR(100);
     ALTER TABLE reviews ADD COLUMN IF NOT EXISTS username VARCHAR(32);
     ALTER TABLE reviews ADD COLUMN IF NOT EXISTS discord_username VARCHAR(100);
     -- Legacy-schema compatibility: older deployments used user_id and omitted newer fields.
@@ -379,8 +372,6 @@ async function initAppDatabase() {
     CREATE INDEX IF NOT EXISTS group_members_username_idx ON group_members(username,group_id);
     CREATE INDEX IF NOT EXISTS group_join_requests_group_status_idx ON group_join_requests(group_id,status,created_at DESC);
     CREATE INDEX IF NOT EXISTS community_groups_status_idx ON community_groups(status,id DESC);
-    CREATE INDEX IF NOT EXISTS game_lobbies_status_idx ON game_lobbies(status,created_at DESC);
-    CREATE INDEX IF NOT EXISTS game_scores_rank_idx ON game_scores(guest,wins DESC,points DESC);
     CREATE INDEX IF NOT EXISTS chat_public_mutes_until_idx ON chat_public_mutes(muted_until);
     CREATE INDEX IF NOT EXISTS password_resets_active_idx ON password_resets(username,expires_at DESC) WHERE used_at IS NULL;
     INSERT INTO site_stats(id,visits) VALUES(1,0) ON CONFLICT (id) DO NOTHING;
@@ -675,8 +666,6 @@ app.get("/api/owner/groups",requireOwner,async(req,res)=>{try{const q=await pool
 app.post("/api/owner/groups/:id/status",requireOwner,async(req,res)=>{try{const id=Number(req.params.id),status=String(req.body?.status||"").toLowerCase();if(!["approved","rejected"].includes(status))return res.status(400).json({error:"حالة غير صحيحة"});const q=await pool.query("SELECT * FROM community_groups WHERE id=$1",[id]);if(!q.rowCount)return res.status(404).json({error:"القروب غير موجود"});const g=q.rows[0];if(status==="rejected"){await pool.query("UPDATE community_groups SET status='rejected' WHERE id=$1",[id]);await audit(req.session.user,"group_status","#"+id+" => rejected");return res.json({ok:true,status:"rejected"});}if(g.status==="approved"&&g.discord_role_id)return res.json({ok:true,status:"approved",alreadyProvisioned:true});const assets=await createServerGroupAssets(g);await audit(req.session.user,"group_status","#"+id+" => approved · role="+assets.role.id+" · channel="+assets.channel.id);res.json({ok:true,status:"approved",roleId:assets.role.id,channelId:assets.channel.id});}catch(e){console.error("Owner group approval:",e);res.status(500).json({error:"تعذر اعتماد القروب وإنشاء الرول والروم عبر بوت الزاجل: "+(e.message||"خطأ غير معروف")});}});
 app.delete("/api/owner/groups/:id",requireOwner,async(req,res)=>{try{const id=Number(req.params.id);const q=await pool.query("SELECT * FROM community_groups WHERE id=$1",[id]);if(!q.rowCount)return res.status(404).json({error:"القروب غير موجود"});const g=q.rows[0];const guild=await getGuild();if(g.discord_channel_id){try{const ch=await guild.channels.fetch(g.discord_channel_id);if(ch)await ch.delete("حذف قروب MLD بواسطة الأونر");}catch(e){console.warn("Group channel delete:",e.message)}}if(g.discord_role_id){try{const role=await guild.roles.fetch(g.discord_role_id);if(role)await role.delete("حذف قروب MLD بواسطة الأونر");}catch(e){console.warn("Group role delete:",e.message)}}if(g.group_conversation_id)await pool.query("DELETE FROM chat_participants WHERE conversation_id=$1",[g.group_conversation_id]).catch(()=>{});await pool.query("DELETE FROM community_groups WHERE id=$1",[id]);await audit(req.session.user,"group_delete","#"+id+" "+g.name);res.json({ok:true});}catch(e){console.error("Owner group delete:",e);res.status(500).json({error:"تعذر حذف القروب: "+(e.message||"خطأ غير معروف")});}});
 app.get("/api/owner/logs/groups",requireOwner,async(req,res)=>{try{const q=await pool.query("SELECT id,username,discord_username,action,details,created_at FROM audit_logs WHERE action LIKE 'group_%' OR action LIKE 'owner_group_%' ORDER BY created_at DESC LIMIT 500");res.json({logs:q.rows});}catch(e){res.status(500).json({error:"تعذر تحميل لوق القروبات"});}});
-app.get("/api/owner/games",requireOwner,async(req,res)=>{const q=await pool.query("SELECT id,game,status,host_username,players,created_at FROM game_lobbies ORDER BY id DESC LIMIT 200");res.json({games:q.rows});});
-app.post("/api/owner/games/:id/finish",requireOwner,async(req,res)=>{const id=Number(req.params.id);const q=await pool.query("SELECT id,game,status,state FROM game_lobbies WHERE id=$1",[id]);if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة"});await pool.query("UPDATE game_lobbies SET status='finished' WHERE id=$1",[id]);await audit(req.session.user,"owner_game_finish","إنهاء جلسة #"+id+" "+q.rows[0].game);res.json({ok:true});});
 app.get("/api/owner/anonymous/logs",requireOwner,async(req,res)=>{const q=await pool.query("SELECT p.id,p.created_at,p.body,(SELECT COUNT(*) FROM anonymous_replies r WHERE r.post_id=p.id) replies FROM anonymous_posts p ORDER BY p.id DESC LIMIT 300");res.json({posts:q.rows});});
 app.delete("/api/owner/anonymous/:id",requireOwner,async(req,res)=>{const id=Number(req.params.id);await pool.query("DELETE FROM anonymous_posts WHERE id=$1",[id]);await audit(req.session.user,"anonymous_post_delete","#"+id);res.json({ok:true});});
 app.get("/api/anonymous",async(req,res)=>{const q=await pool.query("SELECT p.id,p.body,p.created_at,COALESCE((SELECT json_agg(json_build_object('id',r.id,'body',r.body,'created_at',r.created_at) ORDER BY r.id) FROM anonymous_replies r WHERE r.post_id=p.id),'[]'::json) replies FROM anonymous_posts p ORDER BY p.id DESC LIMIT 100");res.json({posts:q.rows});});
@@ -755,7 +744,6 @@ app.post("/api/owner/applications/:id/status",requireAdmin,async(req,res)=>{
 // OWNER FULL CONTROL — destructive actions are owner-only and audited.
 app.get("/api/owner/groups",requireOwner,async(req,res)=>{const q=await pool.query("SELECT id,name,description,username,discord_username,status,created_at FROM community_groups ORDER BY id DESC LIMIT 300");res.json({groups:q.rows});});
 app.get("/api/owner/group-requests",requireOwner,async(req,res)=>{const q=await pool.query("SELECT r.id,r.group_id,r.username,r.discord_username,r.status,r.created_at,g.name AS group_name FROM group_join_requests r JOIN community_groups g ON g.id=r.group_id ORDER BY r.id DESC LIMIT 300");res.json({requests:q.rows});});
-app.get("/api/owner/games",requireOwner,async(req,res)=>{const q=await pool.query("SELECT id,game,host_username,max_players,players,status,created_at FROM game_lobbies ORDER BY id DESC LIMIT 200");res.json({games:q.rows});});
 app.get("/api/owner/reviews",requireOwner,async(req,res)=>{const q=await pool.query("SELECT id,username,discord_username,rating,message,status,created_at FROM reviews ORDER BY id DESC LIMIT 200");res.json({reviews:q.rows});});
 app.delete("/api/owner/applications/:id",requireOwner,async(req,res)=>{const id=Number(req.params.id);const q=await pool.query("DELETE FROM applications WHERE id=$1 RETURNING id",[id]);if(!q.rowCount)return res.status(404).json({error:"التقديم غير موجود"});await audit(req.session.user,"application_delete","#"+id);res.json({ok:true});});
 app.delete("/api/owner/tickets/:id",requireOwner,async(req,res)=>{const id=Number(req.params.id);const q=await pool.query("DELETE FROM tickets WHERE id=$1 RETURNING id",[id]);if(!q.rowCount)return res.status(404).json({error:"التيكت غير موجود"});await audit(req.session.user,"ticket_delete","#"+id);res.json({ok:true});});
@@ -770,13 +758,11 @@ app.delete("/api/owner/groups/:id",requireOwner,async(req,res)=>{
 });
 app.delete("/api/owner/group-requests/:id",requireOwner,async(req,res)=>{const id=Number(req.params.id);const q=await pool.query("DELETE FROM group_join_requests WHERE id=$1 RETURNING id,group_id,username",[id]);if(!q.rowCount)return res.status(404).json({error:"طلب القروب غير موجود"});await audit(req.session.user,"group_request_delete","#"+id);res.json({ok:true});});
 app.delete("/api/owner/reviews/:id",requireOwner,async(req,res)=>{const id=Number(req.params.id);const q=await pool.query("DELETE FROM reviews WHERE id=$1 RETURNING id",[id]);if(!q.rowCount)return res.status(404).json({error:"الرأي غير موجود"});await audit(req.session.user,"review_delete","#"+id);res.json({ok:true});});
-app.delete("/api/owner/games/:id",requireOwner,async(req,res)=>{const id=Number(req.params.id);const q=await pool.query("DELETE FROM game_lobbies WHERE id=$1 RETURNING id",[id]);if(!q.rowCount)return res.status(404).json({error:"جلسة اللعبة غير موجودة"});await audit(req.session.user,"game_delete","#"+id);res.json({ok:true});});
-app.post("/api/owner/games/:id/finish",requireOwner,async(req,res)=>{const id=Number(req.params.id);const q=await pool.query("UPDATE game_lobbies SET status='finished',state=COALESCE(state,'{}'::jsonb)||jsonb_build_object('finishedAt',NOW()::text,'ownerFinished',true) WHERE id=$1 RETURNING id,status",[id]);if(!q.rowCount)return res.status(404).json({error:"جلسة اللعبة غير موجودة"});await audit(req.session.user,"game_finish_owner","#"+id);res.json({ok:true,game:q.rows[0]});});
 app.get("/api/reviews",async(req,res)=>{const q=await pool.query("SELECT id,username,rating,message,is_demo,created_at FROM reviews WHERE status='visible' ORDER BY id DESC LIMIT 100");res.set("Cache-Control","no-store");res.json({reviews:q.rows});});
 app.post("/api/reviews",async(req,res)=>{const u=req.session.user||null,message=String(req.body?.message||"").trim(),rating=Math.max(1,Math.min(5,Number(req.body?.rating)||5));if(message.length<3||message.length>1000)return res.status(400).json({error:"الرأي يجب أن يكون بين 3 و1000 حرف"});const username=u?.username||"زائر",discordUsername=u?.discordUsername||"غير مسجل";const q=await pool.query("INSERT INTO reviews(username,discord_username,rating,message,text,is_demo) VALUES($1,$2,$3,$4,$4,false) RETURNING id",[username,discordUsername,rating,message]);if(u)await audit(u,"review_create",`#${q.rows[0].id}`);res.json({ok:true,id:q.rows[0].id});});
 app.get("/api/announcements",async(req,res)=>{const q=await pool.query("SELECT id,text,link FROM announcements WHERE active=true ORDER BY id DESC LIMIT 5");res.json({announcements:q.rows});});
 app.post("/api/owner/users/:id/ban",requireOwner,async(req,res)=>{const banned=!!req.body?.banned,id=Number(req.params.id);const q=await pool.query("UPDATE app_users SET banned=$1 WHERE id=$2 AND role<>$3 RETURNING id,username,banned",[banned,id,"owner"]);if(!q.rowCount)return res.status(404).json({error:"الحساب غير موجود أو لا يمكن حظر الأونر"});await audit(req.session.user,banned?"account_ban":"account_unban",q.rows[0].username);res.json({ok:true,user:q.rows[0]});});
-app.delete("/api/owner/users/:id",requireOwner,async(req,res)=>{const id=Number(req.params.id),u=await pool.query("SELECT username,role FROM app_users WHERE id=$1",[id]);if(!u.rowCount||u.rows[0].role==="owner")return res.status(404).json({error:"الحساب غير موجود أو لا يمكن حذف الأونر"});const username=u.rows[0].username,c=await pool.connect();try{await c.query("BEGIN");await c.query("DELETE FROM registration_verifications WHERE username=$1 OR discord_user_id IN (SELECT discord_user_id FROM app_users WHERE username=$1)",[username]);await c.query("DELETE FROM password_resets WHERE username=$1",[username]);await c.query("DELETE FROM ticket_messages WHERE ticket_id IN (SELECT id FROM tickets WHERE username=$1)",[username]);await c.query("DELETE FROM tickets WHERE username=$1",[username]);await c.query("DELETE FROM applications WHERE username=$1",[username]);await c.query("DELETE FROM group_join_requests WHERE username=$1",[username]);await c.query("DELETE FROM group_members WHERE username=$1",[username]);await c.query("DELETE FROM community_groups WHERE username=$1",[username]);await c.query("DELETE FROM game_scores WHERE username=$1",[username]);await c.query("DELETE FROM game_lobbies WHERE host_username=$1",[username]);await c.query("DELETE FROM reviews WHERE username=$1",[username]);await c.query("DELETE FROM anonymous_replies WHERE author_username=$1",[username]);await c.query("DELETE FROM anonymous_posts WHERE author_username=$1",[username]);await c.query("DELETE FROM audit_logs WHERE username=$1",[username]);await c.query("DELETE FROM chat_public_mutes WHERE username=$1 OR muted_by=$1",[username]);await c.query("DELETE FROM chat_blocks WHERE blocker_username=$1 OR blocked_username=$1",[username]);await c.query("DELETE FROM chat_messages WHERE sender_username=$1",[username]);await c.query("DELETE FROM chat_conversations WHERE owner_username=$1",[username]);await c.query("DELETE FROM chat_profiles WHERE username=$1",[username]);await c.query("DELETE FROM user_sessions WHERE sess->'user'->>'username'=$1",[username]).catch(()=>{});await c.query("DELETE FROM app_users WHERE username=$1",[username]);await c.query("COMMIT");await audit(req.session.user,"account_delete",username);res.json({ok:true})}catch(e){await c.query("ROLLBACK");console.error("Owner account delete:",e);res.status(500).json({error:"تعذر حذف الحساب بالكامل"})}finally{c.release()}});
+app.delete("/api/owner/users/:id",requireOwner,async(req,res)=>{const id=Number(req.params.id),u=await pool.query("SELECT username,role FROM app_users WHERE id=$1",[id]);if(!u.rowCount||u.rows[0].role==="owner")return res.status(404).json({error:"الحساب غير موجود أو لا يمكن حذف الأونر"});const username=u.rows[0].username,c=await pool.connect();try{await c.query("BEGIN");await c.query("DELETE FROM registration_verifications WHERE username=$1 OR discord_user_id IN (SELECT discord_user_id FROM app_users WHERE username=$1)",[username]);await c.query("DELETE FROM password_resets WHERE username=$1",[username]);await c.query("DELETE FROM ticket_messages WHERE ticket_id IN (SELECT id FROM tickets WHERE username=$1)",[username]);await c.query("DELETE FROM tickets WHERE username=$1",[username]);await c.query("DELETE FROM applications WHERE username=$1",[username]);await c.query("DELETE FROM group_join_requests WHERE username=$1",[username]);await c.query("DELETE FROM group_members WHERE username=$1",[username]);await c.query("DELETE FROM community_groups WHERE username=$1",[username]);await c.query("DELETE FROM reviews WHERE username=$1",[username]);await c.query("DELETE FROM anonymous_replies WHERE author_username=$1",[username]);await c.query("DELETE FROM anonymous_posts WHERE author_username=$1",[username]);await c.query("DELETE FROM audit_logs WHERE username=$1",[username]);await c.query("DELETE FROM chat_public_mutes WHERE username=$1 OR muted_by=$1",[username]);await c.query("DELETE FROM chat_blocks WHERE blocker_username=$1 OR blocked_username=$1",[username]);await c.query("DELETE FROM chat_messages WHERE sender_username=$1",[username]);await c.query("DELETE FROM chat_conversations WHERE owner_username=$1",[username]);await c.query("DELETE FROM chat_profiles WHERE username=$1",[username]);await c.query("DELETE FROM user_sessions WHERE sess->'user'->>'username'=$1",[username]).catch(()=>{});await c.query("DELETE FROM app_users WHERE username=$1",[username]);await c.query("COMMIT");await audit(req.session.user,"account_delete",username);res.json({ok:true})}catch(e){await c.query("ROLLBACK");console.error("Owner account delete:",e);res.status(500).json({error:"تعذر حذف الحساب بالكامل"})}finally{c.release()}});
 app.get("/api/owner/logs/deleted-messages",requireOwner,async(req,res)=>{const q=await pool.query("SELECT id,username,discord_username,details,created_at FROM audit_logs WHERE action='message_deleted_for_everyone' ORDER BY id DESC LIMIT 500");res.json({logs:q.rows})});
 app.get("/api/owner/users",requireOwner,async(req,res)=>{const q=await pool.query("SELECT id,username,discord_username,role,created_at,last_login_at FROM app_users ORDER BY id DESC LIMIT 300");res.json({users:q.rows});});
 app.get("/api/owner/users/:username/messages",requireOwner,async(req,res)=>{
@@ -817,393 +803,6 @@ app.post("/api/owner/broadcast",requireOwner,async(req,res)=>{
 });
 
 
-
-const CODE_WORDS=["قمر","مفتاح","نهر","صحراء","روبوت","مدرسة","سيف","مطر","نجم","حديقة","مسرح","ذهب","بحر","كتاب","طائرة","قلعة","تفاحة","قهوة","نظارة","صاروخ","بوصلة","جزيرة","ثلج","طريق","مغناطيس","برق","نار","ملك","بنك","كرة","طبيب","موسيقى","سفينة","سر","جسر","شمس","ظل","وردة","ساعة","باب","مدينة","غابة","عين","قلب","صوت","فيلم","لؤلؤ","قلم","حصان","موجة","صقر","نقطة","سلم","حجر","خبز","كوكب","دخان","نسر","مرآة","نفق","شيفرة","رعد","قناع","خاتم","برج","نجمة","مخيم","صندوق","قطار","ملعب","رمل","عسل","ورق","جبل","ساحر","دائرة","تاج","سهم","شبكة","مسبار","كنز","ساحل","ليل","نهار","مجرة","كأس","نخلة","بركان","ريشة","موج","حبر","نسر"];
-const GAME_ENGINE={
-  SPYFALL:{kind:"choice",prompt:"أنت في محطة فضائية. اختر السؤال الذي يكشف الجاسوس دون أن تكشف المكان.",choices:["ما لون الجدار؟","كم عدد الموظفين؟","متى يبدأ الدوام؟"],answer:0},
-  PICTIONARY:{kind:"text",prompt:"الكلمة السرية للرسم: «صاروخ». اكتب وصفًا قصيرًا لما سيرسمه اللاعب.",answer:"صاروخ"},
-  CHARADES:{kind:"choice",prompt:"الكلمة المطلوب تمثيلها: «مظلة». اختر أسلوب التمثيل الصحيح.",choices:["تمثيل بلا كلام","قول الكلمة مباشرة","كتابة الكلمة"],answer:0},
-  WHOAMI:{kind:"text",prompt:"أنا شخصية مشهورة، أعيش في عالم الألعاب، وأرتدي قبعة حمراء. من أنا؟",answer:"ماريو"},
-  TABOO:{kind:"text",prompt:"اشرح «البحر» دون استخدام: ماء، موج، شاطئ. اكتب شرحك.",answer:""},
-  WORD_BOMB:{kind:"text",prompt:"القنبلة على حرف «م». اكتب كلمة عربية تبدأ بحرف م قبل انتهاء الدور.",answer:"م"},
-  TRUTH_LIE:{kind:"choice",prompt:"اختر: الأرض تدور حول الشمس.",choices:["حقيقة","كذبة"],answer:0},
-  EMOJI_GUESS:{kind:"choice",prompt:"🦁👑 خمن الفيلم.",choices:["الأسد الملك","توي ستوري","علاء الدين"],answer:0},
-  TRIVIA:{kind:"choice",prompt:"ما أكبر كوكب في المجموعة الشمسية؟",choices:["الأرض","المشتري","المريخ"],answer:1},
-  CATEGORIES:{kind:"text",prompt:"التصنيف: فواكه. اكتب اسم فاكهة تبدأ بحرف «ت».",answer:"ت"},
-  LIAR:{kind:"choice",prompt:"ثلاث عبارات أمامك. أيها تبدو كذبة في هذه الجولة؟",choices:["أنا أحب القهوة","أنا زرت القمر","أنا أحب الألعاب"],answer:1},
-  HOT_SEAT:{kind:"choice",prompt:"أنت في المقعد الساخن: ماذا تختار؟",choices:["تحدي سريع","سؤال صريح","مضاعفة النقاط"],answer:2},
-  WOULD_YOU_RATHER:{kind:"choice",prompt:"ماذا تختار؟",choices:["تقرأ أفكار الناس","توقف الوقت","تطير"],answer:1},
-  DRAW_GUESS:{kind:"text",prompt:"ارسم في خيالك «قلعة» ثم اكتب اسم الشيء الذي يجب أن يخمنه الفريق.",answer:"قلعة"},
-  FASTEST:{kind:"text",prompt:"أسرع إجابة: ما ناتج 7 × 8؟",answer:"56"},
-  RIDDLE_RUSH:{kind:"text",prompt:"لغز: شيء له أسنان ولا يعض. ما هو؟",answer:"مشط"},
-  SECRET_WORD:{kind:"text",prompt:"التلميحات: لون أصفر، حلو، يعيش في عناقيد. اكتب الكلمة السرية.",answer:"موز"},
-  MIMIC:{kind:"choice",prompt:"قلّد حركة القفز. أي خيار يمثل الجولة بشكل صحيح؟",choices:["🦘 قفز","🧍 وقوف","🛌 نوم"],answer:0},
-  GUESS_PLAYER:{kind:"choice",prompt:"اللاعب الغامض يحب الألعاب ويشارك في كل الجولات. اختر التلميح الأقوى لكشفه.",choices:["نشاطه في الجلسة","لون الموقع","وقت اليوم"],answer:0},
-  UNO:{kind:"choice",prompt:"لديك أحمر 5. الورقة المفتوحة أحمر 9. ماذا يمكنك لعبه؟",choices:["أحمر 5","أزرق 2","أخضر 7"],answer:0},
-  LUDO:{kind:"choice",prompt:"قطعتك على 12 ورمية النرد 4. إلى أي خانة تتحرك؟",choices:["14","16","18"],answer:1},
-  BALOOT:{kind:"choice",prompt:"في الجولة اخترت ورقة من نفس النوع المطلوب. ماذا يحدث؟",choices:["تُحسب للغلبة","تنحذف الجولة","تخسر تلقائيًا"],answer:0},
-  DAQSH:{kind:"choice",prompt:"إشارة السرعة ظهرت الآن! اختر رد الفعل الصحيح.",choices:["اضغط فورًا","انتظر","اخرج من الجولة"],answer:0},
-  QAWSAR:{kind:"choice",prompt:"لديك ورقتان قويتان. هل تحفظ القوة أم تستخدمها الآن؟",choices:["أحفظها","أستخدم الأقوى الآن","أرمي عشوائيًا"],answer:1}
-};
-function makeGameState(game,players=[]){ return GAME_ENGINE_V4.create(game,players); }
-const GAME_SEATS={
-  CODENAMES:["قائد الأحمر",...Array.from({length:7},(_,i)=>"عميل أحمر "+(i+1)),"قائد الأزرق",...Array.from({length:7},(_,i)=>"عميل أزرق "+(i+1))],
-
-  SPYFALL:["المحقق 1","المحقق 2","المحقق 3","الجاسوس"],
-  PICTIONARY:["الرسام","المخمن 1","المخمن 2","المخمن 3"],
-  CHARADES:["الممثل","المخمن 1","المخمن 2","المخمن 3"],
-  WHOAMI:["اللاعب 1","اللاعب 2","اللاعب 3","اللاعب 4"],
-  TABOO:["الشارح","المخمن 1","المخمن 2","المخمن 3"],
-  WORD_BOMB:["لاعب 1","لاعب 2","لاعب 3","لاعب 4"],
-  TRUTH_LIE:["لاعب 1","لاعب 2","لاعب 3","لاعب 4"],
-  EMOJI_GUESS:["لاعب 1","لاعب 2","لاعب 3","لاعب 4"],
-  TRIVIA:["لاعب 1","لاعب 2","لاعب 3","لاعب 4"],
-  CATEGORIES:["لاعب 1","لاعب 2","لاعب 3","لاعب 4"],
-  LIAR:["المتهم","المحقق 1","المحقق 2","المحقق 3"],
-  HOT_SEAT:["المقعد الساخن","لاعب 2","لاعب 3","لاعب 4"],
-  WOULD_YOU_RATHER:["لاعب 1","لاعب 2","لاعب 3","لاعب 4"],
-  DRAW_GUESS:["الرسام","المخمن 1","المخمن 2","المخمن 3"],
-  FASTEST:["متسابق 1","متسابق 2","متسابق 3","متسابق 4"],
-  RIDDLE_RUSH:["لاعب 1","لاعب 2","لاعب 3","لاعب 4"],
-  SECRET_WORD:["حامل السر","لاعب 2","لاعب 3","لاعب 4"],
-  MIMIC:["المقلد","المخمن 1","المخمن 2","المخمن 3"],
-  GUESS_PLAYER:["الشخص الغامض","المحقق 1","المحقق 2","المحقق 3"],
-  UNO:Array.from({length:12},(_,i)=>"مقعد "+(i+1)),
-  LUDO:["مقعد 1","مقعد 2","مقعد 3","مقعد 4"],
-  BALOOT:["فريق A - 1","فريق A - 2","فريق B - 1","فريق B - 2"],
-  DAQSH:["لاعب 1","لاعب 2","لاعب 3","لاعب 4"],
-  QAWSAR:["مقعد 1","مقعد 2","مقعد 3","مقعد 4"],
-  JAKAROO:["فريق A - 1","فريق A - 2","فريق B - 1","فريق B - 2"]
-};
-const READY_GAMES=new Set(Object.keys(GAME_SEATS));
-const GAME_MIN_PLAYERS={CODENAMES:2,SPYFALL:3,PICTIONARY:2,CHARADES:2,WHOAMI:2,TABOO:2,WORD_BOMB:2,TRUTH_LIE:2,EMOJI_GUESS:2,TRIVIA:2,CATEGORIES:2,LIAR:3,HOT_SEAT:2,WOULD_YOU_RATHER:2,DRAW_GUESS:2,FASTEST:2,RIDDLE_RUSH:2,SECRET_WORD:2,MIMIC:2,GUESS_PLAYER:3,UNO:2,LUDO:2,BALOOT:4,DAQSH:2,QAWSAR:4,JAKAROO:4};
-function makeDeck32(){const suits=["♠","♥","♦","♣"];const ranks=["7","8","9","10","J","Q","K","A"];const deck=suits.flatMap(s=>ranks.map(r=>({id:"baloot-"+s+"-"+r,color:s,suit:s,value:r,rank:r})));for(let i=deck.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[deck[i],deck[j]]=[deck[j],deck[i]];}return deck;}
-function makeUnoDeck(){const colors=["🔴","🟡","🟢","🔵"],deck=[];for(const color of colors){deck.push({id:color+"-0",color,value:"0"});for(const value of ["1","2","3","4","5","6","7","8","9","Skip","Reverse","+2"])deck.push({id:color+"-"+value+"-a",color,value},{id:color+"-"+value+"-b",color,value})}for(let i=0;i<4;i++)deck.push({id:"wild-"+i,color:"wild",value:"Wild"},{id:"wild4-"+i,color:"wild",value:"+4"});return shuffle(deck)}
-function initUnoState(players){const deck=makeUnoDeck(),hands=Array.from({length:players.length},()=>[]);for(let n=0;n<7;n++)for(let i=0;i<players.length;i++)hands[i].push(deck.pop());let discard=deck.pop();while(discard&&discard.color==="wild"){deck.unshift(discard);discard=deck.pop()}return {version:3,phase:"playing",round:1,hands,drawPile:deck,discardPile:[discard],discardTop:discard,currentColor:discard.color,direction:1,turnPlayerIndex:0,pendingDraw:0,winner:null,lastPlayed:discard,drawCount:deck.length}}
-function initLudoState(players){return {version:3,phase:"rolling",round:1,turnPlayerIndex:0,dice:null,awaitingMove:false,tokens:players.map(()=>[-1,-1,-1,-1]),legalTokens:[],winner:null,lastResult:null}}
-function balootRank(card,trump){const r=String(card?.rank||card?.value||""),order=trump&&card?.suit===trump?["7","8","Q","K","10","A","9","J"]:["7","8","9","J","Q","K","10","A"];return order.indexOf(r)}
-function balootPoints(card,trump){const r=String(card?.rank||card?.value||"");if(trump&&card?.suit===trump)return ({J:20,"9":14,A:11,"10":10,K:4,Q:3,"8":0,"7":0})[r]??0;return ({A:11,"10":10,K:4,Q:3,J:2,"9":0,"8":0,"7":0})[r]??0}
-function balootLegalIndices(state,hand){if(!Array.isArray(hand)||!hand.length)return [];if(!state.trick?.length)return hand.map((_,i)=>i);const led=state.trick[0]?.card?.suit,trump=state.trump,same=hand.map((c,i)=>c.suit===led?i:-1).filter(i=>i>=0);if(same.length)return same;if(state.contract==="hokum"&&trump){const tr=hand.map((c,i)=>c.suit===trump?i:-1).filter(i=>i>=0);if(tr.length)return tr}return hand.map((_,i)=>i)}
-function balootWinner(state){const trick=state.trick||[],trump=state.trump,led=trick[0]?.card?.suit;let best=-1,bestRank=-1;trick.forEach(x=>{const isTrump=trump&&x.card.suit===trump,follows=x.card.suit===led;if(!isTrump&&!follows)return;const rank=balootRank(x.card,trump)+(isTrump?100:50);if(rank>bestRank){bestRank=rank;best=x.playerIndex}});return best}
-function initBalootState(players,dealerIndex=0,matchScores){const deck=makeDeck32(),hands=Array.from({length:4},()=>[]);for(let n=0;n<5;n++)for(let i=0;i<4;i++)hands[i].push(deck.pop());const turnCard=deck.pop();return {version:3,phase:"bidding",round:1,dealerIndex,bidRound:1,bidTurnIndex:(dealerIndex+1)%4,bids:[],turnCard,stock:deck,hands,contract:null,trump:null,trick:[],trickHistory:[],turnPlayerIndex:(dealerIndex+1)%4,teamScores:matchScores||[0,0],handPoints:[0,0],winner:null,lastResult:null}}
-function finishBalootTrick(state,players){const winner=balootWinner(state),points=(state.trick||[]).reduce((n,x)=>n+balootPoints(x.card,state.trump),0)+(state.trickHistory.length===7?10:0),team=winner%2;state.handPoints[team]=(state.handPoints[team]||0)+points;state.trickHistory.push({cards:state.trick,winner});state.trick=[];state.turnPlayerIndex=winner;if(state.trickHistory.length>=8){state.teamScores=[(state.teamScores[0]||0)+(state.handPoints[0]||0),(state.teamScores[1]||0)+(state.handPoints[1]||0)];const a=state.teamScores[0],b=state.teamScores[1];if(a>=152||b>=152){state.winner=a===b?"تعادل — جولة فاصلة":(a>b?"الفريق A":"الفريق B");state.phase="finished"}else Object.assign(state,initBalootState(players,(state.dealerIndex+1)%4,state.teamScores))}}
-function playerKey(p){return p?.guestId?("g:"+p.guestId):("u:"+String(p?.username||"").toLowerCase());}
-function actorFromRequest(players,u,guestId){const gid=String(guestId||"").trim();if(gid){const guest=players.find(p=>!p.bot&&p.guestId===gid);if(guest)return guest;}return u?players.find(p=>!p.bot&&p.username===u.username):null;}
-function seatOptions(game,max){
- const base=GAME_SEATS[game]||[];
- const hardCap=game==="CODENAMES"?16:game==="UNO"?12:game==="QAWSAR"?4:4; const n=Math.max(2,Math.min(Number(max)||4,hardCap));
- const out=base.slice(0,n);
- while(out.length<n)out.push("مقعد "+(out.length+1));
- return out;
-}
-function makePlayerSecret(game,player,state){
-  const key=playerKey(player);
-  const secret=state.playerSecrets?.[key]||{};
-  return secret;
-}
-function publicGameState(game,state,actor){
-  if(state?.version>=4){
-    const players=Array.isArray(state.__players)?state.__players:[];
-    return GAME_ENGINE_V4.pub(state,players,actor);
-  }
-  const out={...state}; delete out.answer; delete out.playerSecrets; return out;
-}
-function allPlayersSeated(players){return players.length>0&&players.every(p=>p.seat);}
-function fillMissingGameBots(game,players,minPlayers,maxPlayers){
-  const seats=seatOptions(game,maxPlayers);
-  const target=Math.min(Math.max(2,minPlayers),maxPlayers,seats.length);
-  let nextBot=1;
-  while(players.length<target){
-    const occupied=new Set(players.map(p=>p.seat).filter(Boolean));
-    const seat=seats.find(s=>!occupied.has(s));
-    if(!seat)break;
-    while(players.some(p=>p.bot&&p.username===("بوت "+nextBot)))nextBot++;
-    players.push({
-      username:"بوت "+nextBot,
-      discordUsername:"بوت "+nextBot,
-      guest:false,
-      bot:true,
-      host:false,
-      seat,
-      seatLabel:seat
-    });
-    nextBot++;
-  }
-  const occupied=new Set();
-  players.forEach(p=>{
-    if(p.seat)occupied.add(p.seat);
-  });
-  players.forEach(p=>{
-    if(!p.seat){
-      const seat=seats.find(s=>!occupied.has(s));
-      if(seat){p.seat=seat;p.seatLabel=seat;occupied.add(seat);}
-    }
-  });
-  return players;
-}
-function firstHumanPlayer(players){return players.find(p=>!p.bot)||players[0]||null;}
-function simulateBotTurns(game,players,state){if(!state||!Array.isArray(players)||!players.some(p=>p.bot))return state;const humanKeys=new Set(players.filter(p=>!p.bot).map(playerKey)),humanTurn=i=>Number.isInteger(Number(i))&&humanKeys.has(playerKey(players[Number(i)]));
-if(game==="BALOOT"){let g=0;while(state.phase==="bidding"&&!humanTurn(state.bidTurnIndex)&&g++<8){const i=Number(state.bidTurnIndex),up=state.turnCard,choose=state.bidRound===1?((i%2===0)?{type:"hokum",suit:up?.suit}:{type:"pass"}):((i%2===0)?{type:"sun"}:{type:"pass"});state.bids.push({playerIndex:i,...choose});if(choose.type!=="pass"){state.contract=choose.type;state.trump=choose.type==="hokum"?choose.suit:null;state.phase="playing";for(let p=0;p<4;p++)while((state.hands[p]||[]).length<8)state.hands[p].push(state.stock.pop());state.turnPlayerIndex=(state.dealerIndex+1)%4;break}if(state.bids.length>=4){if(state.bidRound===1){state.bidRound=2;state.bids=[];state.bidTurnIndex=(state.dealerIndex+1)%4}else{Object.assign(state,initBalootState(players,(state.dealerIndex+1)%4,state.teamScores||[0,0]));break}}else state.bidTurnIndex=(state.bidTurnIndex+1)%4}
-let g2=0;while(state.phase==="playing"&&!humanTurn(state.turnPlayerIndex)&&g2++<32){const i=Number(state.turnPlayerIndex),hand=state.hands[i]||[],legal=balootLegalIndices(state,hand);if(!legal.length)break;const pick=legal[Math.floor(Math.random()*legal.length)];state.trick.push({playerIndex:i,card:hand.splice(pick,1)[0]});if(state.trick.length===4)finishBalootTrick(state,players);else state.turnPlayerIndex=(i+1)%4}}
-else if(game==="UNO"){let g=0;while(state.phase==="playing"&&!humanTurn(state.turnPlayerIndex)&&g++<32){const i=Number(state.turnPlayerIndex),hand=state.hands[i]||[],top=state.discardTop,legal=hand.map((c,n)=>({c,n})).filter(x=>x.c.color==="wild"||x.c.color===state.currentColor||x.c.value===top?.value);if(legal.length){const x=legal[Math.floor(Math.random()*legal.length)],card=hand.splice(x.n,1)[0];state.discardPile.push(card);state.discardTop=card;state.currentColor=card.color==="wild"?["🔴","🟡","🟢","🔵"][Math.floor(Math.random()*4)]:card.color;if(card.value==="+2")state.pendingDraw=2;if(card.value==="Skip")state.turnPlayerIndex=(i+2)%players.length;else{if(card.value==="Reverse")state.direction*=-1;state.turnPlayerIndex=(i+state.direction+players.length)%players.length}if(!hand.length){state.winner=players[i].username;state.phase="finished"}}else{const c=state.drawPile.pop();if(c)hand.push(c);state.turnPlayerIndex=(i+state.direction+players.length)%players.length}}}
-else if(game==="LUDO"){let g=0;while(state.phase==="rolling"&&!humanTurn(state.turnPlayerIndex)&&g++<16){const i=Number(state.turnPlayerIndex);state.dice=1+Math.floor(Math.random()*6);const tokens=state.tokens[i]||[],legal=[];tokens.forEach((p,t)=>{if(p===-1&&state.dice===6)legal.push(t);else if(p>=0&&p<57&&p+state.dice<=57)legal.push(t)});if(legal.length){const t=legal[0];tokens[t]=tokens[t]===-1?0:tokens[t]+state.dice;if(tokens.every(x=>x>=57)){state.winner=players[i].username;state.phase="finished";break}}if(state.dice!==6)state.turnPlayerIndex=(i+1)%players.length}}
-else if(game==="CODENAMES"){const bot=players.find(p=>p.bot&&String(state.playerRoles?.[playerKey(p)]||"").startsWith(state.turn||""));if(bot){const role=state.playerRoles[playerKey(bot)]||"";if(role.endsWith("spymaster")&&!state.clue)state.clue={word:"مجموعة",number:1},state.guessesLeft=1;else if(role.endsWith("agent")&&state.clue){const xs=state.words.map((w,i)=>({w,i})).filter(x=>!x.w.revealed);if(xs.length){const x=xs[Math.floor(Math.random()*xs.length)];x.w.revealed=true;if(x.w.role===state.turn){state.scores[state.turn]++;state.guessesLeft--}else if(x.w.role==="assassin")state.winner=state.turn==="red"?"blue":"red";else state.guessesLeft=0;if(!state.guessesLeft){state.turn=state.turn==="red"?"blue":"red";state.clue=null}}}}}
-else if(state.turnPlayerKey&&!humanKeys.has(state.turnPlayerKey)){const next=players.find(p=>!p.bot);if(next)state.turnPlayerKey=playerKey(next)}
-return state}
-
-async function activeGameFor(req){
-  const u=currentUser(req),guestId=String(req.body?.guestId||req.query?.guestId||"").trim();
-  const q=await pool.query("SELECT id,players,status FROM game_lobbies WHERE status IN ('waiting','ready','playing') ORDER BY id DESC LIMIT 100");
-  for(const g of q.rows){
-    const ps=Array.isArray(g.players)?g.players:[];
-    if(u&&ps.some(p=>!p.bot&&p.username===u.username))return g;
-    if(!u&&guestId&&ps.some(p=>!p.bot&&p.guestId===guestId))return g;
-  }
-  return null;
-}
-app.get("/api/games",async(req,res)=>{
-  const q=await pool.query("SELECT id,game,host_username,host_discord_username,max_players,players,status,created_at FROM game_lobbies WHERE game=ANY($1::text[]) AND status IN ('waiting','ready','playing') ORDER BY id DESC LIMIT 50",[[...READY_GAMES]]);
-  res.set("Cache-Control","no-store");
-  res.json({games:q.rows});
-});
-app.get("/api/games/:id",async(req,res)=>{
-  const q=await pool.query("SELECT id,game,host_username,host_discord_username,max_players,players,status,created_at FROM game_lobbies WHERE id=$1 AND game=ANY($2::text[])",[req.params.id,[...READY_GAMES]]);
-  if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة"});
-  res.json({game:q.rows[0]});
-});
-app.get("/api/games/:id/watch",async(req,res)=>{
-  const q=await pool.query("SELECT id,game,host_username,host_discord_username,max_players,players,status,created_at FROM game_lobbies WHERE id=$1 AND game=ANY($2::text[]) AND status IN ('waiting','ready','playing')",[req.params.id,[...READY_GAMES]]);
-  if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة"});
-  res.json({game:q.rows[0],spectator:true});
-});
-app.post("/api/games",async(req,res)=>{
-  const game=String(req.body?.game||"").trim().toUpperCase(); if(!READY_GAMES.has(game)) return res.status(400).json({error:"هذه اللعبة غير متاحة حاليًا؛ الألعاب الجاهزة فقط: كود نيمز، سباي فول، UNO، لودو، بلوت، قوصر، جاكارو"}); const requestedMax=Math.max(2,Number(req.body?.maxPlayers)||4),gameCap=game==="CODENAMES"?16:game==="UNO"?12:game==="QAWSAR"?4:game==="SPYFALL"?8:game==="LUDO"?4:game==="BALOOT"?4:game==="JAKAROO"?4:4,max=Math.min(requestedMax,gameCap),u=currentUser(req),guestId=String(req.body?.guestId||"").trim().slice(0,80),guestName=String(req.body?.guestName||"زائر").trim().slice(0,40);
-  if(await activeGameFor(req))return res.status(409).json({error:"أنت داخل جلسة بالفعل. اخرج من جلستك الحالية أولًا."});
-  if(!GAME_SEATS[game])return res.status(400).json({error:"اللعبة غير مدعومة"});
-  const min=GAME_MIN_PLAYERS[game]||2;
-  if(max<min)return res.status(400).json({error:"هذه اللعبة تحتاج على الأقل "+min+" لاعبين"});
-  if(!u&&!guestId)return res.status(400).json({error:"معرّف الزائر مفقود"});
-  const hostName=u?.username||guestName||"زائر",discordName=u?.discordUsername||guestName;
-  const firstSeat=seatOptions(game,max)[0]||"مقعد 1"; const players=[{username:hostName,discordUsername:discordName,guest:!u,guestId:u?undefined:guestId,bot:false,host:true,seat:firstSeat,seatLabel:firstSeat}];
-  const q=await pool.query("INSERT INTO game_lobbies(game,host_username,host_discord_username,max_players,players,status) VALUES($1,$2,$3,$4,$5,'waiting') RETURNING *",[game,hostName,discordName,max,JSON.stringify(players)]);
-  if(u)await audit(u,"game_create",game);res.json({ok:true,game:q.rows[0],seats:seatOptions(game,max)});
-});
-app.post("/api/games/:id/join",async(req,res)=>{
-  const u=currentUser(req),guestId=String(req.body?.guestId||"").trim().slice(0,80),guestName=String(req.body?.guestName||"زائر").trim().slice(0,40),name=u?.username||guestName||"زائر",discordName=u?.discordUsername||guestName;
-  const q=await pool.query("SELECT * FROM game_lobbies WHERE id=$1",[req.params.id]);if(!q.rowCount)return res.status(404).json({error:"اللعبة غير موجودة"});const g=q.rows[0],players=Array.isArray(g.players)?g.players:[];
-  if(g.status!=="waiting"&&g.status!=="ready")return res.status(409).json({error:"الجلسة بدأت أو انتهت"});
-  if(players.length>=g.max_players)return res.status(409).json({error:"اللعبة مكتملة"});
-  if(!u&&!guestId)return res.status(400).json({error:"معرّف الزائر مفقود"});
-  if(players.some(x=>u?x.username===name:x.guestId===guestId))return res.json({ok:true,game:g,seats:seatOptions(g.game,g.max_players)});
-  if(await activeGameFor(req))return res.status(409).json({error:"أنت داخل جلسة أخرى بالفعل. اخرج منها أولًا."});
-  players.push({username:name,discordUsername:discordName,guest:!u,guestId:u?undefined:guestId,bot:false,host:false,seat:null,seatLabel:null});
-  const st=allPlayersSeated(players)?"ready":"waiting";
-  const updated=await pool.query("UPDATE game_lobbies SET players=$1,status=$2 WHERE id=$3 RETURNING *",[JSON.stringify(players),st,g.id]);
-  if(u)await audit(u,"game_join","session "+g.id+" "+g.game);
-  res.json({ok:true,game:updated.rows[0],seats:seatOptions(g.game,g.max_players)});
-});
-app.post("/api/games/:id/seat",async(req,res)=>{
-  const u=currentUser(req),guestId=String(req.body?.guestId||"").trim(),seat=String(req.body?.seat||"").trim();
-  const q=await pool.query("SELECT * FROM game_lobbies WHERE id=$1",[req.params.id]);if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة"});
-  const g=q.rows[0],players=Array.isArray(g.players)?g.players:[],actor=actorFromRequest(players,u,guestId);
-  if(!actor)return res.status(403).json({error:"انضم للجلسة أولًا"});
-  if(g.status!=="waiting"&&g.status!=="ready")return res.status(409).json({error:"لا يمكن تغيير المقعد بعد بدء اللعبة"});
-  const seats=seatOptions(g.game,g.max_players);const requestedSeatIndex=/^\d+$/.test(seat)?Number(seat):-1;const normalizedSeat=requestedSeatIndex>=0?seats[requestedSeatIndex] : seat;if(!normalizedSeat||!seats.includes(normalizedSeat))return res.status(400).json({error:"المقعد غير موجود"});
-  if(players.some(p=>p.seat===normalizedSeat&&playerKey(p)!==playerKey(actor)))return res.status(409).json({error:"هذا المكان محجوز"});
-  actor.seat=normalizedSeat;actor.seatLabel=normalizedSeat;
-  const ready=allPlayersSeated(players)&&players.length>=(GAME_MIN_PLAYERS[g.game]||2);
-  const updated=await pool.query("UPDATE game_lobbies SET players=$1,status=$2 WHERE id=$3 RETURNING *",[JSON.stringify(players),ready?"ready":"waiting",g.id]);
-  res.json({ok:true,game:updated.rows[0],ready});
-});
-app.post("/api/games/:id/start",async(req,res)=>{
-  const u=currentUser(req),guestId=String(req.body?.guestId||"").trim(),q=await pool.query("SELECT * FROM game_lobbies WHERE id=$1",[req.params.id]);if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة"});
-  const g=q.rows[0],players=Array.isArray(g.players)?g.players:[],hostMatches=u?g.host_username===u.username:String(players[0]?.guestId||"")===guestId;
-  if(!hostMatches)return res.status(403).json({error:"فقط صاحب الجلسة يقدر يبدأ"});
-  if(!players.some(p=>!p.bot))return res.status(409).json({error:"لا يمكن تشغيل جلسة بدون لاعب حقيقي"});
-  if(g.status==="playing")return res.json({ok:true,game:g});
-  if(g.status!=="waiting"&&g.status!=="ready")return res.status(409).json({error:"لا يمكن بدء هذه الجلسة الآن"});
-  const minPlayers=GAME_MIN_PLAYERS[g.game]||2;
-  const gameSeats=seatOptions(g.game,g.max_players);
-  const hostPlayer=players.find(p=>p.host)||players[0];
-  const freeHostSeat=gameSeats.find(seat=>!players.some(p=>p.seat===seat));
-  if(hostPlayer&&!hostPlayer.seat&&freeHostSeat){ hostPlayer.seat=freeHostSeat; hostPlayer.seatLabel=freeHostSeat; }
-  fillMissingGameBots(g.game,players,minPlayers,g.max_players);
-  if(players.length<minPlayers||!allPlayersSeated(players))return res.status(409).json({error:"تعذر تجهيز المقاعد تلقائيًا"});
-  const state=g.state&&Object.keys(g.state).length?g.state:makeGameState(g.game,players);
-  state.startedAt=new Date().toISOString();
-  state.__players=players.map(p=>({username:p.username,guest:!!p.guest,bot:!!p.bot,guestId:p.guestId,seat:p.seat,seatLabel:p.seatLabel,host:!!p.host}));
-  if(state.version<4){ if(g.game==="BALOOT")Object.assign(state,initBalootState(players,0,state.teamScores||[0,0])); else if(g.game==="UNO")Object.assign(state,initUnoState(players)); else if(g.game==="LUDO")Object.assign(state,initLudoState(players)); }
-  if(!state.playerRoles) state.playerRoles={};
-  if(!state.playerSecrets) state.playerSecrets={};
-  if(state.version<4) players.forEach((p,i)=>{
-    const key=playerKey(p);
-    if(g.game==="CODENAMES"){const label=String(p.seatLabel||"");state.playerRoles[key]=label.includes("قائد الأحمر")?"red_spymaster":label.includes("قائد الأزرق")?"blue_spymaster":label.includes("أحمر")?"red_agent":label.includes("أزرق")?"blue_agent":(i%2===0?"red_agent":"blue_agent");}
-    else state.playerRoles[key]=(g.game==="BALOOT"||g.game==="UNO")?i:(p.seatLabel||("لاعب "+(i+1)));
-  });
-  if(g.game==="CODENAMES")state.turn="red";
-  else if(["BALOOT","UNO","LUDO","SPYFALL"].includes(g.game)){state.turnPlayerIndex=Number.isInteger(state.turnIndex)?state.turnIndex:Math.max(0,players.findIndex(p=>!p.bot));state.playerKeys=players.map(playerKey)}
-  else if(state.turnPlayerKey==null)state.turnPlayerKey=playerKey(firstHumanPlayer(players));
-  const updated=await pool.query("UPDATE game_lobbies SET status='playing',players=$1,state=$2 WHERE id=$3 RETURNING id,game,host_username,host_discord_username,max_players,players,status,created_at",[JSON.stringify(players),JSON.stringify(state),g.id]);
-  if(u)await audit(u,"game_start","session "+g.id+" "+g.game+" players="+players.length);
-  res.json({ok:true,game:updated.rows[0],state:publicGameState(g.game,state,actorFromRequest(players,u,guestId))});
-});
-app.post("/api/games/:id/finish",async(req,res)=>{
-  const u=currentUser(req),guestId=String(req.body?.guestId||"").trim(),q=await pool.query("SELECT * FROM game_lobbies WHERE id=$1",[req.params.id]);
-  if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة"});
-  const g=q.rows[0],players=Array.isArray(g.players)?g.players:[],originalPlayers=Array.isArray(g.state?.__players)?g.state.__players:[],host= u?players.some(p=>p.host&&!p.bot&&p.username===u.username):players.some(p=>p.host&&!p.bot&&p.guestId===guestId)||originalPlayers.some(p=>p.host&&!p.bot&&p.guestId===guestId);
-  const ownerOverride=!!u&&u.role==="owner";
-  if(!host&&!ownerOverride)return res.status(403).json({error:"فقط صاحب الجلسة أو الأونر يقدر ينهي اللعبة"});
-  if(g.status==="finished"||g.status==="closed")return res.json({ok:true,finished:true});
-  const state=g.state&&Object.keys(g.state).length?g.state:{};
-  state.finishedAt=new Date().toISOString();
-  state.winner=state.winner||null;
-  await pool.query("UPDATE game_lobbies SET status='finished',state=$1 WHERE id=$2",[JSON.stringify(state),g.id]);
-  if(u)await audit(u,"game_finish","إنهاء الجلسة "+g.id+" "+g.game);
-  res.json({ok:true,finished:true,closed:true});
-});
-app.post("/api/games/:id/leave",async(req,res)=>{
-  const u=currentUser(req),guestId=String(req.body?.guestId||"").trim(),q=await pool.query("SELECT * FROM game_lobbies WHERE id=$1",[req.params.id]);
-  if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة"});
-  const g=q.rows[0],players=Array.isArray(g.players)?g.players:[],i=u?players.findIndex(x=>x.username===u.username&&!x.bot):players.findIndex(x=>x.guestId===guestId&&!x.bot);
-  if(i<0)return res.status(403).json({error:"أنت لست داخل هذه الجلسة"});
-  if(g.status==="finished"||g.status==="closed")return res.json({ok:true,closed:true});
-  const wasHost=!!players[i]?.host;
-  if(g.status==="playing"){
-    const human=players[i], bot={...human,username:"بوت "+(human.username||"لاعب"),discordUsername:"بوت",guestId:null,guest:false,bot:true,host:false};
-    players[i]=bot;
-    const humansRemaining=players.filter(p=>!p.bot).length;
-    if(humansRemaining===0){
-      await pool.query("UPDATE game_lobbies SET status='closed',players=$1::jsonb,state=jsonb_set(COALESCE(state,'{}'::jsonb),'{closedAt}',to_jsonb(NOW()::text),true) WHERE id=$2",[JSON.stringify(players),g.id]);
-      if(u)await audit(u,"game_leave","session "+g.id+" · no_human_players · closed");
-      return res.json({ok:true,closed:true,replacedByBot:false});
-    }
-    await pool.query("UPDATE game_lobbies SET players=$1 WHERE id=$2",[JSON.stringify(players),g.id]);
-    if(u)await audit(u,"game_leave","session "+g.id+" · replaced_by_bot");
-    return res.json({ok:true,closed:false,replacedByBot:true});
-  }
-  players.splice(i,1);
-  if(players.length===0){
-    await pool.query("UPDATE game_lobbies SET status='closed',players='[]'::jsonb WHERE id=$1",[g.id]);
-    return res.json({ok:true,closed:true});
-  }
-  if(wasHost){
-    players[0].host=true;
-    await pool.query("UPDATE game_lobbies SET host_username=$1,host_discord_username=$2,players=$3,status='waiting' WHERE id=$4",[players[0].username,players[0].discordUsername,JSON.stringify(players),g.id]);
-  }else{
-    const ready=allPlayersSeated(players)&&players.length>=(GAME_MIN_PLAYERS[g.game]||2);
-    await pool.query("UPDATE game_lobbies SET players=$1,status=$2 WHERE id=$3",[JSON.stringify(players),ready?"ready":"waiting",g.id]);
-  }
-  if(u)await audit(u,"game_leave","session "+g.id);
-  res.json({ok:true,closed:false});
-});
-app.get("/api/games/:id/state",async(req,res)=>{
-  res.set("Cache-Control","no-store");
-  const u=currentUser(req),guestId=String(req.query?.guestId||"").trim();
-  const q=await pool.query("SELECT id,game,host_username,host_discord_username,max_players,players,status,state,created_at FROM game_lobbies WHERE id=$1",[req.params.id]);
-  if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة"});
-  const row=q.rows[0],players=Array.isArray(row.players)?row.players:[],actor=actorFromRequest(players,u,guestId);
-  if(row.status==="finished"){
-    const endedAt=Date.parse(row.state?.endedAt||row.state?.finishedAt||"")||0;
-    if(endedAt && Date.now()-endedAt>GAME_RESULT_TTL_MS){
-      await pool.query("DELETE FROM game_lobbies WHERE id=$1",[row.id]);
-      return res.status(404).json({error:"انتهت جلسة اللعبة"});
-    }
-    return res.json({game:{...row,players:players.map(p=>({username:p.username,guest:!!p.guest,host:!!p.host,seat:p.seat||null,seatLabel:p.seatLabel||null})),minPlayers:GAME_MIN_PLAYERS[row.game]||2},state:publicGameState(row.game,row.state,actor),results:true,expiresAt:new Date(endedAt+GAME_RESULT_TTL_MS).toISOString()});
-  }
-  if(row.status==="closed")return res.status(410).json({error:"انتهت الجلسة وتم إغلاقها",closed:true});
-  let state=row.state&&Object.keys(row.state).length?row.state:null;
-  if(row.status==="playing"&&!state){state=makeGameState(row.game);}
-  if(row.status==="playing"){
-    if(state.version>=4){ state.__players=players.map(p=>({username:p.username,guest:!!p.guest,bot:!!p.bot,guestId:p.guestId,seat:p.seat,seatLabel:p.seatLabel,host:!!p.host})); state=GAME_ENGINE_V4.bot(row.game,state,players); }
-    else state=simulateBotTurns(row.game,players,state);
-    if(state.winner&&!state.endedAt)state.endedAt=new Date().toISOString();
-    await pool.query("UPDATE game_lobbies SET state=$1,status=$2 WHERE id=$3",[JSON.stringify(state),state.winner?"finished":"playing",row.id]);
-  }
-  const publicPlayers=players.map(p=>({username:p.username,guest:!!p.guest,host:!!p.host,seat:p.seat||null,seatLabel:p.seatLabel||null}));
-  const viewer=actor?{username:actor.username||null,guest:!!actor.guest,host:!!actor.host,seat:actor.seat||null,seatLabel:actor.seatLabel||null}:null;
-  res.json({game:{...row,players:publicPlayers,minPlayers:GAME_MIN_PLAYERS[row.game]||2},viewer,state:publicGameState(row.game,state,actor)});
-});
-app.post("/api/games/:id/action",async(req,res)=>{
-  const u=currentUser(req),guestId=String(req.body?.guestId||"").trim(),action=String(req.body?.action||"").trim();
-  const q=await pool.query("SELECT * FROM game_lobbies WHERE id=$1",[req.params.id]);if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة"});
-  const g=q.rows[0],players=Array.isArray(g.players)?g.players:[],state=g.state&&Object.keys(g.state).length?g.state:makeGameState(g.game);
-  if(g.status!=="playing")return res.status(409).json({error:"الجلسة لم تبدأ"});
-  const actor=actorFromRequest(players,u,guestId);if(!actor)return res.status(403).json({error:"لست داخل الجلسة"});
-  const role=state.playerRoles?.[playerKey(actor)]||"";
-  if(state.version>=4){
-    try{
-      state.__players=players.map(p=>({username:p.username,guest:!!p.guest,bot:!!p.bot,guestId:p.guestId,seat:p.seat,seatLabel:p.seatLabel,host:!!p.host}));
-      GAME_ENGINE_V4.apply(g.game,state,players,actor,action,req.body||{});
-      const finished=!!state.winner;
-      if(finished)state.endedAt=new Date().toISOString();
-      const up=await pool.query("UPDATE game_lobbies SET state=$1,status=$2 WHERE id=$3 RETURNING state,status,players",[JSON.stringify(state),finished?"finished":"playing",g.id]);
-      return res.json({ok:true,state:publicGameState(g.game,up.rows[0].state,actor),status:up.rows[0].status,players:up.rows[0].players.map(p=>({username:p.username,guest:!!p.guest,host:!!p.host,seat:p.seat||null,seatLabel:p.seatLabel||null}))});
-    }catch(e){return res.status(400).json({error:e.message||"الحركة غير صحيحة"});}
-  }
-  if(g.game==="CODENAMES"){
-    const team=role.startsWith("red")?"red":role.startsWith("blue")?"blue":null;
-    if(action==="clue"){
-      if(!role.endsWith("spymaster"))return res.status(403).json({error:"هذا الدور لا يعطي التلميح"});
-      if(team!==state.turn)return res.status(403).json({error:"ليس دور فريقك"});
-      const word=String(req.body?.word||"").trim().split(/\s+/)[0].slice(0,30),number=Math.max(1,Math.min(9,Number(req.body?.number)||1));
-      if(!word)return res.status(400).json({error:"اكتب التلميح"});
-      state.clue={word,number};state.guessesLeft=number;
-    }else if(action==="guess"){
-      if(!role.endsWith("agent"))return res.status(403).json({error:"القائد فقط يضع التلميح؛ العملاء يختارون الكلمات"});
-      if(team!==state.turn)return res.status(403).json({error:"ليس دور فريقك"});
-      const index=Number(req.body?.index),card=state.words?.[index];
-      if(!Number.isInteger(index)||!card)return res.status(400).json({error:"الكلمة غير صحيحة"});
-      if(card.revealed)return res.status(409).json({error:"الكلمة مكشوفة"});
-      card.revealed=true;
-      if(card.role==="assassin"){state.winner=state.turn==="red"?"blue":"red";state.clue=null;state.guessesLeft=0;}
-      else if(card.role===state.turn){
-        state.scores[state.turn]=(state.scores[state.turn]||0)+1;state.guessesLeft=Math.max(0,(state.guessesLeft||1)-1);
-        const remaining=state.words.filter(x=>x.role===state.turn&&!x.revealed).length;
-        if(remaining===0){state.winner=state.turn;state.clue=null;state.guessesLeft=0;}
-        else if(state.guessesLeft===0){state.turn=state.turn==="red"?"blue":"red";state.turnNumber++;state.clue=null;}
-      }else{state.guessesLeft=0;state.turn=state.turn==="red"?"blue":"red";state.turnNumber++;state.clue=null;}
-    }else if(action==="endTurn"){
-      if(!role.endsWith("agent")&& !role.endsWith("spymaster"))return res.status(403).json({error:"الدور غير صالح"});
-      if(team!==state.turn)return res.status(403).json({error:"ليس دور فريقك"});
-      state.guessesLeft=0;state.turn=state.turn==="red"?"blue":"red";state.turnNumber++;state.clue=null;
-    }else return res.status(400).json({error:"حركة غير معروفة"});
-  }else if(g.game==="BALOOT"){
-    const playerIndex=players.findIndex(p=>playerKey(p)===playerKey(actor));
-    if(state.phase==="bidding"&&action==="bid"){if(state.bidTurnIndex!==playerIndex)return res.status(403).json({error:"ليس دورك في الشراء"});const type=String(req.body?.bid||"pass"),suit=String(req.body?.suit||"");if(type==="pass")state.bids.push({playerIndex,type});else if(type==="sun")state.contract="sun";else if(type==="hokum"&&["♠","♥","♦","♣"].includes(suit)){state.contract="hokum";state.trump=suit}else return res.status(400).json({error:"الطلب غير صحيح"});if(state.contract){state.phase="playing";for(let p=0;p<4;p++)while((state.hands[p]||[]).length<8)state.hands[p].push(state.stock.pop());state.turnPlayerIndex=(state.dealerIndex+1)%4}else if(state.bids.length>=4){if(state.bidRound===1){state.bidRound=2;state.bids=[];state.bidTurnIndex=(state.dealerIndex+1)%4}else Object.assign(state,initBalootState(players,(state.dealerIndex+1)%4,state.teamScores||[0,0]))}else state.bidTurnIndex=(state.bidTurnIndex+1)%4}
-    else if(state.phase==="playing"&&action==="playCard"){if(state.turnPlayerIndex!==playerIndex)return res.status(403).json({error:"ليس دورك الآن"});const hand=state.hands?.[playerIndex]||[],idx=Number(req.body?.index),legal=balootLegalIndices(state,hand);if(!Number.isInteger(idx)||!legal.includes(idx))return res.status(400).json({error:"هذه الورقة غير قانونية في هذا الدور"});state.trick.push({playerIndex,card:hand.splice(idx,1)[0]});if(state.trick.length===4)finishBalootTrick(state,players);else state.turnPlayerIndex=(playerIndex+1)%players.length}else return res.status(400).json({error:"الحركة غير مدعومة في البلوت"});
-  }else if(g.game==="UNO"){
-    const playerIndex=players.findIndex(p=>playerKey(p)===playerKey(actor)),hand=state.hands?.[playerIndex]||[];if(state.turnPlayerIndex!==playerIndex)return res.status(403).json({error:"ليس دورك الآن"});
-    if(action==="draw"){const c=state.drawPile.pop();if(c)hand.push(c);state.turnPlayerIndex=(playerIndex+state.direction+players.length)%players.length}
-    else if(action==="playCard"){const idx=Number(req.body?.index),card=hand[idx],top=state.discardTop,playable=card&&(card.color==="wild"||card.color===state.currentColor||card.value===top?.value);if(!playable)return res.status(400).json({error:"هذه الورقة غير صالحة الآن"});hand.splice(idx,1);state.discardPile.push(card);state.discardTop=card;state.currentColor=card.color==="wild"?["🔴","🟡","🟢","🔵"][Math.floor(Math.random()*4)]:card.color;if(card.value==="+2")state.pendingDraw=2;if(card.value==="Skip")state.turnPlayerIndex=(playerIndex+2)%players.length;else{if(card.value==="Reverse")state.direction*=-1;state.turnPlayerIndex=(playerIndex+state.direction+players.length)%players.length}if(!hand.length){state.winner=actor.username||actor.guestId||("لاعب "+(playerIndex+1));state.phase="finished"}}
-    else return res.status(400).json({error:"الحركة غير مدعومة في UNO"});
-  }else if(g.game==="LUDO"){
-    const playerIndex=players.findIndex(p=>playerKey(p)===playerKey(actor));if(state.turnPlayerIndex!==playerIndex)return res.status(403).json({error:"ليس دورك الآن"});
-    if(action==="roll"){if(state.awaitingMove)return res.status(409).json({error:"اختر القطعة أولًا"});state.dice=1+Math.floor(Math.random()*6);state.awaitingMove=true;state.legalTokens=[];const tokens=state.tokens[playerIndex]||[];tokens.forEach((p,t)=>{if(p===-1&&state.dice===6)state.legalTokens.push(t);else if(p>=0&&p<57&&p+state.dice<=57)state.legalTokens.push(t)});if(!state.legalTokens.length){state.awaitingMove=false;state.turnPlayerIndex=(playerIndex+1)%players.length}}
-    else if(action==="moveToken"){if(!state.awaitingMove)return res.status(409).json({error:"ارمِ النرد أولًا"});const token=Number(req.body?.token),tokens=state.tokens[playerIndex]||[];if(!state.legalTokens.includes(token))return res.status(400).json({error:"هذه القطعة لا تستطيع الحركة"});tokens[token]=tokens[token]===-1?0:tokens[token]+state.dice;state.awaitingMove=false;if(tokens.every(x=>x>=57)){state.winner=actor.username||actor.guestId||("لاعب "+(playerIndex+1));state.phase="finished"}else if(state.dice!==6)state.turnPlayerIndex=(playerIndex+1)%players.length}
-    else return res.status(400).json({error:"الحركة غير مدعومة في لودو"});
-  }else if(action==="round"||action==="answer"||action==="choose"){
-    const engine=GAME_ENGINE[g.game]||{kind:"text",prompt:"ابدأ الجولة واكتب إجابتك.",choices:[],answer:""};
-    if(state.turnPlayerKey && state.turnPlayerKey!==playerKey(actor))return res.status(403).json({error:"انتظر دور اللاعب الآخر"});
-    if(action==="round"){state.round=(state.round||1)+1;state.prompt=engine.prompt;state.choices=engine.choices||[];state.kind=engine.kind;state.lastResult=null;}
-    else{
-      let correct=false;
-      if(action==="choose"){const choice=Number(req.body?.choice);correct=Number.isInteger(choice)&&choice===Number(engine.answer);}
-      else{const answer=String(req.body?.answer||"").trim().toLocaleLowerCase("ar"),expected=String(engine.answer||"").trim().toLocaleLowerCase("ar");if(!answer)return res.status(400).json({error:"اكتب إجابتك أولًا"});if(["WORD_BOMB","CATEGORIES"].includes(g.game))correct=expected.length>0&&answer.startsWith(expected);else if(["TABOO"].includes(g.game))correct=answer.length>=3;else correct=expected.length>0&&answer===expected;}
-      if(correct)state.score=(state.score||0)+1;
-      state.lastResult={correct,message:correct?"تم احتساب النقطة والانتقال للجولة التالية.":"حاول مرة أخرى أو ابدأ جولة جديدة."};
-      state.round=(state.round||1)+1;state.prompt=engine.prompt;state.choices=engine.choices||[];state.kind=engine.kind;
-      const next=players.filter(p=>!p.bot);
-      const currentIndex=Math.max(0,next.findIndex(p=>playerKey(p)===playerKey(actor)));
-      state.turnPlayerKey=playerKey(next[(currentIndex+1)%Math.max(1,next.length)]);
-    }
-  }else return res.status(400).json({error:"الحركة غير مدعومة"});
-  const finished=!!state.winner;
-  const up=await pool.query("UPDATE game_lobbies SET state=$1,status=$2 WHERE id=$3 RETURNING state,status,players",[JSON.stringify(state),finished?"finished":"playing",g.id]);
-  res.json({ok:true,state:publicGameState(g.game,up.rows[0].state,actor),status:up.rows[0].status,players:up.rows[0].players.map(p=>({username:p.username,guest:!!p.guest,host:!!p.host,seat:p.seat||null,seatLabel:p.seatLabel||null}))});
-});
-app.get("/api/games/top",async(req,res)=>{try{const q=await pool.query("SELECT username,discord_username,wins,points FROM game_scores WHERE guest=false ORDER BY wins DESC,points DESC LIMIT 50");res.json({top:q.rows});}catch(e){res.json({top:[]});}});
-app.post("/api/games/:id/score",requireAuth,async(req,res)=>{const points=Math.max(1,Math.min(100,Number(req.body?.points)||10)),u=req.session.user;await pool.query("INSERT INTO game_scores(username,discord_username,wins,points,guest) VALUES($1,$2,1,$3,false) ON CONFLICT(username) DO UPDATE SET wins=game_scores.wins+1,points=game_scores.points+$3,discord_username=EXCLUDED.discord_username",[u.username,u.discordUsername,points]);await audit(u,"game_win",`#${req.params.id} +${points}`);res.json({ok:true});});
-setInterval(async()=>{try{await pool.query("DELETE FROM game_lobbies WHERE status IN ('waiting','ready') AND created_at < NOW() - make_interval(mins => 5)")}catch(e){console.error("game cleanup:",e.message)}},30000);
 
 app.get("/api/public/server", async (req, res) => {
   try {
@@ -1602,7 +1201,7 @@ const server = app.listen(port, async () => {
   server.headersTimeout = 70_000;
   server.requestTimeout = 30_000;
   console.log(`MLD listening on port ${port}`);
-  try { await initAppDatabase(); await pool.query("DELETE FROM game_lobbies WHERE game NOT IN ('UNO','LUDO','BALOOT','JAKAROO','QAWSAR')"); await ensureOwner(); await ensureChatDatabase(); console.log("App database ready"); }
+  try { await initAppDatabase(); await ensureOwner(); await ensureChatDatabase(); console.log("App database ready"); }
   catch (error) { console.error("Database init failed:", error.message); }
 });
 async function gracefulShutdown(signal){
