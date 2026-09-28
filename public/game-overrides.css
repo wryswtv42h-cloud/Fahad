@@ -167,3 +167,60 @@ body.mld-game-fullscreen .game-fullscreen-fab{z-index:2147483647!important}
 @media(orientation:landscape) and (max-height:600px){body.mld-game-fullscreen .game-room .felt{width:min(78vw,1200px)!important;height:calc(100dvh - 125px)!important;max-height:none!important}}
 
 .game-fullscreen-fab{position:absolute;inset-inline-end:18px;bottom:18px;z-index:30;width:52px;height:52px;border:1px solid rgba(255,255,255,.18);border-radius:16px;background:rgba(10,15,28,.88);color:#fff;font-size:24px;display:grid;place-items:center;box-shadow:0 12px 30px rgba(0,0,0,.28);backdrop-filter:blur(12px);cursor:pointer}.game-fullscreen-fab:active{transform:scale(.96)}.game-room.game-focus-mode .game-fullscreen-fab{position:fixed;bottom:20px;inset-inline-end:20px}@media(max-width:700px){.game-fullscreen-fab{width:48px;height:48px;bottom:12px;inset-inline-end:12px}}
+/* MULTIPLAYER TABLE V8 — real perspective, readable opponents, premium boards */
+.player-seat{z-index:2;transition:left .35s ease,top .35s ease,transform .2s ease;max-width:min(190px,24vw)}
+.player-seat.seat-n12,.player-seat.seat-n16{width:132px;font-size:10px;padding:7px}
+.player-seat.seat-n12 .seat-avatar,.player-seat.seat-n16 .seat-avatar{width:30px;height:30px;flex-basis:30px;border-radius:9px;font-size:8px}
+.player-seat.seat-n12 small,.player-seat.seat-n16 small{font-size:8px}
+.seat-mini-cards{position:absolute;display:flex;top:-12px;inset-inline-end:-5px;direction:ltr}
+.mini-back{display:grid;place-items:center;width:18px;height:25px;margin-inline-start:-9px;border-radius:4px;border:1px solid #dce4f5;background:repeating-linear-gradient(45deg,#20283b 0 4px,#394767 4px 8px);color:#fff;font-size:8px;box-shadow:0 3px 7px #0008}
+.player-seat.self{z-index:8}
+.player-seat.turn{animation:seatPulse 1.5s ease-in-out infinite}
+@keyframes seatPulse{0%,100%{box-shadow:0 0 0 2px rgba(255,156,220,.08),0 0 18px rgba(255,156,220,.08)}50%{box-shadow:0 0 0 3px rgba(255,156,220,.18),0 0 35px rgba(255,156,220,.24)}}
+.physical-table{overflow:visible!important}
+.real-jackaroo{width:min(620px,94%)!important;aspect-ratio:1;border-radius:34px!important;background:radial-gradient(circle,#173f34 0 35%,#0a251d 68%,#06130f 100%)!important;border:12px solid #4d3425!important}
+.real-jackaroo .jack-path{inset:7%;grid-template-columns:repeat(13,1fr);grid-template-rows:repeat(4,1fr);gap:3px}
+.real-jackaroo .jack-path i{border:1px solid rgba(255,255,255,.05);font-size:6px}
+.jack-houses{position:absolute;inset:5%;pointer-events:none}
+.jack-house{position:absolute;width:25%;height:25%;display:grid;grid-template-columns:1fr 1fr;gap:5px;padding:9px;border-radius:16px;background:rgba(0,0,0,.22);border:1px solid rgba(255,255,255,.07)}
+.house-0{left:2%;top:2%}.house-1{right:2%;top:2%}.house-2{left:2%;bottom:2%}.house-3{right:2%;bottom:2%}
+.jack-piece{display:grid;place-items:center;font-size:19px;border-radius:9px;background:rgba(255,255,255,.06)}
+.jack-piece.on-track{box-shadow:0 0 15px rgba(255,255,255,.2)}
+.jack-center{position:absolute;inset:39%;display:grid;place-items:center;align-content:center;gap:3px;border-radius:50%;background:rgba(0,0,0,.22);border:1px solid rgba(255,255,255,.08);text-align:center}
+.jack-center b{font-size:13px;letter-spacing:2px}.jack-center small{font-size:8px;color:var(--muted)}
+.qawsar-physical .center-piles,.baloot-physical .center-piles,.uno-physical .center-piles{transform:translateY(-25px)}
+.qawsar-own-hand .hand-card,.jackaroo-hand .jack-card{cursor:pointer}
+@media(max-width:820px){
+ .player-seat.seat-n12,.player-seat.seat-n16{width:94px!important;max-width:94px!important}
+ .player-seat.seat-n12 .seat-avatar,.player-seat.seat-n16 .seat-avatar{width:25px;height:25px;flex-basis:25px}
+ .seat-mini-cards{top:-9px}.mini-back{width:14px;height:20px;font-size:6px;margin-inline-start:-7px}
+}
+@media(max-width:560px){
+ .player-seat{max-width:105px!important}
+ .player-seat.seat-n12,.player-seat.seat-n16{width:76px!important;max-width:76px!important;padding:5px!important}
+ .player-seat.seat-n12 b,.player-seat.seat-n16 b{font-size:8px}
+ .player-seat.seat-n12 small,.player-seat.seat-n16 small{font-size:7px}
+ .real-jackaroo{width:96%!important;border-width:7px!important}
+ .jack-piece{font-size:14px}
+}
+
+/* MOBILE THREE-LINE MENU V8 */
+@media(max-width:820px){
+ .mobile-menu{padding:12px 12px max(18px,env(safe-area-inset-bottom));background:linear-gradient(180deg,#10091a,#08060d);border-top:1px solid #f7c8ee22;box-shadow:0 25px 60px #000b;max-height:calc(100dvh - 78px);overflow:auto}
+ .mobile-menu.open{gap:9px}
+ .mobile-menu-main,.mobile-menu-group-toggle{min-height:50px!important;border-radius:15px!important}
+ .mobile-menu-main{justify-content:flex-start!important;padding-inline:17px!important;background:rgba(255,255,255,.045)!important}
+ .mobile-menu-main:first-child{background:linear-gradient(135deg,#ff9cdc22,#a987ff18)!important;border-color:#ff9cdc55!important}
+ .mobile-menu-group{border:1px solid #ffffff12;border-radius:17px;overflow:hidden;background:rgba(255,255,255,.025)}
+ .mobile-menu-group-toggle{width:100%!important;border:0!important;border-radius:0!important;background:transparent!important;display:flex!important;align-items:center!important;justify-content:space-between!important;padding:0 16px!important;color:#fff!important;font-weight:900!important}
+ .mobile-menu-group-toggle:after{content:"";width:7px;height:7px;border-radius:50%;background:#ff9cdc;box-shadow:0 0 12px #ff9cdc;order:-1}
+ .mobile-menu-chevron{font-size:18px;color:#ffb4e4;transition:transform .2s}
+ .mobile-menu-group.is-open .mobile-menu-chevron{transform:rotate(180deg)}
+ .mobile-menu-sub{display:grid;grid-template-rows:0fr;transition:grid-template-rows .22s ease;padding:0 8px}
+ .mobile-menu-group.is-open .mobile-menu-sub{grid-template-rows:1fr;padding:0 8px 8px}
+ .mobile-menu-sub:before{content:"";display:block;min-height:0}
+ .mobile-menu-sub button{width:100%!important;min-height:45px!important;justify-content:flex-start!important;text-align:right!important;padding-inline:15px!important;border:1px solid #ffffff0c!important;border-radius:12px!important;background:#ffffff06!important;font-size:13px!important}
+ .mobile-menu-sub button:hover{transform:none!important;background:#ff9cdc12!important;color:#fff!important}
+ .mobile-menu-logout{border-color:#ff687f55!important;color:#ffb1bd!important;background:#ff687f0c!important}
+ .mobile-menu .invite{min-height:50px!important;margin-top:2px}
+}
