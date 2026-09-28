@@ -375,47 +375,45 @@ applyView=async function(){
 };
 
 
-// MLD GAMES — lobby + session client
+// MLD GAMES — ready-made arcade and external multiplayer hubs
 async function renderGames(){
   searchWrap.style.display="none";
   title.textContent="مركز الألعاب";
-  subtitle.textContent="جلسات ألعاب حقيقية مرتبطة بالخادم — إنشاء، انضمام، مقاعد، مشاهدة، ولعب.";
-  content.className="feature-grid";
-  const guestId=localStorage.getItem("mld_guest_id")||("g_"+crypto.randomUUID());
-  localStorage.setItem("mld_guest_id",guestId);
-  let sessionTimer=null,sessionId=null;
-   const names = { CODENAMES:"Codenames", SPYFALL:"Spyfall", PICTIONARY:"Pictionary", CHARADES:"Charades", WHOAMI:"Who Am I?", TABOO:"Taboo", WORD_BOMB:"Word Bomb", TRUTH_LIE:"Truth or Lie", EMOJI_GUESS:"Emoji Guess", TRIVIA:"Trivia", CATEGORIES:"Categories", LIAR:"Liar", HOT_SEAT:"Hot Seat", WOULD_YOU_RATHER:"Would You Rather", DRAW_GUESS:"Draw & Guess", FASTEST:"Fastest", RIDDLE_RUSH:"Riddle Rush", SECRET_WORD:"Secret Word", MIMIC:"Mimic", GUESS_PLAYER:"Guess Player", UNO:"UNO", LUDO:"Ludo", BALOOT:"Baloot", DAQSH:"Daqsh", QAWSAR:"Qawsar" };
-   const gameDescriptions = {"CODENAMES":"لعبتان ضد بعض: قائد كل فريق يرى خريطة الألوان السرية، ويعطي كلمة تلميح ورقمًا، وفريقه يحاول كشف كلمات فريقه. تجنبوا الكلمات المحايدة وكلمة القاتل؛ كشف القاتل ينهي الجولة فورًا. القائد لا يخمن بدل الفريق.","SPYFALL":"كل اللاعبين يعرفون الموقع ما عدا الجاسوس. اسألوا بعضكم أسئلة ذكية لا تكشف الموقع للجاسوس، وحاولوا اكتشافه قبل أن يخمن الموقع. الجاسوس يفوز إذا عرف الموقع أو أفلت من الشك.","PICTIONARY":"رسام واحد يأخذ الكلمة السرية ويرسمها دون كتابة الكلمة أو قولها، والبقية يحاولون التخمين. الأسرع في الوصول للكلمة الصحيحة يكسب النقاط.","CHARADES":"لاعب يمثل الكلمة أو العبارة بدون كلام، والبقية يخمنونها. ممنوع نطق الإجابة أو تهجئتها؛ الفوز يكون بالتخمين الصحيح قبل انتهاء الجولة.","WHOAMI":"كل لاعب يحاول معرفة الشخصية المخفية عنه من خلال الأسئلة والتلميحات. اسأل أسئلة تساعدك على تضييق الاحتمالات، ثم اكتب تخمينك عندما تصبح واثقًا.","TABOO":"اشرح الكلمة السرية لفريقك دون استخدام الكلمات المحظورة المرتبطة بها. الفريق يحاول التخمين بسرعة، والشارح يخسر الجولة إذا استخدم كلمة ممنوعة.","WORD_BOMB":"القنبلة مع لاعب في كل دور، ويظهر حرف مطلوب. اكتب كلمة تبدأ بالحرف المطلوب قبل انتهاء الوقت ثم تنتقل القنبلة للاعب التالي. التأخر أو الإجابة غير الصحيحة يسبب خسارة الجولة.","TRUTH_LIE":"تظهر عبارة أو ادعاء، واختر هل هو حقيقة أم كذبة. الإجابة الصحيحة تمنح نقطة، ومع تقدم الجولات تتغير الأسئلة وتزداد سرعة اللعب.","EMOJI_GUESS":"تظهر مجموعة إيموجي تمثل فيلمًا أو شخصية أو شيئًا معروفًا. اختر الإجابة الصحيحة قبل الآخرين لتحصل على النقطة.","TRIVIA":"أسئلة معلومات عامة متعددة الخيارات. اختر إجابتك قبل انتهاء الوقت؛ الإجابة الصحيحة تزيد نتيجتك والخاطئة لا تحتسب كنقطة.","CATEGORIES":"يظهر تصنيف وحرف محدد. اكتب كلمة صحيحة تنتمي للتصنيف وتبدأ بالحرف المطلوب. التكرار أو الإجابة خارج التصنيف لا تحتسب.","LIAR":"تظهر مجموعة ادعاءات ويجب تحديد الادعاء الكاذب. راقب المعلومات وحاول كشف الخداع قبل بقية اللاعبين؛ النقاط تعتمد على اختيار الكذبة الصحيحة.","HOT_SEAT":"لاعب يجلس في المقعد الساخن وتظهر له اختيارات أو تحديات. يختار ما سيفعله، ثم ينتقل الدور للاعب التالي مع احتساب نتيجة الجولة.","WOULD_YOU_RATHER":"يظهر خياران صعبان. اختر أحدهما، ثم قارن اختيارك باختيارات بقية اللاعبين. الجولة تعتمد على سرعة الاختيار وتفاعل المجموعة.","DRAW_GUESS":"لاعب يرسم كلمة سرية والبقية يخمنونها. لا يسمح بكتابة الكلمة داخل الرسم؛ أول تخمين صحيح يكسب الجولة.","FASTEST":"سؤال سريع يحتاج إجابة فورية. اكتب الحل بأسرع ما تستطيع، وترتفع النتيجة حسب سرعة الإجابة الصحيحة.","RIDDLE_RUSH":"تظهر أحجية قصيرة، وكل لاعب يحاول حلها قبل الآخرين. الإجابة الصحيحة والسريعة تكسب النقاط وتبدأ أحجية جديدة.","SECRET_WORD":"لاعب واحد يحمل الكلمة السرية بينما يحصل الآخرون على تلميحات أو يحاولون استنتاجها. صاحب السر يدير الجولة دون كشف الكلمة مباشرة.","MIMIC":"لاعب واحد يقلد حركة أو تصرفًا دون قول الاسم، والبقية يحاولون معرفة المطلوب. التخمين الصحيح ينهي الجولة ويمنح النقاط.","GUESS_PLAYER":"يوجد لاعب غامض وتظهر تلميحات عنه. استخدم التلميحات لاستنتاج هويته، ثم اختر اللاعب الصحيح من الخيارات.","UNO":"كل لاعب يحاول التخلص من أوراقه. العب ورقة تطابق اللون أو الرقم أو استخدم ورقة خاصة عندما يسمح الدور، ومن يفرغ يده أولًا يفوز.","LUDO":"حرّك قطعك على المسار حسب رمية النرد وحاول إيصال قطعك إلى النهاية قبل الخصوم. بعض الرميات والحركات تمنحك فرصًا إضافية أو تضرب قطعة منافس.","BALOOT":"لعبة ورق جماعية بأربعة لاعبين وفريقين. اختاروا الأوراق والحركات حسب الدور والنوع المطلوب، واجمعوا الجولات لتحقيق نقاط أكثر من الفريق الآخر.","DAQSH":"لعبة رد فعل سريعة: تظهر إشارة أو حدث مفاجئ، واضغط في اللحظة المناسبة. الاستجابة الصحيحة والسريعة تحسب نقطة، والضغط الخطأ قد يضيع الدور.","QAWSAR":"لعبة أوراق تعتمد على إدارة القوة والتوقيت. اختر متى تستخدم الورقة القوية ومتى تحتفظ بها، وحاول جمع أفضل نتيجة عبر الجولات."};
-   const seatNames = {
-  CODENAMES:["قائد الأحمر","عميل الأحمر","قائد الأزرق","عميل الأزرق"], SPYFALL:["المحقق 1","المحقق 2","المحقق 3","الجاسوس"], PICTIONARY:["الرسام","المخمن 1","المخمن 2","المخمن 3"], CHARADES:["الممثل","المخمن 1","المخمن 2","المخمن 3"], WHOAMI:["اللاعب 1","اللاعب 2","اللاعب 3","اللاعب 4"], TABOO:["الشارح","المخمن 1","المخمن 2","المخمن 3"], WORD_BOMB:["لاعب 1","لاعب 2","لاعب 3","لاعب 4"], TRUTH_LIE:["لاعب 1","لاعب 2","لاعب 3","لاعب 4"], EMOJI_GUESS:["لاعب 1","لاعب 2","لاعب 3","لاعب 4"], TRIVIA:["لاعب 1","لاعب 2","لاعب 3","لاعب 4"], CATEGORIES:["لاعب 1","لاعب 2","لاعب 3","لاعب 4"], LIAR:["المتهم","المحقق 1","المحقق 2","المحقق 3"], HOT_SEAT:["المقعد الساخن","لاعب 2","لاعب 3","لاعب 4"], WOULD_YOU_RATHER:["لاعب 1","لاعب 2","لاعب 3","لاعب 4"], DRAW_GUESS:["الرسام","المخمن 1","المخمن 2","المخمن 3"], FASTEST:["متسابق 1","متسابق 2","متسابق 3","متسابق 4"], RIDDLE_RUSH:["لاعب 1","لاعب 2","لاعب 3","لاعب 4"], SECRET_WORD:["حامل السر","لاعب 2","لاعب 3","لاعب 4"], MIMIC:["المقلد","المخمن 1","المخمن 2","المخمن 3"], GUESS_PLAYER:["الشخص الغامض","المحقق 1","المحقق 2","المحقق 3"], UNO:["مقعد 1","مقعد 2","مقعد 3","مقعد 4"], LUDO:["مقعد 1","مقعد 2","مقعد 3","مقعد 4"], BALOOT:["فريق A - 1","فريق A - 2","فريق B - 1","فريق B - 2"], DAQSH:["لاعب 1","لاعب 2","لاعب 3","لاعب 4"], QAWSAR:["مقعد 1","مقعد 2","مقعد 3","مقعد 4"]
-};
-  const escGame=x=>esc(x);
-  const api=async(url,opt)=>{const r=await fetch(url,opt);let d={};try{d=await r.json()}catch{}if(!r.ok)throw Error(d.error||"تعذر تنفيذ العملية");return d};
-  const guestPayload=()=>({guestId,guestName:"زائر"});
-  const stop=()=>{if(sessionTimer){clearInterval(sessionTimer);sessionTimer=null}sessionId=null};
-  const gamesList=async()=>{
- searchWrap.style.display="none";
- title.textContent="مركز الألعاب";
- subtitle.textContent="ألعاب جاهزة مستقلة — اختر لعبة وابدأ مباشرة.";
- content.className="feature-grid ready-games-grid";
- const games=[
-  ["2048","🔢","ألغاز دمج الأرقام وسجّل رقمك القياسي.","/games/2048.html"],
-  ["Snake","🐍","الثعبان الكلاسيكي مع تحكم بالجوال والكمبيوتر.","/games/snake.html"],
-  ["Tetris","🧱","رتّب القطع وامسح الصفوف وارفع المستوى.","/games/tetris.html"],
-  ["Sudoku","🧩","ثلاث درجات صعوبة مع فحص وحل.","/games/sudoku.html"],
-  ["Connect Four","🔴","أربع متتالية ضد الذكاء الاصطناعي أو لاعب ثانٍ.","/games/connect-four.html"],
-  ["Tic-Tac-Toe","❌","إكس أو ضد الذكاء الاصطناعي أو لاعبين.","/games/tic-tac-toe.html"]
- ];
- content.innerHTML=games.map(([name,icon,desc,path])=>"<article class='feature-card ready-game-card'><div class='ready-game-icon'>"+icon+"</div><span class='pill'>لعبة جاهزة</span><h3>"+esc(name)+"</h3><p class='muted'>"+esc(desc)+"</p><button class='primary wide' data-ready-game='"+esc(path)+"'>🎮 العب الآن</button></article>").join("");
- document.querySelectorAll("[data-ready-game]").forEach(btn=>btn.onclick=()=>openReadyGame(btn.dataset.readyGame));
- setStatus("الألعاب جاهزة");
-};
-function openReadyGame(path){
- const name=path.split("/").pop().replace(".html","");
- modal.classList.remove("hidden");
- modalContent.innerHTML="<div class='ready-game-modal'><div class='ready-game-modal-head'><div><span class='pill'>🎮 لعبة جاهزة</span><h2>"+esc(name)+"</h2></div><button class='ghost' id='ready-game-close'>إغلاق</button></div><iframe class='ready-game-frame' src='"+esc(path)+"' title='"+esc(name)+"' loading='eager' allow='fullscreen'></iframe></div>";
- $("#ready-game-close").onclick=()=>modal.classList.add("hidden");
+  subtitle.textContent="ألعاب جاهزة ومجانية — فردية وجماعية، مع ألعاب عربية وألعاب أونلاين.";
+  content.className="feature-grid ready-games-grid";
+  const games=[
+    ["2048","🔢","ألغاز دمج الأرقام — جاهزة داخل الموقع.","local","/games/2048.html"],
+    ["Snake","🐍","الثعبان الكلاسيكي — جاهز للجوال والكمبيوتر.","local","/games/snake.html"],
+    ["Tetris","🧱","تتريس كلاسيكي جاهز وسريع.","local","/games/tetris.html"],
+    ["Sudoku","🧩","سودوكو بثلاث درجات صعوبة.","local","/games/sudoku.html"],
+    ["Connect Four","🔴","أربع متتالية ضد الكمبيوتر أو لاعب ثانٍ.","local","/games/connect-four.html"],
+    ["Tic-Tac-Toe","❌","إكس أو ضد الكمبيوتر أو لاعبين.","local","/games/tic-tac-toe.html"],
+    ["بلوت","🃏","بلوت سعودي أونلاين — غرف حتى 4 لاعبين واللعب ضد الكمبيوتر.","external","https://la3ebni.com/games/baloot"],
+    ["UNO","🎴","UNO جماعي جاهز مع نظام غرف ولعب أونلاين.","external","https://game-production-03da.up.railway.app/"],
+    ["GameNest","🎮","مركز ألعاب جماعية جاهز: UNO، شطرنج، داما، رومي، مونوبولي، Exploding Kittens وغيرها.","external","https://game-production-03da.up.railway.app/"],
+    ["Waraq","♠️","ألعاب عربية جاهزة: بلوت، طرنيب، تركس، تقدير، هاند، طاولة، داما، دومينو وغيرها.","external","https://playwaraq.com/"],
+    ["لعبني","🇸🇦","مكتبة ألعاب عربية كبيرة تشمل بلوت وألعاب جماعية وألعاب متصفح كثيرة.","external","https://la3ebni.com/"],
+    ["Codenames","🕵️","لعبة كلمات جماعية أونلاين من مشروع جاهز.","external","https://codenames.ai/"],
+    ["Draw & Guess","🎨","ارسم وخمّن للجلسات مع الأصدقاء.","external","https://drawparty-public.pages.dev/"],
+    ["Multiplayer Tetris","⚡","تتريس جماعي لحظي جاهز للعب عبر المتصفح.","external","https://tetris.4444.wtf/"]
+  ];
+  content.innerHTML=games.map(([name,icon,desc,type,path])=>{
+    const button=type==="local"
+      ? "<button class='primary wide' data-ready-game='"+esc(path)+"'>🎮 العب الآن</button>"
+      : "<button class='primary wide' data-external-game='"+esc(path)+"'>🚀 افتح اللعبة</button>";
+    return "<article class='feature-card ready-game-card'><div class='ready-game-icon'>"+icon+"</div><span class='pill'>"+(type==="local"?"جاهزة داخل الموقع":"مشروع جاهز أونلاين")+"</span><h3>"+esc(name)+"</h3><p class='muted'>"+esc(desc)+"</p>"+button+"</article>";
+  }).join("");
+  document.querySelectorAll("[data-ready-game]").forEach(btn=>btn.onclick=()=>openReadyGame(btn.dataset.readyGame));
+  document.querySelectorAll("[data-external-game]").forEach(btn=>btn.onclick=()=>window.open(btn.dataset.externalGame,"_blank","noopener,noreferrer"));
+  setStatus("مركز الألعاب جاهز");
 }
+function openReadyGame(path){
+  const name=path.split("/").pop().replace(".html","");
+  modal.classList.remove("hidden");
+  box.innerHTML="<div class='ready-game-modal'><div class='ready-game-modal-head'><div><span class='pill'>🎮 لعبة جاهزة</span><h2>"+esc(name)+"</h2></div><button class='ghost' id='ready-game-close'>إغلاق</button></div><iframe class='ready-game-frame' src='"+esc(path)+"' title='"+esc(name)+"' loading='eager' allow='fullscreen'></iframe></div>";
+  $("#ready-game-close").onclick=closeModal;
+}
+
 function mldNavButton(view,label,extra=""){
   return '<button type="button" data-view="'+view+'" data-admin-nav="1" '+extra+'>'+label+'</button>';
 }
