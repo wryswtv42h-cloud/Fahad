@@ -1460,7 +1460,7 @@ client.on("interactionCreate", async (interaction) => {
       embeds:[],
       components:[]
     }).catch((editError)=>console.error("Registration confirmation message edit:",editError.message));
-    await audit
+    await audit(
       {username:v.username,discordUsername:v.discord_username},
       "register_confirmed",
       "تأكيد إنشاء الحساب من زر Discord"
