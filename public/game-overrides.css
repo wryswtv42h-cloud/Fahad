@@ -155,3 +155,13 @@ html.mld-game-fullscreen,body.mld-game-fullscreen{overflow:hidden!important;widt
 @media(max-width:700px){.game-room.fallback-fullscreen .felt{width:94vw!important;height:60dvh!important;max-height:calc(100dvh - 190px)!important}.game-room.fallback-fullscreen .room-controls{max-height:28dvh}}
 @media(orientation:landscape) and (max-height:600px){.game-room.fallback-fullscreen .felt{width:min(78vw,1200px)!important;height:calc(100dvh - 135px)!important;max-height:none!important}.game-room.fallback-fullscreen .room-controls{max-height:22dvh}}
 .game-fullscreen-fab{z-index:2147483646!important}
+
+
+/* DEVICE-UNIFIED TABLE MODE v7 */
+html.mld-game-fullscreen,html.mld-game-fullscreen body{width:100%!important;height:100%!important;overflow:hidden!important;background:#04070a!important}
+body.mld-game-fullscreen .game-room{position:fixed!important;inset:0!important;z-index:2147483647!important;width:100vw!important;width:100dvw!important;height:100vh!important;height:100svh!important;height:100dvh!important;min-height:0!important;margin:0!important;padding:max(6px,env(safe-area-inset-top)) max(6px,env(safe-area-inset-right)) max(6px,env(safe-area-inset-bottom)) max(6px,env(safe-area-inset-left))!important;border-radius:0!important;box-sizing:border-box!important;overflow:hidden!important}
+body.mld-game-fullscreen .game-room .table-shell{flex:1 1 auto!important;width:100%!important;min-width:0!important;min-height:0!important;height:auto!important;max-height:none!important}
+body.mld-game-fullscreen .game-room .felt{width:min(88vw,1200px)!important;height:min(68dvh,760px)!important;min-height:0!important;max-height:calc(100dvh - 190px)!important}
+body.mld-game-fullscreen .game-fullscreen-fab{z-index:2147483647!important}
+@media(max-width:700px){body.mld-game-fullscreen .game-room .felt{width:94vw!important;height:min(60dvh,620px)!important;max-height:calc(100dvh - 170px)!important}body.mld-game-fullscreen .game-room .table-own-hand{left:4px!important;right:4px!important;bottom:4px!important}}
+@media(orientation:landscape) and (max-height:600px){body.mld-game-fullscreen .game-room .felt{width:min(78vw,1200px)!important;height:calc(100dvh - 125px)!important;max-height:none!important}}
