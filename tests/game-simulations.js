@@ -24,7 +24,19 @@ function checkQawsarRules(){
  assert.equal(s.qawsarPhase,"draw");
 }
 checkQawsarRules();
-function checkJackarooRules(){const p=players(4),s=E.create("JAKAROO",p);assert.equal(s.hands.length,4);assert.ok(s.hands.every(h=>h.length===4));const pub=E.pub(s,p,p[0]);assert.ok(pub.private.hand.length===4);E.apply("JAKAROO",s,p,p[0],"playCard",{index:0});assert.ok(Number.isInteger(s.pendingCard));E.apply("JAKAROO",s,p,p[0],"moveToken",{token:0});assert.equal(s.pendingCard,null)}
+function checkJackarooRules(){
+ const p=players(4),s=E.create("JAKAROO",p);
+ assert.equal(s.hands.length,4);assert.ok(s.hands.every(h=>h.length===4));
+ const pub=E.pub(s,p,p[0]);assert.ok(pub.private.hand.length===4);
+ let chosen=-1;
+ for(let i=0;i<s.hands[0].length;i++){try{E.apply("JAKAROO",s,p,p[0],"playCard",{index:i});chosen=i;break}catch{}}
+ assert.ok(chosen>=0);
+ assert.ok(Number.isInteger(s.pendingCard));
+ const token=s.moveOptions[0];
+ assert.ok(Number.isInteger(token));
+ E.apply("JAKAROO",s,p,p[0],"moveToken",{token});
+ assert.equal(s.pendingCard,null);
+}
 checkJackarooRules();
 
 for(let round=0;round<40000;round++)for(const g of games)check(g);
