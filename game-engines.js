@@ -10,11 +10,11 @@ const CAT=["فواكه","دول","حيوانات","أكلات","ألعاب","م�
 const sh=a=>{a=[...a];for(let i=a.length-1;i>0;i--){let j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
 const k=p=>p?.guestId?"g:"+p.guestId:"u:"+String(p?.username||"").toLowerCase(), ni=(s,n)=>(s.turnIndex+1)%n;
 function base(game,p){return{version:4,game,phase:"playing",round:1,turnIndex:0,scores:p.map(()=>0),winner:null,lastResult:null}}
-function uno(p){let d=[];for(const c of C){d.push({color:c,value:"0"});for(const v of["1","2","3","4","5","6","7","8","9","Skip","Reverse","+2"])d.push({color:c,value:v},{color:c,value:v})}for(let i=0;i<4;i++)d.push({color:"wild",value:"Wild"},{color:"wild",value:"+4"});d=sh(d);let h=p.map(()=>[]);for(let n=0;n<7;n++)for(let i=0;i<p.length;i++)h[i].push(d.pop());let top=d.pop();return Object.assign(base("UNO",p),{hands:h,drawPile:d,discardPile:[top],top,color:top.color,direction:1,pending:0})}
+function uno(p){let d=[];for(const c of C){d.push({id:"uno-"+c+"-0",color:c,value:"0"});for(const v of["1","2","3","4","5","6","7","8","9","Skip","Reverse","+2"])d.push({id:"uno-"+c+"-"+v+"-a",color:c,value:v},{id:"uno-"+c+"-"+v+"-b",color:c,value:v})}for(let i=0;i<4;i++)d.push({id:"uno-wild-"+i,color:"wild",value:"Wild"},{id:"uno-wild4-"+i,color:"wild",value:"+4"});d=sh(d);let h=p.map(()=>[]);for(let n=0;n<7;n++)for(let i=0;i<p.length;i++)h[i].push(d.pop());let top=d.pop();return Object.assign(base("UNO",p),{hands:h,drawPile:d,discardPile:[top],top,color:top.color,direction:1,pending:0})}
 function ludo(p){let s=base("LUDO",p);return Object.assign(s,{tokens:p.map(()=>[-1,-1,-1,-1]),dice:null,awaitingMove:false,legalTokens:[],sixStreak:0})}
 function jackaroo(p){
   const suits=["♠","♥","♦","♣"], ranks=["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
-  const deck=sh(suits.flatMap(su=>ranks.map(r=>({suit:su,rank:r}))));
+  const deck=sh(suits.flatMap(su=>ranks.map(r=>({id:"jackaroo-"+su+"-"+r,suit:su,rank:r}))));
   const hands=p.map(()=>deck.splice(0,4));
   return Object.assign(base("JAKAROO",p),{
     kind:"jackaroo",phase:"playing",turnIndex:0,hands,deck,discard:null,
@@ -60,7 +60,7 @@ function jackFinish(s,p){
   return false;
 }
 function baloot(p){
- let d=sh(S.flatMap(s=>R.map(r=>({suit:s,rank:r})))),h=[[],[],[],[]];
+ let d=sh(S.flatMap(s=>R.map(r=>({id:"baloot-"+s+"-"+r,suit:s,rank:r})))),h=[[],[],[],[]];
  for(let n=0;n<5;n++)for(let i=0;i<4;i++)h[i].push(d.pop());
  let s=base("BALOOT",p);
  return Object.assign(s,{phase:"bidding",round:1,turnIndex:1,bidRound:1,bids:[],contract:null,trump:null,buyer:null,dealerIndex:0,hands:h,deck:d,turnCard:d.pop(),turnCardTaken:false,trick:[],tricks:[],teamScores:[0,0],matchScores:[0,0],roundPoints:[0,0]})
@@ -69,8 +69,8 @@ function spy(p){let x=SPY[Math.floor(Math.random()*SPY.length)],roles=p.map((_,i
 function code(p){let s=base("CODENAMES",p),rs=sh([..."rrrrrrrrrbbbbbbbbnnnnnnna"]),ws=sh(WORDS).slice(0,25);const roles={};p.forEach((x,i)=>{const seat=String(x.seatLabel||"");roles[k(x)]=seat==="قائد الأحمر"?"red_spymaster":seat==="قائد الأزرق"?"blue_spymaster":seat.includes("أحمر")?"red_agent":seat.includes("أزرق")?"blue_agent":i===0?"red_spymaster":"blue_agent"});return Object.assign(s,{words:ws.map((word,i)=>({word,role:{r:"red",b:"blue",n:"neutral",a:"assassin"}[rs[i]],revealed:false})),team:"red",clue:null,guesses:0,teamScores:{red:0,blue:0},playerRoles:roles})}
 function create(game,p){if(game==="UNO")return uno(p);if(game==="LUDO")return ludo(p);if(game==="BALOOT")return baloot(p);if(game==="JAKAROO")return jackaroo(p);if(game==="SPYFALL")return spy(p);if(game==="CODENAMES")return code(p);let s=base(game,p);s.kind="text";s.choices=[];s.prompt="ابدأ الجولة";if(game==="TRIVIA"){let q=TRIVIA[Math.floor(Math.random()*TRIVIA.length)];Object.assign(s,{kind:"choice",prompt:q[0],choices:q[1],answer:q[2]})}else if(game==="EMOJI_GUESS"){let q=EMO[Math.floor(Math.random()*EMO.length)];Object.assign(s,{kind:"choice",prompt:q[0],choices:sh(EMO.map(x=>x[1])),answer:q[1]})}else if(game==="TABOO"){let q=TAB[Math.floor(Math.random()*TAB.length)];Object.assign(s,{prompt:"اشرح الكلمة دون الكلمات الممنوعة",secret:q[0],taboo:q[1],kind:"taboo"})}else if(game==="RIDDLE_RUSH"){let q=RIDDLE[Math.floor(Math.random()*RIDDLE.length)];Object.assign(s,{prompt:q[0],answer:q[1]})}else if(game==="FASTEST")Object.assign(s,{prompt:"ما ناتج 7 × 8؟",answer:"56"});else if(game==="WORD_BOMB")Object.assign(s,{letter:LET[Math.floor(Math.random()*LET.length)],prompt:"اكتب كلمة تبدأ بالحرف"});else if(game==="CATEGORIES")Object.assign(s,{category:CAT[Math.floor(Math.random()*CAT.length)],letter:LET[Math.floor(Math.random()*LET.length)],prompt:"اكتب إجابة من التصنيف بالحرف"});else if(game==="SECRET_WORD"||game==="WHOAMI")Object.assign(s,{secret:WORDS[Math.floor(Math.random()*WORDS.length)],prompt:"خمن الكلمة السرية"});else if(game==="PICTIONARY"||game==="DRAW_GUESS")Object.assign(s,{secret:WORDS[Math.floor(Math.random()*WORDS.length)],role:"drawer",prompt:"الرسام يرى الكلمة، والباقون يخمنون"});else if(game==="CHARADES"||game==="MIMIC")Object.assign(s,{secret:WORDS[Math.floor(Math.random()*WORDS.length)],role:"actor",prompt:"مثّل الكلمة بلا كلام"});else if(game==="DAQSH")Object.assign(s,{kind:"reaction",prompt:"انتظر الإشارة ثم اضغط فورًا",readyAt:Date.now()+2000+Math.random()*3000,signal:false});else if(game==="QAWSAR"){
  const deck=sh([
-  ...S.flatMap(s=>R.map(r=>({suit:s,rank:r}))),
-  {suit:"joker",rank:"JOKER"}
+  ...S.flatMap(s=>R.map(r=>({id:"qawsar-"+s+"-"+r,suit:s,rank:r}))),
+  {id:"qawsar-joker",suit:"joker",rank:"JOKER"}
  ]);
  const hands=p.map(()=>deck.splice(0,4));
  const revealed=p.map(()=>[true,true,false,false]);
