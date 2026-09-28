@@ -41,6 +41,8 @@ test("every game opens a real multiplayer room", async ({ page, request }) => {
 
     await page.goto(BASE + "/#games", { waitUntil: "domcontentloaded" });
     await page.evaluate((guestId) => localStorage.setItem("mld_guest_id", guestId), guestId);
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect.poll(async () => await page.evaluate(() => typeof window.openEnhancedGameSession)).toBe("function");
     await page.evaluate((id) => window.openEnhancedGameSession(id, false), id);
     expect(pageErrors, game + " browser JavaScript errors").toEqual([]);
     await expect(page.locator(".game-room")).toBeVisible({ timeout: 10000 });
