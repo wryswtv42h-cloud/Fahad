@@ -21,44 +21,114 @@ refreshTimer=setInterval(()=>{if(!modal.classList.contains("hidden")||view==="me
 // MLD Add-on: Games
 async function renderGames(){
   searchWrap.style.display="none"; title.textContent="صالات الألعاب";
-  subtitle.textContent="اختر اللعبة وعدد اللاعبين، وأنشئ غرفة حقيقية وتلعب داخل نفس موقع MLD.";
-  content.className="games-hub"; await mldMe();
+  subtitle.textContent="اختر لعبة، أنشئ غرفة، وشاركها مع اللاعبين — بدون تسجيل دخول.";
+  content.className="games-hub";
   const games=[
-    {id:"uno",name:"UNO",icon:"🃏",max:6,desc:"ورق جماعي سريع",ready:true},
-    {id:"monopoly",name:"مونوبولي",icon:"🎲",max:6,desc:"شراء وبناء وتنافس",ready:true},
-    {id:"flightchess",name:"لودو / طاولة سباق",icon:"🎯",max:4,desc:"سباق جماعي",ready:true},
-    {id:"hearts",name:"قلوب",icon:"♥️",max:4,desc:"أربع لاعبين",ready:true},
-    {id:"rummikub",name:"رومي",icon:"🀄",max:4,desc:"تركيب وتجميع",ready:true},
-    {id:"liarsbar",name:"لعبة الخداع",icon:"♣️",max:6,desc:"خداع وبلوف",ready:true},
-    {id:"texas",name:"تكساس",icon:"♠️",max:8,desc:"بوكر",ready:true},
-    {id:"doudizhu",name:"دوديزهو",icon:"🃏",max:3,desc:"ورق",ready:true},
-    {id:"bigtwo",name:"Big Two",icon:"🂡",max:4,desc:"ورق",ready:true},
-    {id:"davinci",name:"رمز دافنشي",icon:"🧠",max:4,desc:"استنتاج",ready:true},
-    {id:"mahjong-sichuan",name:"ماجونغ",icon:"🀄",max:4,desc:"طاولة",ready:true},
-    {id:"drawguess",name:"ارسم وخمّن",icon:"✏️",max:8,desc:"حفلة رسم",ready:true},
-    {id:"numberbomb",name:"القنبلة الرقمية",icon:"💣",max:10,desc:"تخمين",ready:true},
-    {id:"oldmaid",name:"الورقة الشبح",icon:"👻",max:6,desc:"ورق",ready:true},
-    {id:"exploding-kittens",name:"Exploding Kittens",icon:"🐱",max:6,desc:"كروت",ready:true},
-    {id:"connect4",name:"أربعة على التوالي",icon:"🔴",max:2,desc:"كلاسيكية",ready:true},
-    {id:"chess",name:"شطرنج",icon:"♟️",max:2,desc:"كلاسيكية",ready:true},
-    {id:"checkers",name:"داما",icon:"⚫",max:2,desc:"استراتيجية",ready:true},
-    {id:"codenames",name:"Code Names",icon:"🕵️",max:8,desc:"فرق وتخمين كلمات",ready:false}
+    {id:"uno",name:"UNO",icon:"🃏",max:6,desc:"ورق جماعي سريع"},
+    {id:"monopoly",name:"مونوبولي",icon:"🎲",max:6,desc:"شراء وبناء وتنافس"},
+    {id:"flightchess",name:"لودو",icon:"🎯",max:4,desc:"سباق جماعي"},
+    {id:"hearts",name:"قلوب",icon:"♥️",max:4,desc:"لعبة ورق لأربعة"},
+    {id:"rummikub",name:"رومي",icon:"🀄",max:4,desc:"تركيب وتجميع"},
+    {id:"liarsbar",name:"لعبة الخداع",icon:"♣️",max:6,desc:"خداع وبلوف"},
+    {id:"texas",name:"تكساس",icon:"♠️",max:8,desc:"بوكر جماعي"},
+    {id:"doudizhu",name:"دوديزهو",icon:"🃏",max:3,desc:"لعبة ورق"},
+    {id:"bigtwo",name:"Big Two",icon:"🂡",max:4,desc:"ورق وتنافس"},
+    {id:"davinci",name:"رمز دافنشي",icon:"🧠",max:4,desc:"استنتاج"},
+    {id:"mahjong-sichuan",name:"ماجونغ",icon:"🀄",max:4,desc:"طاولة"},
+    {id:"drawguess",name:"ارسم وخمّن",icon:"✏️",max:8,desc:"حفلة رسم"},
+    {id:"numberbomb",name:"القنبلة الرقمية",icon:"💣",max:10,desc:"تخمين"},
+    {id:"oldmaid",name:"الورقة الشبح",icon:"👻",max:6,desc:"ورق"},
+    {id:"exploding-kittens",name:"Exploding Kittens",icon:"🐱",max:6,desc:"كروت"},
+    {id:"connect4",name:"أربعة على التوالي",icon:"🔴",max:2,desc:"كلاسيكية"},
+    {id:"chess",name:"شطرنج",icon:"♟️",max:2,desc:"كلاسيكية"},
+    {id:"checkers",name:"داما",icon:"⚫",max:2,desc:"استراتيجية"},
+    {id:"codenames",name:"Code Names",icon:"🕵️",max:8,desc:"فرق وتخمين كلمات",disabled:true}
   ];
-  let selected=games.find(g=>g.ready), sessions=[];
+  let selected=games[0], sessions=[];
   const esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
   const byId=id=>games.find(g=>g.id===id)||selected;
-  content.innerHTML='<section class="games-hero-card"><div><span class="games-kicker">MLD GAMES</span><h2>🎮 مجلس الألعاب</h2><p>غرف حقيقية — اللعبة تفتح داخل الموقع بدون نقل لموقع خارجي.</p></div><div class="games-live-badge"><i></i> LIVE</div></section>'+
-  '<section class="games-create-card"><div class="games-create-head"><div><h3>إنشاء غرفة</h3><p>اختر اللعبة وعدد المقاعد ثم ابدأ.</p></div><button id="game-refresh" class="games-secondary">تحديث</button></div><div id="game-picker" class="games-picker"></div><div class="games-create-controls"><label>عدد اللاعبين <select id="game-max"></select></label><label class="games-bot-toggle"><input id="game-fill-bots" type="checkbox"> املأ المقاعد بالبوتات</label><button id="game-create" class="games-primary">إنشاء غرفة واللعب الآن</button></div><div id="game-create-status" class="games-status"></div></section>'+
-  '<section class="games-sessions-card"><div class="games-create-head"><div><h3>الغرف الحية</h3><p>ادخل إلى أي غرفة من داخل MLD.</p></div><span id="games-count" class="games-count"></span></div><div id="games-sessions" class="games-session-list"></div></section>';
-  function renderPicker(){ $("#game-picker").innerHTML=games.map(g=>'<button class="game-choice '+(g.id===selected.id?"selected ":"")+(g.ready?"":"disabled")+'" data-game="'+g.id+'"><span class="game-choice-icon">'+g.icon+'</span><span><b>'+esc(g.name)+'</b><small>'+esc(g.desc)+(g.ready?"":" · قريبًا")+'</small></span></button>').join(""); $("#game-picker").querySelectorAll(".game-choice").forEach(b=>b.onclick=()=>{const g=byId(b.dataset.game);if(!g.ready)return;selected=g;renderPicker();renderMax()})}
-  function renderMax(){ $("#game-max").innerHTML=Array.from({length:selected.max-1},(_,i)=>{const n=i+2;return '<option value="'+n+'" '+(n===selected.max?"selected":"")+'>'+n+' لاعبين</option>'}).join("") }
+  const savedName=()=>String(localStorage.getItem("mld-game-name")||"").trim().slice(0,8);
+  content.innerHTML=
+    '<section class="games-hero-card"><div><span class="games-kicker">MLD GAMES</span><h2>🎮 مجلس الألعاب</h2><p>غرف جماعية حقيقية داخل MLD — لا تحتاج حساب.</p></div><div class="games-live-badge"><i></i> LIVE</div></section>'+
+    '<section class="games-create-card"><div class="games-create-head"><div><h3>إنشاء غرفة</h3><p>اختر اللعبة وعدد اللاعبين ثم اكتب اسمك.</p></div><button id="game-catalog-open" class="games-secondary">قائمة الألعاب</button></div>'+
+    '<div class="games-create-controls"><label>اللعبة<select id="game-select"></select></label><label>عدد اللاعبين<select id="game-max"></select></label><button id="game-create" class="games-primary">إنشاء غرفة</button></div><div id="game-create-status" class="games-status"></div></section>'+
+    '<section class="games-sessions-card"><div class="games-create-head"><div><h3>الغرف المفتوحة</h3><p>الغرف التي تنتظر لاعبين تظهر هنا مباشرة.</p></div><button id="game-refresh" class="games-secondary">تحديث</button><span id="games-count" class="games-count"></span></div><div id="games-sessions" class="games-session-list"></div></section>'+
+    '<div id="games-catalog-modal" class="games-catalog-modal hidden"><div class="games-catalog-box"><div class="games-catalog-head"><div><span class="games-kicker">MLD GAMES</span><h3>قائمة الألعاب</h3><p>اضغط على لعبة لاختيارها، ثم تختفي القائمة.</p></div><button id="games-catalog-close" class="games-catalog-close">×</button></div><div id="games-catalog-grid" class="games-catalog-grid"></div></div></div>'+
+    '<div id="games-name-modal" class="games-catalog-modal hidden"><div class="games-name-box"><span class="games-kicker">PLAYER</span><h3>اسمك في اللعبة</h3><p>اكتب الاسم الذي سيظهر للاعبين.</p><input id="games-name-input" maxlength="8" placeholder="مثال: فهد"><button id="games-name-ok" class="games-primary">دخول اللعبة</button></div></div>';
+
+  function renderSelects(){
+    $("#game-select").innerHTML=games.filter(g=>!g.disabled).map(g=>'<option value="'+g.id+'">'+g.icon+' '+esc(g.name)+'</option>').join("");
+    $("#game-select").value=selected.id;
+    $("#game-max").innerHTML=Array.from({length:selected.max-1},(_,i)=>{const n=i+2;return '<option value="'+n+'" '+(n===selected.max?"selected":"")+'>'+n+' لاعبين</option>'}).join("");
+  }
+  function renderCatalog(){
+    $("#games-catalog-grid").innerHTML=games.map(g=>'<button class="games-catalog-item '+(g.disabled?"disabled":"")+'" data-catalog-game="'+g.id+'"><span>'+g.icon+'</span><b>'+esc(g.name)+'</b><small>'+esc(g.desc)+(g.disabled?" · قريبًا":" · "+g.max+" لاعبين")+'</small></button>').join("");
+    $("#games-catalog-grid").querySelectorAll("[data-catalog-game]").forEach(b=>b.onclick=()=>{
+      const g=byId(b.dataset.catalogGame); if(g.disabled)return;
+      selected=g; renderSelects(); $("#games-catalog-modal").classList.add("hidden");
+    });
+  }
+  function askName(action){
+    const modal=$("#games-name-modal"), input=$("#games-name-input");
+    input.value=savedName(); modal.classList.remove("hidden"); setTimeout(()=>input.focus(),50);
+    return new Promise(resolve=>{
+      const ok=()=>{const name=input.value.trim().slice(0,8);if(!name){input.focus();return}localStorage.setItem("mld-game-name",name);modal.classList.add("hidden");cleanup();resolve(name)};
+      const cleanup=()=>{ $("#games-name-ok").removeEventListener("click",ok); input.removeEventListener("keydown",key); };
+      const key=e=>{if(e.key==="Enter")ok()};
+      $("#games-name-ok").addEventListener("click",ok); input.addEventListener("keydown",key);
+    });
+  }
   function socket(){return new WebSocket((location.protocol==="https:"?"wss://":"ws://")+location.host)}
-  function save(msg){sessionStorage.setItem("roomId",msg.roomId);sessionStorage.setItem("playerIndex",String(msg.playerIndex??0));sessionStorage.setItem("game",msg.game);if(msg.resumeToken)sessionStorage.setItem("resumeToken",msg.resumeToken)}
-  function openGame(roomId,name){const old=document.querySelector(".mld-game-stage");if(old)old.remove();const s=document.createElement("section");s.className="mld-game-stage";s.innerHTML='<div class="mld-game-stage-head"><div><span>MLD LIVE ROOM</span><b>'+esc(name)+' · '+esc(roomId)+'</b></div><div class="mld-game-stage-actions"><button id="game-fullscreen">⛶ ملء الشاشة</button><button id="game-close">رجوع</button></div></div><div class="mld-game-frame-wrap"><iframe id="mld-game-frame" src="/mld-games/game.html" allow="fullscreen; autoplay; clipboard-write" title="MLD Game"></iframe></div></section>';content.prepend(s);$("#game-close").onclick=()=>s.remove();$("#game-fullscreen").onclick=async()=>{try{await s.querySelector(".mld-game-frame-wrap").requestFullscreen()}catch{const f=s.querySelector("iframe");if(f.requestFullscreen)f.requestFullscreen()}};s.scrollIntoView({behavior:"smooth",block:"start"})}
-  async function createRoom(){if(!mldUser){authView();return}const st=$("#game-create-status"),max=Number($("#game-max").value),fill=$("#game-fill-bots").checked;st.textContent="جاري إنشاء الغرفة...";const ws=socket();ws.onopen=()=>ws.send(JSON.stringify({type:"create_room",data:{game:selected.id,lang:"en"}}));ws.onerror=()=>st.textContent="تعذر الاتصال بمحرك الألعاب.";ws.onmessage=async e=>{let m;try{m=JSON.parse(e.data)}catch{return}if(m.type==="room_created"){save(m);await fetch("/api/games/sessions",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({gameId:selected.id+"::"+m.roomId,gameName:selected.name,maxPlayers:max})}).catch(()=>{});if(fill&&m.maxPlayers){const target=Math.min(max,m.maxPlayers);for(let n=(m.players||[]).length;n<target;n++)ws.send(JSON.stringify({type:"add_bot",data:{}}))}st.textContent="تم إنشاء "+m.roomId;setTimeout(()=>{ws.close();openGame(m.roomId,selected.name)},200);refreshSessions()}else if(m.type==="error")st.textContent=m.message||"تعذر إنشاء الغرفة."}}
-  async function joinRoom(s){if(!mldUser){authView();return}const roomId=String(s.game_id||"").split("::")[1]||s.code,ws=socket();ws.onopen=()=>ws.send(JSON.stringify({type:"join_room",data:{roomId,lang:"en"}}));ws.onerror=()=>alert("تعذر الاتصال بمحرك الألعاب");ws.onmessage=async e=>{let m;try{m=JSON.parse(e.data)}catch{return}if(m.type==="room_joined"){save(m);await fetch("/api/games/sessions/"+encodeURIComponent(s.code)+"/join",{method:"POST"}).catch(()=>{});ws.close();openGame(m.roomId,byId(m.game).name);refreshSessions()}else if(m.type==="error")alert(m.message||"تعذر الدخول")}}
-  async function refreshSessions(){try{sessions=(await fetch("/api/games/sessions?"+Date.now()).then(r=>r.json())).sessions||[]}catch{return}const live=sessions.filter(s=>s.status==="open"||s.status==="started");$("#games-count").textContent=live.length+" غرف";$("#games-sessions").innerHTML=live.length?live.map(s=>{const g=byId(String(s.game_id).split("::")[0]);return '<article class="game-session-row"><div class="game-session-icon">'+g.icon+'</div><div class="game-session-info"><b>'+esc(g.name)+'</b><span>الغرفة <strong>'+esc(s.code)+'</strong> · '+esc(s.owner_username)+'</span><small>'+s.players+' / '+s.max_players+' لاعبين</small></div><button class="games-primary games-join-btn" data-code="'+esc(s.code)+'">دخول</button></article>'}).join(""):'<div class="games-empty">لا توجد غرف مفتوحة الآن. أنشئ أول غرفة 👑</div>';$("#games-sessions").querySelectorAll(".games-join-btn").forEach(b=>b.onclick=()=>{const s=sessions.find(x=>x.code===b.dataset.code);if(s)joinRoom(s)})}
-  $("#game-create").onclick=createRoom;$("#game-refresh").onclick=refreshSessions;renderPicker();renderMax();await refreshSessions();setStatus("صالات الألعاب جاهزة");
+  function save(msg,name){sessionStorage.setItem("roomId",msg.roomId);sessionStorage.setItem("playerIndex",String(msg.playerIndex??0));sessionStorage.setItem("game",msg.game);if(msg.resumeToken)sessionStorage.setItem("resumeToken",msg.resumeToken);if(name)sessionStorage.setItem("mldGamePlayerName",name)}
+  function openGame(roomId,name,mode){
+    const old=document.querySelector(".mld-game-stage");if(old)old.remove();
+    const s=document.createElement("section");s.className="mld-game-stage";
+    s.innerHTML='<div class="mld-game-stage-head"><div><span>MLD LIVE ROOM</span><b>'+esc(name)+' · '+esc(roomId)+'</b></div><div class="mld-game-stage-actions"><button id="game-fullscreen">⛶ ملء الشاشة</button><button id="game-close">رجوع</button></div></div><div class="mld-game-frame-wrap"><iframe id="mld-game-frame" src="/mld-games/game.html" allow="fullscreen; autoplay; clipboard-write" title="MLD Game"></iframe></div>';
+    content.prepend(s);
+    $("#game-close").onclick=()=>s.remove();
+    $("#game-fullscreen").onclick=async()=>{try{await s.querySelector(".mld-game-frame-wrap").requestFullscreen()}catch{const f=s.querySelector("iframe");if(f.requestFullscreen)f.requestFullscreen()}};
+    s.querySelector("iframe").addEventListener("load",()=>{try{s.querySelector("iframe").contentWindow.postMessage({type:"mld_player_name",name:sessionStorage.getItem("mldGamePlayerName")||""},"*")}catch{}});
+    s.scrollIntoView({behavior:"smooth",block:"start"});
+  }
+  async function createRoom(){
+    const name=await askName("create"),st=$("#game-create-status"),max=Number($("#game-max").value);
+    st.textContent="جاري إنشاء الغرفة...";
+    const ws=socket();
+    ws.onopen=()=>ws.send(JSON.stringify({type:"create_room",data:{game:selected.id,lang:"en",name:name}}));
+    ws.onerror=()=>st.textContent="تعذر الاتصال بمحرك الألعاب.";
+    ws.onmessage=async e=>{let m;try{m=JSON.parse(e.data)}catch{return}
+      if(m.type==="room_created"){
+        save(m,name);
+        await fetch("/api/games/sessions",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({gameId:selected.id+"::"+m.roomId,gameName:selected.name,maxPlayers:max,playerName:name})}).catch(()=>{});
+        st.textContent="تم إنشاء الغرفة "+m.roomId; ws.close(); openGame(m.roomId,selected.name,"player"); refreshSessions();
+      }else if(m.type==="error")st.textContent=m.message||"تعذر إنشاء الغرفة.";
+    };
+  }
+  async function joinRoom(s){
+    const name=await askName("join"),roomId=String(s.game_id||"").split("::")[1]||s.code,ws=socket();
+    ws.onopen=()=>ws.send(JSON.stringify({type:"join_room",data:{roomId,lang:"en",name:name}}));
+    ws.onerror=()=>alert("تعذر الاتصال بمحرك الألعاب");
+    ws.onmessage=async e=>{let m;try{m=JSON.parse(e.data)}catch{return}
+      if(m.type==="room_joined"){save(m,name);await fetch("/api/games/sessions/"+encodeURIComponent(s.code)+"/join",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({playerName:name})}).catch(()=>{});ws.close();openGame(m.roomId,byId(m.game).name,"player");refreshSessions()}
+      else if(m.type==="error")alert(m.message||"تعذر الدخول");
+    };
+  }
+  async function refreshSessions(){
+    try{sessions=(await fetch("/api/games/sessions?"+Date.now()).then(r=>r.json())).sessions||[]}catch{return}
+    const live=sessions.filter(s=>s.status==="open"||s.status==="playing");
+    $("#games-count").textContent=live.length+" غرف";
+    $("#games-sessions").innerHTML=live.length?live.map(s=>{
+      const g=byId(String(s.game_id).split("::")[0]),started=s.status==="playing";
+      return '<article class="game-session-row"><div class="game-session-icon">'+g.icon+'</div><div class="game-session-info"><b>'+esc(g.name)+'</b><span>الغرفة <strong>'+esc(s.code)+'</strong> · '+esc(s.owner_username)+'</span><small>'+s.players+' / '+s.max_players+' لاعبين'+(started?" · بدأت":" · مفتوحة")+'</small></div><button class="games-primary games-join-btn" data-code="'+esc(s.code)+'">'+(started?"مشاهدة":"دخول")+'</button></article>'
+    }).join(""):'<div class="games-empty">لا توجد غرف مفتوحة الآن. أنشئ أول غرفة 👑</div>';
+    $("#games-sessions").querySelectorAll(".games-join-btn").forEach(b=>b.onclick=()=>{const s=sessions.find(x=>x.code===b.dataset.code);if(s)joinRoom(s)});
+  }
+  $("#game-select").onchange=()=>{selected=byId($("#game-select").value);renderSelects()};
+  $("#game-create").onclick=createRoom; $("#game-refresh").onclick=refreshSessions;
+  $("#game-catalog-open").onclick=()=>{renderCatalog();$("#games-catalog-modal").classList.remove("hidden")};
+  $("#games-catalog-close").onclick=()=>$("#games-catalog-modal").classList.add("hidden");
+  $("#games-catalog-modal").onclick=e=>{if(e.target.id==="games-catalog-modal")e.currentTarget.classList.add("hidden")};
+  renderSelects(); await refreshSessions(); setStatus("صالات الألعاب جاهزة");
 }
 async function ownerGameLogs(){
   await mldMe(); if(!mldUser||mldUser.role!=="owner")return authView();
