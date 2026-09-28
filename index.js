@@ -282,7 +282,7 @@ async function initAppDatabase() {
     ALTER TABLE app_users ADD COLUMN IF NOT EXISTS role VARCHAR(20) DEFAULT 'user';
     ALTER TABLE app_users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
     ALTER TABLE app_users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ; ALTER TABLE app_users ADD COLUMN IF NOT EXISTS banned BOOLEAN NOT NULL DEFAULT false;
-    CREATE TABLE IF NOT EXISTS password_resets (id BIGSERIAL PRIMARY KEY, username VARCHAR(32), discord_username VARCHAR(100), temp_password_hash TEXT, expires_at TIMESTAMPTZ, used_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()); CREATE TABLE IF NOT EXISTS registration_verifications (id BIGSERIAL PRIMARY KEY, username VARCHAR(32) NOT NULL, password_hash TEXT NOT NULL, discord_username VARCHAR(100) NOT NULL, discord_user_id VARCHAR(32) NOT NULL, code VARCHAR(12) NOT NULL, expires_at TIMESTAMPTZ NOT NULL, used_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), decision VARCHAR(12) NOT NULL DEFAULT 'pending'); ALTER TABLE registration_verifications ADD COLUMN IF NOT EXISTS decision VARCHAR(12) NOT NULL DEFAULT 'pending'; CREATE INDEX IF NOT EXISTS registration_verifications_lookup_idx ON registration_verifications(discord_user_id,created_at DESC);
+    CREATE TABLE IF NOT EXISTS password_resets (id BIGSERIAL PRIMARY KEY, username VARCHAR(32), discord_username VARCHAR(100), temp_password_hash TEXT, expires_at TIMESTAMPTZ, used_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()); CREATE TABLE IF NOT EXISTS registration_verifications (id BIGSERIAL PRIMARY KEY, username VARCHAR(32) NOT NULL, password_hash TEXT NOT NULL, discord_username VARCHAR(100) NOT NULL, discord_user_id VARCHAR(32) NOT NULL, code VARCHAR(12) NOT NULL, expires_at TIMESTAMPTZ NOT NULL, used_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), decision VARCHAR(12) NOT NULL DEFAULT 'pending', message_id VARCHAR(32)); ALTER TABLE registration_verifications ADD COLUMN IF NOT EXISTS decision VARCHAR(12) NOT NULL DEFAULT 'pending'; ALTER TABLE registration_verifications ADD COLUMN IF NOT EXISTS message_id VARCHAR(32); CREATE INDEX IF NOT EXISTS registration_verifications_lookup_idx ON registration_verifications(discord_user_id,created_at DESC);
     ALTER TABLE password_resets ADD COLUMN IF NOT EXISTS username VARCHAR(32);
     ALTER TABLE password_resets ADD COLUMN IF NOT EXISTS discord_username VARCHAR(100);
     ALTER TABLE password_resets ADD COLUMN IF NOT EXISTS temp_password_hash TEXT;
@@ -478,7 +478,7 @@ app.post("/api/auth/register",authLimiter,async(req,res)=>{
     const verificationId=pending.rows[0].id;
     const row=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("register_yes:"+verificationId).setLabel("نعم، هذا حسابي").setStyle(ButtonStyle.Success),new ButtonBuilder().setCustomId("register_no:"+verificationId).setLabel("لا، إلغاء").setStyle(ButtonStyle.Danger));
     try{
-      await member.send({embeds:[new EmbedBuilder().setTitle("تأكيد إنشاء حساب MLD").setDescription("تم العثور على حساب Discord **"+member.user.username+"**. هل تريد إنشاء حساب الموقع **"+username+"**؟\n\nاضغط «نعم» لإنشاء الحساب فورًا، أو «لا» لإلغاء الطلب.\n\nينتهي الطلب خلال 10 دقائق.").setColor("#ff9cdc").setTimestamp()],components:[row]});
+      const verificationMessage=await member.send({embeds:[new EmbedBuilder().setTitle("تأكيد إنشاء حساب MLD").setDescription("تم العثور على حساب Discord **"+member.user.username+"**. هل تريد إنشاء حساب الموقع **"+username+"**؟\n\nاضغط «نعم» لإنشاء الحساب فورًا، أو «لا» لإلغاء الطلب.\n\nينتهي الطلب خلال 10 دقائق.").setColor("#ff9cdc").setTimestamp()],components:[row]}); await pool.query("UPDATE registration_verifications SET message_id=$1 WHERE id=$2 AND used_at IS NULL AND decision='pending'",[verificationMessage.id,verificationId]);
     }catch(e){await pool.query("UPDATE registration_verifications SET used_at=NOW() WHERE id=$1 AND used_at IS NULL",[verificationId]);return res.status(400).json({error:"تعذر إرسال رسالة التأكيد في Discord. افتح الخاص مع الزاجل ثم حاول مرة أخرى."});}
     await audit({username,discordUsername:member.user.username},"register_pending","طلب إنشاء حساب بانتظار تأكيد زر Discord").catch(()=>{});
     res.json({ok:true,pending:true,message:"تم إرسال رسالة التأكيد إلى الخاص في Discord. اضغط «نعم» أو «لا» هناك."});
@@ -1393,8 +1393,8 @@ client.on("interactionCreate", async (interaction) => {
     await db.query("BEGIN");
 
     const q=await db.query(
-      "SELECT * FROM registration_verifications WHERE id=$1 AND discord_user_id=$2 AND used_at IS NULL AND decision='pending' AND expires_at>NOW() FOR UPDATE",
-      [id,interaction.user.id]
+      "SELECT * FROM registration_verifications WHERE id=$1 AND discord_user_id=$2 AND used_at IS NULL AND decision='pending' AND expires_at>NOW() AND (message_id IS NULL OR message_id=$3) FOR UPDATE",
+      [id,interaction.user.id,String(interaction.message?.id||"")]
     );
 
     if(!q.rowCount){
