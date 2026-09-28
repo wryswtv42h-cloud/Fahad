@@ -180,6 +180,26 @@ JAKAROO:"لكل لاعب 4 قطع و4 أوراق. استخدم A أو K لإخر
   window.enhancedGames=enhancedGames;
   window.openEnhancedGameSession=openSession;
   window.renderGames=enhancedGames;
+  // Game-room lifecycle: leaving the Games route must stop polling and hand the seat to a bot.
+  // This prevents a stale 1.2s renderer from forcing the user back into the game after navigation.
+  const originalRouteChange=window.change;
+  if(typeof originalRouteChange==="function" && !window.__mldGameRouteGuard){
+    window.__mldGameRouteGuard=true;
+    window.change=async function(route){
+      const leavingGame=!!activeId && route!=="games";
+      if(leavingGame){
+        const id=activeId, wasSpectator=spectator;
+        stop();
+        clearActive();
+        if(!wasSpectator){
+          try{await api("/api/games/"+id+"/leave",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload())});}catch(e){}
+        }
+        setImmersive(false);
+        document.body.style.overflow="";
+      }
+      return originalRouteChange(route);
+    };
+  }
   if(typeof renderGames==="function")renderGames=enhancedGames;
   window.addEventListener("pagehide",()=>{if(activeId&&!spectator){try{navigator.sendBeacon("/api/games/"+activeId+"/leave",new Blob([JSON.stringify(payload())],{type:"application/json"}))}catch{}}});
 })();
