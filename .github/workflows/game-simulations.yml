@@ -12,6 +12,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - run: node --check public/game-overrides.js
+      - run: node --check public/site.js
       - run: node tests/game-simulations.js
 
   browser-smoke:
