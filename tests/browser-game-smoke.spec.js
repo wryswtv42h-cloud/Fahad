@@ -9,7 +9,7 @@ const GAMES = [
   "QAWSAR","JAKAROO"
 ];
 
-test.describe.configure({ mode: "parallel" });
+test.describe.configure({ mode: "serial" });
 
 test("every game opens a real multiplayer room", async ({ page, request }) => {
   test.setTimeout(120000);
