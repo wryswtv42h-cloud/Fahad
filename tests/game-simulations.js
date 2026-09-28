@@ -7,7 +7,7 @@ const sizes={CODENAMES:4,SPYFALL:3,PICTIONARY:2,CHARADES:2,WHOAMI:2,TABOO:2,WORD
 let total=0;
 function check(game){
  const p=players(sizes[game]); const s=E.create(game,p); assert.equal(s.game,game); assert.equal(s.version,4);
- const pub=E.pub(s,p,p[0]); assert.ok(pub&&pub.private!==undefined); if(["UNO","BALOOT","JAKAROO"].includes(game)) assert.equal(pub.hand.length,p[0].hand?.length||4);
+ const pub=E.pub(s,p,p[0]); assert.ok(pub&&pub.private!==undefined); if(["UNO","BALOOT","JAKAROO"].includes(game)){const expected=game==="UNO"?7:game==="BALOOT"?5:4; assert.equal(pub.hand.length,expected);}
  for(let i=0;i<3;i++){E.bot(game,s,p); E.pub(s,p,p[0]);}
  total++;
 }
