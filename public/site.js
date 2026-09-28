@@ -109,7 +109,7 @@ async function renderGames(){
     ws.onopen=()=>ws.send(JSON.stringify({type:"join_room",data:{roomId,lang:"en",name:name}}));
     ws.onerror=()=>alert("تعذر الاتصال بمحرك الألعاب");
     ws.onmessage=async e=>{let m;try{m=JSON.parse(e.data)}catch{return}
-      if(m.type==="room_joined"){save(m,name,spectator);if(!spectator)await fetch("/api/games/sessions/"+encodeURIComponent(s.code)+"/join",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({playerName:name})}).catch(()=>{});ws.close();openGame(m.roomId,byId(m.game).name,spectator?"spectator":"player",s.code,spectator);refreshSessions()}
+      if(m.type==="room_joined"){save(m,name,spectator);if(!spectator)await fetch("/api/games/sessions/"+encodeURIComponent(s.code)+"/join",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({playerName:name})}).catch(()=>{});else await fetch("/api/games/sessions/"+encodeURIComponent(s.code)+"/spectate",{method:"POST",headers:{"Content-Type":"application/json"}}).catch(()=>{});ws.close();openGame(m.roomId,byId(m.game).name,spectator?"spectator":"player",s.code,spectator);refreshSessions()}
       else if(m.type==="error")alert(m.message||"تعذر الدخول");
     };
   }
