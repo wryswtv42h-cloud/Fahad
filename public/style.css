@@ -346,3 +346,9 @@ body.mld-booting #mld-welcome{opacity:1;visibility:visible}
 @media(max-width:560px){
   .mobile-menu{top:74px!important;max-height:calc(100dvh - 74px)!important}
 }
+
+/* Stable three-line mobile menu icon */
+#menu .menu-bars{width:22px;height:18px;display:flex;flex-direction:column;justify-content:space-between;align-items:stretch}
+#menu .menu-bars i{display:block;height:2px;border-radius:99px;background:currentColor;box-shadow:0 0 8px rgba(255,156,222,.28)}
+#menu .menu-close{display:block;font-size:30px;line-height:1;font-weight:300;transform:translateY(-1px)}
+#menu[aria-expanded="true"]{background:linear-gradient(145deg,#ff9cde22,#ffffff0c);border-color:#ff9cde66}
