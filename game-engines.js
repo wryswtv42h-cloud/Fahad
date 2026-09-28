@@ -273,7 +273,7 @@ if(game==="QAWSAR"){
    const mode=String(x.mode||"discard");
    if(mode==="swap"){
      if(!h[n])throw Error("ورقة غير صالحة");
-     h[n]=s.drawn;s.drawn=null;s.discarded=x.keepDiscard?x.keepDiscard:h[n];nextTurn();return s;
+     const replaced=h[n];h[n]=s.drawn;s.drawn=null;s.discarded=replaced;nextTurn();return s;
    }
    if(mode==="swapOpponent"){
      const oi=Number(x.player),on=Number(x.opponentIndex);
