@@ -264,3 +264,8 @@ body.mld-game-fullscreen .game-fullscreen-fab{z-index:2147483647!important}
 .game-room .hand-cards .playing-card{user-select:none;-webkit-user-select:none}.game-room .hand-cards{scrollbar-width:thin}.game-room .playing-card{transition:transform .16s ease,box-shadow .16s ease,border-color .16s ease}.game-room .playing-card:active{transform:translateY(-8px) scale(1.03)}.game-room .playing-card:disabled{opacity:.45;cursor:not-allowed}.game-room .turn-chip{box-shadow:inset 0 0 0 1px rgba(255,255,255,.04)}.game-room .room-status{min-height:24px}
 @media(max-width:700px){.qawsar-physical-board,.ludo-physical-board{min-height:210px;padding:15px;gap:12px}.q-targets{grid-template-columns:1fr}.qawsar-physical-board .playing-card{width:58px;height:84px}.ludo-physical-board .big-dice{font-size:60px}}
 @media(orientation:landscape) and (max-height:600px){.qawsar-physical-board,.ludo-physical-board{min-height:180px}.qawsar-physical-board .playing-card{width:55px;height:78px}}
+
+
+.uno-color-picker{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;padding:14px;border-radius:18px;background:rgba(10,12,20,.72);border:1px solid rgba(255,255,255,.1)}
+.uno-color-picker b{width:100%;text-align:center;font-size:14px}.uno-color-picker button{min-width:48px;min-height:44px;border-radius:14px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.08);font-size:20px}.uno-color-picker button[data-uno-cancel]{font-size:13px;padding:0 14px}
+@media(max-width:600px){.uno-color-picker{gap:7px}.uno-color-picker button{min-width:44px;min-height:42px}}
