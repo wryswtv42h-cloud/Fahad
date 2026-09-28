@@ -192,6 +192,7 @@ JAKAROO:"لكل لاعب 4 قطع و4 أوراق. استخدم A أو K لإخر
         if(box) box.textContent="الاتصال يتجدد تلقائيًا…";
         setTimeout(()=>{if(activeId===id)render()},900);
       }
+    };
     const act=async(action,extra={})=>{const body={...payload(),action,...extra};if(action==="clue"){body.word=$("#eg-clue")?.value.trim();body.number=Number($("#eg-clue-num")?.value)||1}if(action==="answer")body.answer=$("#eg-answer")?.value.trim()||"";try{await api("/api/games/"+id+"/action",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});sound(action==="playCard"?"card":"click");await render()}catch(e){const x=$(".game-board-status");if(x)x.textContent=e.message;sound("error")}};
     await render();timer=setInterval(render,1200);
   }
