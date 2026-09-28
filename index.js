@@ -875,7 +875,7 @@ const GAME_SEATS={
   QAWSAR:["مقعد 1","مقعد 2","مقعد 3","مقعد 4"],
   JAKAROO:["فريق A - 1","فريق A - 2","فريق B - 1","فريق B - 2"]
 };
-const GAME_MIN_PLAYERS={CODENAMES:4,SPYFALL:3,PICTIONARY:2,CHARADES:2,WHOAMI:2,TABOO:2,WORD_BOMB:2,TRUTH_LIE:2,EMOJI_GUESS:2,TRIVIA:2,CATEGORIES:2,LIAR:3,HOT_SEAT:2,WOULD_YOU_RATHER:2,DRAW_GUESS:2,FASTEST:2,RIDDLE_RUSH:2,SECRET_WORD:2,MIMIC:2,GUESS_PLAYER:3,UNO:2,LUDO:2,BALOOT:4,DAQSH:2,QAWSAR:2,JAKAROO:4};
+const READY_GAMES=new Set(["UNO","LUDO","BALOOT","JAKAROO","QAWSAR"]); const GAME_MIN_PLAYERS={UNO:2,LUDO:2,BALOOT:4,JAKAROO:4,QAWSAR:4};
 function makeDeck32(){const suits=["♠","♥","♦","♣"];const ranks=["7","8","9","10","J","Q","K","A"];const deck=suits.flatMap(s=>ranks.map(r=>({id:"baloot-"+s+"-"+r,color:s,suit:s,value:r,rank:r})));for(let i=deck.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[deck[i],deck[j]]=[deck[j],deck[i]];}return deck;}
 function makeUnoDeck(){const colors=["🔴","🟡","🟢","🔵"],deck=[];for(const color of colors){deck.push({id:color+"-0",color,value:"0"});for(const value of ["1","2","3","4","5","6","7","8","9","Skip","Reverse","+2"])deck.push({id:color+"-"+value+"-a",color,value},{id:color+"-"+value+"-b",color,value})}for(let i=0;i<4;i++)deck.push({id:"wild-"+i,color:"wild",value:"Wild"},{id:"wild4-"+i,color:"wild",value:"+4"});return shuffle(deck)}
 function initUnoState(players){const deck=makeUnoDeck(),hands=Array.from({length:players.length},()=>[]);for(let n=0;n<7;n++)for(let i=0;i<players.length;i++)hands[i].push(deck.pop());let discard=deck.pop();while(discard&&discard.color==="wild"){deck.unshift(discard);discard=deck.pop()}return {version:3,phase:"playing",round:1,hands,drawPile:deck,discardPile:[discard],discardTop:discard,currentColor:discard.color,direction:1,turnPlayerIndex:0,pendingDraw:0,winner:null,lastPlayed:discard,drawCount:deck.length}}
@@ -890,7 +890,7 @@ function playerKey(p){return p?.guestId?("g:"+p.guestId):("u:"+String(p?.usernam
 function actorFromRequest(players,u,guestId){const gid=String(guestId||"").trim();if(gid){const guest=players.find(p=>!p.bot&&p.guestId===gid);if(guest)return guest;}return u?players.find(p=>!p.bot&&p.username===u.username):null;}
 function seatOptions(game,max){
  const base=GAME_SEATS[game]||[];
- const hardCap=game==="CODENAMES"?16:game==="UNO"?12:game==="QAWSAR"?4:4; const n=Math.max(2,Math.min(Number(max)||4,hardCap));
+ const hardCap=game==="UNO"?12:game==="QAWSAR"?4:4; const n=Math.max(2,Math.min(Number(max)||4,hardCap));
  const out=base.slice(0,n);
  while(out.length<n)out.push("مقعد "+(out.length+1));
  return out;
@@ -961,17 +961,17 @@ async function activeGameFor(req){
   return null;
 }
 app.get("/api/games",async(req,res)=>{
-  const q=await pool.query("SELECT id,game,host_username,host_discord_username,max_players,players,status,created_at FROM game_lobbies WHERE status IN ('waiting','ready','playing') ORDER BY id DESC LIMIT 50");
+  const q=await pool.query("SELECT id,game,host_username,host_discord_username,max_players,players,status,created_at FROM game_lobbies WHERE game=ANY($1::text[]) AND status IN ('waiting','ready','playing') ORDER BY id DESC LIMIT 50",[[...READY_GAMES]]);
   res.set("Cache-Control","no-store");
   res.json({games:q.rows});
 });
 app.get("/api/games/:id",async(req,res)=>{
-  const q=await pool.query("SELECT id,game,host_username,host_discord_username,max_players,players,status,created_at FROM game_lobbies WHERE id=$1",[req.params.id]);
+  const q=await pool.query("SELECT id,game,host_username,host_discord_username,max_players,players,status,created_at FROM game_lobbies WHERE id=$1 AND game=ANY($2::text[])",[req.params.id,[...READY_GAMES]]);
   if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة"});
   res.json({game:q.rows[0]});
 });
 app.get("/api/games/:id/watch",async(req,res)=>{
-  const q=await pool.query("SELECT id,game,host_username,host_discord_username,max_players,players,status,created_at FROM game_lobbies WHERE id=$1 AND status IN ('waiting','ready','playing')",[req.params.id]);
+  const q=await pool.query("SELECT id,game,host_username,host_discord_username,max_players,players,status,created_at FROM game_lobbies WHERE id=$1 AND game=ANY($2::text[]) AND status IN ('waiting','ready','playing')",[req.params.id,[...READY_GAMES]]);
   if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة"});
   res.json({game:q.rows[0],spectator:true});
 });
