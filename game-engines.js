@@ -83,7 +83,7 @@ function create(game,p){if(game==="UNO")return uno(p);if(game==="LUDO")return lu
    qawsarCalledBy:null,qawsarRound:1,lastAction:null
  });
 }else if(game==="WOULD_YOU_RATHER"||game==="HOT_SEAT")Object.assign(s,{kind:"choice",prompt:"اختر",choices:["الخيار الأول","الخيار الثاني","الخيار الثالث"]});else if(game==="GUESS_PLAYER")Object.assign(s,{kind:"choice",prompt:"اختر اللاعب الغامض",choices:p.map(x=>x.username),target:Math.floor(Math.random()*p.length)});else if(game==="LIAR"||game==="TRUTH_LIE")Object.assign(s,{kind:"claim",prompt:"صاحب الدور يكتب ادعاء ثم يصوت الباقون",claimant:0,votes:0});return s}
-function priv(s,p,a){let i=p.findIndex(x=>k(x)===k(a)),o={};if(s.game==="SPYFALL"){let r=s.roles[i];o.spy=r.spy;o.location=r.spy?null:s.location;o.role=r.role}if(s.game==="CODENAMES")o.role=s.playerRoles[k(a)];if(["UNO","LUDO","BALOOT","QAWSAR","JAKAROO"].includes(s.game)){if(s.game==="UNO")o.hand=s.hands[i]||[];if(s.game==="LUDO")o.tokens=s.tokens[i]||[-1,-1,-1,-1];if(s.game==="BALOOT")o.hand=s.hands[i]||[];if(s.game==="JAKAROO"){o.hand=s.hands[i]||[];o.tokens=s.tokens[i]||[-1,-1,-1,-1];}
+function priv(s,p,a){let i=p.findIndex(x=>k(x)===k(a)),o={};if(s.game==="SPYFALL"){let r=s.roles[i];o.spy=r.spy;o.location=r.spy?null:s.location;o.role=r.role}if(s.game==="CODENAMES")o.role=s.playerRoles[k(a)];if(["UNO","LUDO","BALOOT","QAWSAR","JAKAROO"].includes(s.game)){if(s.game==="UNO")o.hand=s.hands[i]||[];if(s.game==="LUDO")o.tokens=s.tokens[i]||[-1,-1,-1,-1];if(s.game==="BALOOT")o.hand=s.hands[i]||[];if(s.game==="JAKAROO"){o.hand=s.hands[i]||[];o.tokens=s.tokens[i]||[-1,-1,-1,-1];o.pendingCard=s.pendingCard;o.moveOptions=s.moveOptions||[];o.playersTokens=s.tokens;}
  if(s.game==="QAWSAR"){
    o.hand=(s.hands[i]||[]).map((card,n)=>({card,revealed:!!s.revealed?.[i]?.[n]}));
    o.discarded=s.discarded||null;o.qawsarTurn=s.qawsarTurn;o.qawsarPhase=s.qawsarPhase;
@@ -163,7 +163,7 @@ if(game==="JAKAROO"){
     const card=hand[s.pendingCard],r=String(card.rank||"");
     if(r==="J"){
       const targetPlayer=Number(x.targetPlayer),targetToken=Number(x.targetToken);
-      if(!Number.isInteger(targetPlayer)||targetPlayer===i||!s.tokens[targetPlayer]?.[targetToken]===undefined)throw new Error("هدف التبديل غير صالح");
+      if(!Number.isInteger(targetPlayer)||targetPlayer===i||!s.tokens[targetPlayer]||!Number.isInteger(targetToken))throw new Error("هدف التبديل غير صالح");
       if(!s.tokens[targetPlayer]||s.tokens[targetPlayer][targetToken]<0)throw new Error("قطعة الخصم غير موجودة على المسار");
       [s.tokens[i][t],s.tokens[targetPlayer][targetToken]]=[s.tokens[targetPlayer][targetToken],s.tokens[i][t]];
     }else if(r==="7"&&Number.isInteger(x.splitSteps)){
@@ -186,7 +186,7 @@ if(game==="JAKAROO"){
     if(s.pendingCard==null)throw new Error("اختر ورقة أولًا");
     const card=hand[s.pendingCard];
     const targetPlayer=Number(x.targetPlayer),targetToken=Number(x.targetToken);
-    if(card.rank!=="J"||targetPlayer===i||!s.tokens[targetPlayer]?.[targetToken]===undefined||s.tokens[targetPlayer][targetToken]<0)throw new Error("تبديل غير صالح");
+    if(card.rank!=="J"||targetPlayer===i||!s.tokens[targetPlayer]||!Number.isInteger(targetToken)||s.tokens[targetPlayer][targetToken]<0)throw new Error("تبديل غير صالح");
     [s.tokens[i][Number(x.token)],s.tokens[targetPlayer][targetToken]]=[s.tokens[targetPlayer][targetToken],s.tokens[i][Number(x.token)]];
     hand.splice(s.pendingCard,1);s.discard=card;s.pendingCard=null;s.moveOptions=[];s.turnIndex=ni(s,p.length);return s;
   }
