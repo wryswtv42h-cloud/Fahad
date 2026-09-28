@@ -476,7 +476,7 @@ app.post("/api/auth/register",authLimiter,async(req,res)=>{
     await pool.query("UPDATE registration_verifications SET used_at=NOW(),decision='superseded' WHERE (username=$1 OR discord_user_id=$2) AND used_at IS NULL",[username,member.user.id]);
     const pending=await pool.query("INSERT INTO registration_verifications(username,password_hash,discord_username,discord_user_id,code,expires_at,decision) VALUES($1,$2,$3,$4,$5,NOW()+INTERVAL '10 minutes','pending') RETURNING id",[username,hash,member.user.username,member.user.id,code]);
     const verificationId=pending.rows[0].id;
-    const row=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("register_yes:"+verificationId).setLabel("نعم، هذا حسابي").setStyle(ButtonStyle.Success),new ButtonBuilder().setCustomId("register_no:"+verificationId).setLabel("لا، إلغاء").setStyle(ButtonStyle.Danger));
+    const row=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("register_v2_yes:"+verificationId).setLabel("نعم، هذا حسابي").setStyle(ButtonStyle.Success),new ButtonBuilder().setCustomId("register_v2_no:"+verificationId).setLabel("لا، إلغاء").setStyle(ButtonStyle.Danger));
     try{
       const verificationMessage=await member.send({embeds:[new EmbedBuilder().setTitle("تأكيد إنشاء حساب MLD").setDescription("تم العثور على حساب Discord **"+member.user.username+"**. هل تريد إنشاء حساب الموقع **"+username+"**؟\n\nاضغط «نعم» لإنشاء الحساب فورًا، أو «لا» لإلغاء الطلب.\n\nينتهي الطلب خلال 10 دقائق.").setColor("#ff9cdc").setTimestamp()],components:[row]}); await pool.query("UPDATE registration_verifications SET message_id=$1 WHERE id=$2 AND used_at IS NULL AND decision='pending'",[verificationMessage.id,verificationId]);
     }catch(e){await pool.query("UPDATE registration_verifications SET used_at=NOW() WHERE id=$1 AND used_at IS NULL",[verificationId]);return res.status(400).json({error:"تعذر إرسال رسالة التأكيد في Discord. افتح الخاص مع الزاجل ثم حاول مرة أخرى."});}
@@ -1372,7 +1372,7 @@ client.on("interactionCreate", async (interaction) => {
   if (!interaction.isButton()) return;
   const parts=String(interaction.customId||"").split(":");
   const action=parts[0], id=Number(parts[1]);
-  if(!["register_yes","register_no"].includes(action)) return;
+  if(!["register_v2_yes","register_v2_no"].includes(action)) return;
   if(!Number.isInteger(id)){
     return interaction.reply({content:"⚠️ طلب التسجيل غير صالح.",ephemeral:true}).catch(()=>{});
   }
@@ -1406,7 +1406,7 @@ client.on("interactionCreate", async (interaction) => {
     const v=q.rows[0];
 
     // NO is terminal and performs no app_users INSERT.
-    if(action==="register_no"){
+    if(action==="register_v2_no"){
       await db.query(
         "UPDATE registration_verifications SET used_at=NOW(),decision='cancelled' WHERE id=$1 AND used_at IS NULL AND decision='pending'",
         [id]
