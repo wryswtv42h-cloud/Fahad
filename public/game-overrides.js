@@ -181,8 +181,17 @@ JAKAROO:"لكل لاعب 4 قطع و4 أوراق. استخدم A أو K لإخر
         document.querySelectorAll("[data-jack-swap]").forEach(b=>b.onclick=()=>{const [targetPlayer,targetToken]=b.dataset.jackSwap.split(":").map(Number);const own=Number(document.querySelector("[data-jack-token].selected")?.dataset.jackToken||document.querySelector("[data-jack-token]")?.dataset.jackToken||0);act("swap",{token:own,targetPlayer,targetToken})});
         document.querySelectorAll("[data-eg-choice]").forEach(b=>b.onclick=()=>act("choose",{choice:Number(b.dataset.egChoice)}));
         document.querySelectorAll("[data-eg-guess]").forEach(b=>b.onclick=()=>act("guess",{index:Number(b.dataset.egGuess)}));
-      }catch(e){ if(e?.status===404||e?.status===410){clearActive();content.innerHTML=content.innerHTML="<section class='game-room'><h3>انتهت الجلسة</h3><p class='muted'>"+esc(e.message)+"</p><button class='primary' id='eg-dead-back'>العودة للألعاب</button></section>";$("#eg-dead-back").onclick=goList}
-    ;$("#eg-dead-back").onclick=goList;return;} const box=$(".game-board-status"); if(box) box.textContent="الاتصال يتجدد تلقائيًا…"; setTimeout(()=>{if(activeId===id)render()},900); }
+      }catch(e){
+        if(e?.status===404||e?.status===410){
+          clearActive();
+          content.innerHTML="<section class='game-room'><h3>انتهت الجلسة</h3><p class='muted'>"+esc(e.message)+"</p><button class='primary' id='eg-dead-back'>العودة للألعاب</button></section>";
+          $("#eg-dead-back").onclick=goList;
+          return;
+        }
+        const box=$(".game-board-status");
+        if(box) box.textContent="الاتصال يتجدد تلقائيًا…";
+        setTimeout(()=>{if(activeId===id)render()},900);
+      }
     const act=async(action,extra={})=>{const body={...payload(),action,...extra};if(action==="clue"){body.word=$("#eg-clue")?.value.trim();body.number=Number($("#eg-clue-num")?.value)||1}if(action==="answer")body.answer=$("#eg-answer")?.value.trim()||"";try{await api("/api/games/"+id+"/action",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});sound(action==="playCard"?"card":"click");await render()}catch(e){const x=$(".game-board-status");if(x)x.textContent=e.message;sound("error")}};
     await render();timer=setInterval(render,1200);
   }
