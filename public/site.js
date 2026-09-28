@@ -513,19 +513,22 @@ function rebuildMobileMenu(){
   const role=mldUser?.role||"";
   const isAdmin=role==="admin" || role==="owner";
   const isOwner=role==="owner";
-  const base=[
-    ["home","الرئيسية"],["members","الأعضاء"],["top","TOP"],["roles","الرتب القيادية"],
-    ["chat","الشات"],["profile","بروفايلي"],["message","الزاجل"],["anonymous","الفضفضة"],
-    ["games","الألعاب"],["groups","القروبات"],["account","حسابي"],["tickets","التذاكر"],
-    ["apply","التقديم"],["reviews","الآراء"]
-  ];
-  let html=base.map(x=>'<button type="button" data-view="'+x[0]+'">'+x[1]+'</button>').join("");
-  if(!mldUser) html+='<button type="button" data-view="login">تسجيل الدخول</button>';
-  if(mldUser) html+='<button type="button" data-view="logout">تسجيل الخروج</button>';
-  if(isAdmin) html+='<button type="button" data-view="admin"> الإدارة</button>';
-  if(isOwner) html+='<button type="button" data-view="owner"> لوحة الأونر</button><button type="button" data-view="broadcast"> برودكاست</button>';
+  const group=(title,items,open=false)=>'<div class="mobile-menu-group '+(open?"is-open":"")+'"><button type="button" class="mobile-menu-group-toggle" aria-expanded="'+(open?"true":"false")+'"><span>'+title+'</span><span class="mobile-menu-chevron">⌄</span></button><div class="mobile-menu-sub">'+items.map(x=>'<button type="button" data-view="'+x[0]+'">'+x[1]+'</button>').join("")+'</div></div>';
+  let html='';
+  html+='<button type="button" class="mobile-menu-main" data-view="home">الرئيسية</button>';
+  html+=group("المجتمع",[["members","الأعضاء"],["top","TOP"],["roles","الرتب القيادية"],["groups","القروبات"],["reviews","الآراء"]],true);
+  html+=group("التواصل",[["chat","الشات"],["message","الزاجل"],["anonymous","الفضفضة"],["tickets","التذاكر"]]);
+  html+=group("الألعاب",[["games","صالات الألعاب"]]);
+  html+=group("الحساب",[["profile","بروفايلي"],["account","حسابي"],["apply","التقديم"]]);
+  if(isAdmin) html+=group("الإدارة",[["admin","لوحة الإدارة"]]);
+  if(isOwner) html+=group("الأونر",[["owner","مركز الأونر"],["broadcast","برودكاست السيرفر"]]);
+  if(!mldUser) html+='<button type="button" class="mobile-menu-main" data-view="login">تسجيل الدخول</button>';
+  else html+='<button type="button" class="mobile-menu-main mobile-menu-logout" data-view="logout">تسجيل الخروج</button>';
   menu.innerHTML=html+'<a id="invite-mobile" class="invite" target="_blank">انضم للسيرفر</a>';
-  
+  menu.querySelectorAll(".mobile-menu-group-toggle").forEach(b=>b.onclick=()=>{
+    const group=b.closest(".mobile-menu-group"); if(!group)return;
+    const open=group.classList.toggle("is-open"); b.setAttribute("aria-expanded",open?"true":"false");
+  });
 }
 
 async function anonymousView(){
