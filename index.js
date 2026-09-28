@@ -281,7 +281,7 @@ async function initAppDatabase() {
     ALTER TABLE app_users ADD COLUMN IF NOT EXISTS role VARCHAR(20) DEFAULT 'user';
     ALTER TABLE app_users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
     ALTER TABLE app_users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ; ALTER TABLE app_users ADD COLUMN IF NOT EXISTS banned BOOLEAN NOT NULL DEFAULT false;
-    CREATE TABLE IF NOT EXISTS password_resets (id BIGSERIAL PRIMARY KEY, username VARCHAR(32), discord_username VARCHAR(100), temp_password_hash TEXT, expires_at TIMESTAMPTZ, used_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()); CREATE TABLE IF NOT EXISTS registration_verifications (id BIGSERIAL PRIMARY KEY, username VARCHAR(32) NOT NULL, password_hash TEXT NOT NULL, discord_username VARCHAR(100) NOT NULL, discord_user_id VARCHAR(32) NOT NULL, code VARCHAR(12) NOT NULL, expires_at TIMESTAMPTZ NOT NULL, used_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()); CREATE INDEX IF NOT EXISTS registration_verifications_lookup_idx ON registration_verifications(discord_user_id,created_at DESC);
+    CREATE TABLE IF NOT EXISTS password_resets (id BIGSERIAL PRIMARY KEY, username VARCHAR(32), discord_username VARCHAR(100), temp_password_hash TEXT, expires_at TIMESTAMPTZ, used_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()); CREATE TABLE IF NOT EXISTS registration_verifications (id BIGSERIAL PRIMARY KEY, username VARCHAR(32) NOT NULL, password_hash TEXT NOT NULL, discord_username VARCHAR(100) NOT NULL, discord_user_id VARCHAR(32) NOT NULL, code VARCHAR(12) NOT NULL, expires_at TIMESTAMPTZ NOT NULL, used_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), decision VARCHAR(12) NOT NULL DEFAULT 'pending'); ALTER TABLE registration_verifications ADD COLUMN IF NOT EXISTS decision VARCHAR(12) NOT NULL DEFAULT 'pending'; CREATE INDEX IF NOT EXISTS registration_verifications_lookup_idx ON registration_verifications(discord_user_id,created_at DESC);
     ALTER TABLE password_resets ADD COLUMN IF NOT EXISTS username VARCHAR(32);
     ALTER TABLE password_resets ADD COLUMN IF NOT EXISTS discord_username VARCHAR(100);
     ALTER TABLE password_resets ADD COLUMN IF NOT EXISTS temp_password_hash TEXT;
@@ -472,8 +472,8 @@ app.post("/api/auth/register",authLimiter,async(req,res)=>{
     if((await pool.query("SELECT id FROM app_users WHERE lower(trim(discord_username))=lower(trim($1))",[member.user.username])).rowCount) return res.status(409).json({error:"حساب موقع موجود مسبقًا لهذا Discord"});
     const hash=await bcrypt.hash(password,12);
     const crypto=require("crypto"),code=crypto.randomBytes(3).toString("hex").toUpperCase();
-    await pool.query("UPDATE registration_verifications SET used_at=NOW() WHERE (username=$1 OR discord_user_id=$2) AND used_at IS NULL",[username,member.user.id]);
-    const pending=await pool.query("INSERT INTO registration_verifications(username,password_hash,discord_username,discord_user_id,code,expires_at) VALUES($1,$2,$3,$4,$5,NOW()+INTERVAL '10 minutes') RETURNING id",[username,hash,member.user.username,member.user.id,code]);
+    await pool.query("UPDATE registration_verifications SET used_at=NOW(),decision='superseded' WHERE (username=$1 OR discord_user_id=$2) AND used_at IS NULL",[username,member.user.id]);
+    const pending=await pool.query("INSERT INTO registration_verifications(username,password_hash,discord_username,discord_user_id,code,expires_at,decision) VALUES($1,$2,$3,$4,$5,NOW()+INTERVAL '10 minutes','pending') RETURNING id",[username,hash,member.user.username,member.user.id,code]);
     const verificationId=pending.rows[0].id;
     const row=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("register_yes:"+verificationId).setLabel("نعم، هذا حسابي").setStyle(ButtonStyle.Success),new ButtonBuilder().setCustomId("register_no:"+verificationId).setLabel("لا، إلغاء").setStyle(ButtonStyle.Danger));
     try{
@@ -1374,7 +1374,7 @@ client.on("interactionCreate", async (interaction) => {
     let v=null;
     try{
       await db.query("BEGIN");
-      const q=await db.query("SELECT * FROM registration_verifications WHERE id=$1 AND discord_user_id=$2 AND used_at IS NULL AND expires_at>NOW() FOR UPDATE",[id,interaction.user.id]);
+      const q=await db.query("SELECT * FROM registration_verifications WHERE id=$1 AND discord_user_id=$2 AND used_at IS NULL AND decision='pending' AND expires_at>NOW() FOR UPDATE",[id,interaction.user.id]);
       if(!q.rowCount){
         await db.query("ROLLBACK");
         await interaction.message.edit({content:"⚠️ طلب التسجيل غير متاح: إما انتهت صلاحيته أو تم استخدامه سابقًا.",embeds:[],components:[]}).catch(()=>{});
@@ -1383,7 +1383,7 @@ client.on("interactionCreate", async (interaction) => {
       }
       v=q.rows[0];
       if(action==="register_no"){
-        await db.query("UPDATE registration_verifications SET used_at=NOW() WHERE id=$1 AND used_at IS NULL",[id]);
+        await db.query("UPDATE registration_verifications SET used_at=NOW(),decision='cancelled' WHERE id=$1 AND used_at IS NULL AND decision='pending'",[id]);
         await db.query("COMMIT");
         await interaction.message.edit({content:"❌ تم إلغاء إنشاء الحساب. لم يتم إنشاء أي حساب.",embeds:[],components:[]}).catch(()=>{});
         await interaction.followUp({content:"تم الإلغاء بنجاح. لا يوجد حساب تم إنشاؤه من هذا الطلب.",ephemeral:true}).catch(()=>{});
@@ -1392,7 +1392,7 @@ client.on("interactionCreate", async (interaction) => {
       }
       const exists=await db.query("SELECT id FROM app_users WHERE username=$1 OR lower(trim(discord_username))=lower(trim($2)) OR discord_user_id=$3",[v.username,v.discord_username,v.discord_user_id]);
       if(exists.rowCount){
-        await db.query("UPDATE registration_verifications SET used_at=NOW() WHERE id=$1 AND used_at IS NULL",[id]);
+        await db.query("UPDATE registration_verifications SET used_at=NOW(),decision='confirmed' WHERE id=$1 AND used_at IS NULL AND decision='pending'",[id]);
         await db.query("COMMIT");
         await interaction.message.edit({content:"⚠️ هذا الحساب أو Discord مرتبط بحساب موجود مسبقًا. لم يتم إنشاء حساب جديد.",embeds:[],components:[]}).catch(()=>{});
         await interaction.followUp({content:"لم يتم إنشاء حساب جديد لأن البيانات مرتبطة بحساب موجود.",ephemeral:true}).catch(()=>{});
@@ -1426,15 +1426,7 @@ async function handleRegistrationDM(message){
   const text=String(message.content||"").trim();
   const m=text.match(/^(?:تأكيد|confirm)\\s+([A-Z0-9]{6,12})$/i);
   if(!m) return false;
-  const code=m[1].toUpperCase();
-  const q=await pool.query("SELECT * FROM registration_verifications WHERE discord_user_id=$1 AND code=$2 AND used_at IS NULL AND expires_at>NOW() ORDER BY id DESC LIMIT 1",[message.author.id,code]);
-  if(!q.rowCount){await message.author.send("رمز التأكيد غير صحيح أو منتهي.");return true;}
-  const v=q.rows[0];
-  if((await pool.query("SELECT id FROM app_users WHERE username=$1",[v.username])).rowCount){await pool.query("UPDATE registration_verifications SET used_at=NOW() WHERE id=$1",[v.id]);await message.author.send("هذا الحساب موجود بالفعل.");return true;}
-  await pool.query("INSERT INTO app_users(username,password_hash,discord_username,discord_user_id,role) VALUES($1,$2,$3,$4,'user')",[v.username,v.password_hash,v.discord_username,v.discord_user_id]);
-  await pool.query("UPDATE registration_verifications SET used_at=NOW() WHERE id=$1",[v.id]);
-  await audit({username:v.username,discordUsername:v.discord_username},"register_confirmed","تم تأكيد إنشاء الحساب من Discord").catch(()=>{});
-  await message.author.send("تم تأكيد حسابك وإنشاؤه بنجاح. الآن تقدر تسجل الدخول من الموقع.");
+  await message.author.send("لأمان الحساب، إنشاء الحساب يتم فقط من زر «نعم، هذا حسابي» في رسالة التأكيد. لا يتم إنشاء أي حساب من خلال كتابة رمز في الخاص.");
   return true;
 }
 
