@@ -272,3 +272,15 @@ body.mld-game-fullscreen .game-fullscreen-fab{z-index:2147483647!important}
 
 /* READY-MADE GAME ARCADE */
 .ready-games-grid{align-items:stretch}.ready-game-card{min-height:230px;display:flex!important;flex-direction:column;gap:10px}.ready-game-card .ready-game-icon{font-size:42px;line-height:1}.ready-game-card .primary{margin-top:auto}.ready-game-modal{width:min(1100px,96vw)}.ready-game-modal-head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:12px}.ready-game-modal-head h2{margin:8px 0 0}.ready-game-frame{display:block;width:100%;height:min(78vh,760px);border:1px solid rgba(255,255,255,.12);border-radius:16px;background:#0f172a}@media(max-width:700px){.ready-game-frame{height:72vh}.ready-game-modal-head h2{font-size:20px}}
+
+
+/* MLD GAME BRANDING */
+.game-brand-card{position:relative;overflow:hidden;background:linear-gradient(145deg,rgba(255,255,255,.045),rgba(255,255,255,.018));border:1px solid rgba(255,255,255,.09)}
+.game-brand-card:before{content:"";position:absolute;inset:-60px auto auto -50px;width:150px;height:150px;border-radius:50%;background:rgba(255,156,220,.09);filter:blur(8px);pointer-events:none}
+.game-card-rights{font-size:11px;color:var(--muted,#9aa4b2);margin-top:auto;padding:8px 0;border-top:1px solid rgba(255,255,255,.07)}
+.branded-game-modal{width:min(1280px,97vw)!important}
+.game-rights-line{display:block;margin-top:6px;color:var(--muted,#9aa4b2);font-size:11px}
+.game-frame-wrap{position:relative}
+.game-watermark{position:absolute;top:12px;right:16px;z-index:3;padding:5px 9px;border-radius:999px;background:rgba(0,0,0,.62);border:1px solid rgba(255,255,255,.12);color:#fff;font-size:10px;font-weight:900;letter-spacing:1px;pointer-events:none;backdrop-filter:blur(8px)}
+.branded-game-modal .ready-game-frame{height:min(82vh,820px);border-radius:18px}
+@media(max-width:700px){.branded-game-modal .ready-game-frame{height:76vh}.game-watermark{top:8px;right:10px;font-size:9px}}
