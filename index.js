@@ -1036,7 +1036,7 @@ app.post("/api/games/:id/start",async(req,res)=>{
   if(!state.playerSecrets) state.playerSecrets={};
   if(state.version<4) players.forEach((p,i)=>{
     const key=playerKey(p);
-    if(g.game==="CODENAMES") state.playerRoles[key]=i===0?"red_spymaster":i===1?"red_agent":i===2?"blue_spymaster":"blue_agent";
+    if(g.game==="CODENAMES"){const label=String(p.seatLabel||"");state.playerRoles[key]=label.includes("قائد الأحمر")?"red_spymaster":label.includes("قائد الأزرق")?"blue_spymaster":label.includes("أحمر")?"red_agent":label.includes("أزرق")?"blue_agent":(i%2===0?"red_agent":"blue_agent");}
     else state.playerRoles[key]=(g.game==="BALOOT"||g.game==="UNO")?i:(p.seatLabel||("لاعب "+(i+1)));
   });
   if(g.game==="CODENAMES")state.turn="red";
