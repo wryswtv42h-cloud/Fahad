@@ -86,7 +86,7 @@ function create(game,p){if(game==="UNO")return uno(p);if(game==="LUDO")return lu
 function priv(s,p,a){let i=p.findIndex(x=>k(x)===k(a)),o={};if(s.game==="SPYFALL"){let r=s.roles?.[i];if(r){o.spy=!!r.spy;o.location=r.spy?null:s.location;o.role=r.role}}if(s.game==="CODENAMES")o.role=s.playerRoles[k(a)];if(["UNO","LUDO","BALOOT","QAWSAR","JAKAROO"].includes(s.game)){if(s.game==="UNO")o.hand=s.hands[i]||[];if(s.game==="LUDO")o.tokens=s.tokens[i]||[-1,-1,-1,-1];if(s.game==="BALOOT")o.hand=s.hands[i]||[];if(s.game==="JAKAROO"){o.hand=s.hands[i]||[];o.tokens=s.tokens[i]||[-1,-1,-1,-1];o.pendingCard=s.pendingCard;o.moveOptions=s.moveOptions||[];o.playersTokens=s.tokens;}
  if(s.game==="QAWSAR"){
    o.hand=(s.hands[i]||[]).map((card,n)=>({card,revealed:!!s.revealed?.[i]?.[n]}));
-   o.discarded=s.discarded||null;o.qawsarTurn=s.qawsarTurn;o.qawsarPhase=s.qawsarPhase;
+   o.discarded=s.discarded||null;o.drawn=s.drawn||null;o.qawsarTurn=s.qawsarTurn;o.qawsarPhase=s.qawsarPhase;
    o.scores=s.qawsarScores;o.zeros=s.qawsarZeros;o.out=s.qawsarOut;
  }
  }if(s.secret&&(s.turnIndex===i||["WHOAMI","SECRET_WORD"].includes(s.game)))o.secret=s.secret;if(s.taboo)o.taboo=s.taboo;return o}
@@ -297,7 +297,7 @@ if(game==="QAWSAR"){
    const r=h[n];
    if(r.rank==="8") reveal(i,Number(x.targetIndex));
    else if(r.rank==="9"&&["♠","♣"].includes(r.suit)) reveal(i,Number(x.targetIndex));
-   else if(r.rank==="9"&&r.suit==="♥") {
+   else if(r.rank==="9"&&["♥","♦"].includes(r.suit)) {
      const pi=Number(x.player),idx=Number(x.targetIndex);
      if(!s.hands[pi]||pi===i)throw Error("يمكن للـ9 الأحمر كشف ورقة من الخصم فقط");
      reveal(pi,idx);
