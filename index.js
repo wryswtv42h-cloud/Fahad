@@ -1223,12 +1223,10 @@ const server = app.listen(port, async () => {
 });
 
 server.on("upgrade",(req,socket,head)=>{
-  if(String(req.url||"").startsWith("/mld-games") || String(req.headers.referer||"").includes("/mld-games/game.html")){
-    const original=req.url||"/";
-    if(original.startsWith("/mld-games")) req.url=original.replace(/^\/mld-games/,"")||"/";
-    return mldGameProxy.ws(req,socket,head,{target:MLD_GAME_TARGET,changeOrigin:true,secure:true});
-  }
-  socket.destroy();
+  // MLD currently has no native WebSocket endpoint; GameNest owns the WS channel.
+  const original=req.url||"/";
+  if(original.startsWith("/mld-games")) req.url=original.replace(/^\/mld-games/,"")||"/";
+  return mldGameProxy.ws(req,socket,head,{target:MLD_GAME_TARGET,changeOrigin:true,secure:true});
 });
 async function gracefulShutdown(signal){
   console.log(`Shutting down: ${signal}`);
