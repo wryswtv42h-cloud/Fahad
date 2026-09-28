@@ -20,7 +20,25 @@ let activeId=null,timer=null,spectator=false;
 const stop=()=>{if(timer){clearInterval(timer);timer=null}};
 const list=()=>{stop();activeId=null;localStorage.removeItem("mld_active_game_id");document.body.classList.remove("mld-game-fullscreen");document.documentElement.classList.remove("mld-game-fullscreen");document.body.style.overflow="";return typeof window.change==="function"?window.change("games"):null};
 const tone=(f=520,d=.07,type="sine")=>{try{const C=AudioContext||webkitAudioContext,c=new C(),o=c.createOscillator(),g=c.createGain();o.type=type;o.frequency.value=f;g.gain.setValueAtTime(.025,c.currentTime);g.gain.exponentialRampToValueAtTime(.001,c.currentTime+d);o.connect(g);g.connect(c.destination);o.start();o.stop(c.currentTime+d)}catch{}};
-const fs=async()=>{const r=$(".game-room");if(!r)return;try{if(document.fullscreenElement){await document.exitFullscreen()}else if(r.requestFullscreen){await r.requestFullscreen({navigationUI:"hide"})}else{r.classList.toggle("fallback-fullscreen");document.body.classList.toggle("mld-game-fullscreen")}}catch{r.classList.toggle("fallback-fullscreen");document.body.classList.toggle("mld-game-fullscreen")}document.body.style.overflow=document.body.classList.contains("mld-game-fullscreen")?"hidden":""};
+const fs=async()=>{
+ const r=$(".game-room");if(!r)return;
+ const fallback=()=>{const on=!r.classList.contains("fallback-fullscreen");r.classList.toggle("fallback-fullscreen",on);document.body.classList.toggle("mld-game-fullscreen",on);document.documentElement.classList.toggle("mld-game-fullscreen",on);document.body.style.overflow=on?"hidden":"";const b=$("#eg-fullscreen"),f=$("#eg-fullscreen-fab");[b,f].forEach(x=>{if(x)x.innerHTML=on?"⤢ <span>خروج من ملء الشاشة</span>":"⛶ <span>ملء الشاشة</span>"})};
+ try{
+   if(document.fullscreenElement){await document.exitFullscreen();return}
+   if(r.requestFullscreen && document.fullscreenEnabled!==false){await r.requestFullscreen({navigationUI:"hide"});return}
+   fallback();
+ }catch{fallback()}
+};
+document.addEventListener("fullscreenchange",()=>{
+ const r=$(".game-room"),on=!!document.fullscreenElement;
+ if(!r)return;
+ r.classList.toggle("fallback-fullscreen",false);
+ document.body.classList.toggle("mld-game-fullscreen",on);
+ document.documentElement.classList.toggle("mld-game-fullscreen",on);
+ document.body.style.overflow=on?"hidden":"";
+ const b=$("#eg-fullscreen"),f=$("#eg-fullscreen-fab");
+ [b,f].forEach(x=>{if(x)x.innerHTML=on?"⤢ <span>خروج من ملء الشاشة</span>":"⛶ <span>ملء الشاشة</span>"});
+});
 const card=(c,back=false,extra="")=>{if(back)return "<div class='playing-card back'><i>MLD</i><b>✦</b></div>";c=c||{};const suit=esc(c.suit||"");const rank=esc(c.rank??c.value??"");const red=["♥","♦"].includes(c.suit)||c.color==="red";return "<button type='button' class='playing-card "+(red?"red ":"")+" "+extra+"'><span>"+suit+"</span><strong>"+rank+"</strong><small>"+suit+"</small></button>"};
 const seatName=(g,i)=>{if(g==="CODENAMES"){if(i===0)return"قائد الأحمر";if(i===1)return"قائد الأزرق";return i%2?"عميل أزرق "+Math.ceil((i-1)/2):"عميل أحمر "+Math.ceil((i-1)/2)}return"مقعد "+(i+1)};
 const renderSeats=(g,players,current,me)=>players.map((p,i)=>"<div class='player-seat p"+Math.min(i,5)+" "+(i===current?"turn ":"")+(i===me?"self ":"")+(p.bot?"bot":"")+"'><div class='seat-avatar'>"+(p.bot?"BOT":esc((p.username||"لاعب").slice(0,2)))+"</div><div><b>"+esc(i===me?"أنت":p.username||"لاعب")+"</b><small>"+esc(p.seatLabel||seatName(g,i))+(i===current?" · دورك الآن":"")+"</small></div></div>").join("");
