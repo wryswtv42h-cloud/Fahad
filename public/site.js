@@ -19,8 +19,29 @@ const welcome=document.getElementById("mld-welcome");if(welcome){const hideWelco
 refreshTimer=setInterval(()=>{if(!modal.classList.contains("hidden")||view==="message")return;refresh()},15000);
 
 // MLD Add-on: Games
-function renderGames(){searchWrap.style.display="none";title.textContent="مركز الألعاب";subtitle.textContent="ألعاب خفيفة تعمل مباشرة من الموقع.";content.className="feature-grid";content.innerHTML='<article class="feature-card"><div class="feature-icon"></div><h3>اضغط بسرعة</h3><p class="muted">اجمع أكبر عدد خلال 10 ثواني.</p><div class="game-score" id="click-score">0</div><button class="primary wide" id="click-start">ابدأ الجولة</button></article><article class="feature-card"><div class="feature-icon"></div><h3>رمي النرد</h3><div class="dice-result" id="dice-result"> </div><button class="primary wide" id="dice-roll">ارمِ النرد</button></article><article class="feature-card"><div class="feature-icon"></div><h3>عملة الحظ</h3><div class="dice-result" id="coin-result">—</div><button class="primary wide" id="coin-flip">اقلب العملة</button></article>';let score=0,end=0;$("#click-start").onclick=()=>{score=0;end=Date.now()+10000;$("#click-score").textContent="0";$("#click-start").textContent="اضغط الآن!";const t=setInterval(()=>{if(Date.now()>=end){clearInterval(t);$("#click-start").textContent="انتهت الجولة — "+score;setTimeout(()=>$("#click-start").textContent="ابدأ الجولة",1200)}},100)};content.onclick=e=>{if(e.target.id==="click-start"&&end>Date.now()){score++;$("#click-score").textContent=score}if(e.target.id==="dice-roll")$("#dice-result").textContent=(Math.floor(Math.random()*6)+1)+" + "+(Math.floor(Math.random()*6)+1);if(e.target.id==="coin-flip")$("#coin-result").textContent=Math.random()<.5?"وجه ":"كتابة "};setStatus("الألعاب جاهزة")}
-
+function renderGames(){
+ searchWrap.style.display="none";
+ title.textContent="مركز الألعاب";
+ subtitle.textContent="ألعاب جاهزة تعمل مباشرة داخل الموقع — بدون جلسات الألعاب القديمة.";
+ content.className="feature-grid ready-games-grid";
+ const games=[
+  ["2048","🔢","ألغاز دمج الأرقام وسجّل رقمك القياسي.","/games/2048.html"],
+  ["Snake","🐍","الثعبان الكلاسيكي مع تحكم بالجوال والكمبيوتر.","/games/snake.html"],
+  ["Tetris","🧱","رتّب القطع وامسح الصفوف وارفع المستوى.","/games/tetris.html"],
+  ["Sudoku","🧩","ثلاث درجات صعوبة مع فحص وحل.","/games/sudoku.html"],
+  ["Connect Four","🔴","أربع متتالية ضد الذكاء الاصطناعي أو لاعب ثانٍ.","/games/connect-four.html"],
+  ["Tic-Tac-Toe","❌","إكس أو ضد الذكاء الاصطناعي أو لاعبين.","/games/tic-tac-toe.html"]
+ ];
+ content.innerHTML=games.map(([name,icon,desc,path])=>"<article class='feature-card ready-game-card'><div class='ready-game-icon'>"+icon+"</div><span class='pill'>لعبة جاهزة</span><h3>"+esc(name)+"</h3><p class='muted'>"+esc(desc)+"</p><button class='primary wide' data-ready-game='"+esc(path)+"'>🎮 العب الآن</button></article>").join("");
+ document.querySelectorAll("[data-ready-game]").forEach(btn=>btn.onclick=()=>openReadyGame(btn.dataset.readyGame));
+ setStatus("الألعاب جاهزة");
+}
+function openReadyGame(path){
+ const name=path.split("/").pop().replace(".html","");
+ modal.classList.remove("hidden");
+ modalContent.innerHTML="<div class='ready-game-modal'><div class='ready-game-modal-head'><div><span class='pill'>🎮 لعبة جاهزة</span><h2>"+esc(name)+"</h2></div><button class='ghost' id='ready-game-close'>إغلاق</button></div><iframe class='ready-game-frame' src='"+esc(path)+"' title='"+esc(name)+"' loading='eager' allow='fullscreen'></iframe></div>";
+ $("#ready-game-close").onclick=()=>modal.classList.add("hidden");
+}
 // MLD Add-on: Groups
 async function renderGroups(){
  await mldMe();searchWrap.style.display="none";title.textContent="القروبات";subtitle.textContent="قروبات المجتمع — الانضمام والطلبات مرتبطة بالسيرفر.";content.className="feature-grid";
