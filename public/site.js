@@ -19,34 +19,59 @@ const welcome=document.getElementById("mld-welcome");if(welcome){const hideWelco
 refreshTimer=setInterval(()=>{if(!modal.classList.contains("hidden")||view==="message")return;refresh()},15000);
 
 // MLD Add-on: Games
-function renderGames(){
- searchWrap.style.display="none";
- title.textContent="مركز الألعاب";
- subtitle.textContent="ألعاب جماعية جاهزة داخل الموقع — غرف، لعب جماعي لحظي، وبوتات تكمل المقاعد عند الحاجة.";
- content.className="feature-grid ready-games-grid";
- const games=[
-  ["GameNest Arcade","🎮","قاعة الألعاب الجماعية: غرف خاصة، كود دخول، مقاعد وبوتات، وأكثر من 30 لعبة جاهزة.","https://mld-gamenest-production.up.railway.app/"],
-  ["ألعاب فردية سريعة","⚡","2048 وSnake وTetris وSudoku — ألعاب خفيفة داخل الموقع.","/games/2048.html"]
- ];
- content.innerHTML=games.map(([name,icon,desc,path],i)=>"<article class='feature-card ready-game-card game-brand-card'>"+
-   "<div class='ready-game-icon'>"+icon+"</div><span class='pill'>"+(i===0?"MLD × GameNest":"MLD Arcade")+"</span>"+
-   "<h3>"+esc(name)+"</h3><p class='muted'>"+esc(desc)+"</p>"+
-   "<div class='game-card-rights'>© MLD Community · الألعاب مدمجة داخل مركز الألعاب</div>"+
-   "<button class='primary wide' data-ready-game='"+esc(path)+"'>🎮 افتح داخل الموقع</button></article>").join("");
- document.querySelectorAll("[data-ready-game]").forEach(btn=>btn.onclick=()=>openReadyGame(btn.dataset.readyGame));
- setStatus("مركز الألعاب الجماعية جاهز");
+async function renderGames(){
+  searchWrap.style.display="none";
+  title.textContent="صالات الألعاب";
+  subtitle.textContent="أنشئ جلسة، اختر اللعبة، وخَلّ الأعضاء يشوفون الجلسات ويدخلون أو يتفرجون. كل نشاط الألعاب يسجل في لوق الأونر.";
+  content.className="games-hub";
+  await mldMe();
+  const games=[
+    {id:"uno",name:"UNO",icon:"🃏",desc:"لعبة الورق الجماعية السريعة.",max:6,ready:true},
+    {id:"monopoly",name:"مونوبولي / أونوك",icon:"🎲",desc:"طاولة تجارة وشراء وتنافس جماعي.",max:6,ready:true},
+    {id:"flightchess",name:"لودو / طاولة سباق",icon:"🎯",desc:"طاولة خفيفة للجلسات الجماعية.",max:4,ready:true},
+    {id:"hearts",name:"قلوب",icon:"♥️",desc:"أربع لاعبين وذكاء في الورق.",max:4,ready:true},
+    {id:"rummikub",name:"رومي",icon:"🀄",desc:"ترتيب وتجميع القطع مع الأصدقاء.",max:4,ready:true},
+    {id:"liarsbar",name:"لعبة خداع",icon:"♣️",desc:"بلوف وتحديات اجتماعية.",max:6,ready:true},
+    {id:"baloot",name:"بلوت",icon:"🃏",desc:"نظام بلوت سعودي كامل بجلسات خاصة ومشاهدين — نضيف محرك البلوت المخصص هنا.",max:4,ready:false},
+    {id:"jackaroo",name:"جاكارو",icon:"🔴",desc:"طاولة جاكارو جماعية مع بوتات.",max:4,ready:false},
+    {id:"ludo",name:"لودو",icon:"🎲",desc:"لودو 2–4 لاعبين مع بوتات.",max:4,ready:false}
+  ];
+  let sessions=[];
+  try{sessions=(await fetch("/api/games/sessions?"+Date.now()).then(r=>r.json())).sessions||[]}catch{}
+  const gameMap=Object.fromEntries(games.map(g=>[g.id,g]));
+  content.innerHTML=`
+    <section class="games-hero-card">
+      <div><span class="pill">MLD GAMES</span><h2>مجلس الألعاب الجماعية</h2><p>الغرف، الأكواد، اللاعبين، المشاهدين والبوتات — كلها من مركز الألعاب.</p></div>
+      <div class="games-hero-badge">🎮 داخل MLD</div>
+    </section>
+    <section class="games-create-card">
+      <div class="section-heading"><div><h3>إنشاء جلسة</h3><p class="muted">اختر اللعبة وحدد عدد المقاعد ثم أنشئ الجلسة.</p></div></div>
+      <div class="games-picker">${games.map(g=>`<button class="game-choice ${g.ready?"":"is-soon"}" data-game-choice="${g.id}" ${g.ready?"":"disabled"}><span>${g.icon}</span><b>${esc(g.name)}</b><small>${esc(g.ready?g.max+" لاعبين":"قريبًا")}</small></button>`).join("")}</div>
+      <div class="games-create-row"><select id="game-max" class="full"><option value="2">2 لاعبين</option><option value="4" selected>4 لاعبين</option><option value="6">6 لاعبين</option><option value="8">8 لاعبين</option><option value="10">10 لاعبين</option></select><button id="game-create" class="primary">إنشاء الجلسة</button><span id="game-create-status" class="muted"></span></div>
+    </section>
+    <section class="games-sessions-card"><div class="section-heading"><div><h3>الجلسات المفتوحة</h3><p class="muted">الجلسة تظهر هنا للكل حتى تبدأ أو تمتلئ.</p></div><button id="games-refresh" class="ghost">تحديث</button></div><div id="games-session-list" class="games-session-list"></div></section>
+    <section class="games-catalog-card"><div class="section-heading"><div><h3>الألعاب</h3><p class="muted">المتاح الآن يفتح داخل مركز MLD، والألعاب الجديدة تُضاف بنفس النظام.</p></div></div><div class="games-catalog-grid">${games.map(g=>`<article class="game-catalog-mini ${g.ready?"":"is-soon"}"><span>${g.icon}</span><div><b>${esc(g.name)}</b><small>${esc(g.desc)}</small></div><em>${g.ready?"متاحة":"قريبًا"}</em></article>`).join("")}</div></section>`;
+  let selected=games.find(g=>g.ready)?.id||"uno";
+  const renderSessions=()=>{
+    const list=$("#games-session-list"); if(!list)return;
+    if(!sessions.length){list.innerHTML="<div class='games-empty'>🎮 ما فيه جلسات مفتوحة الآن — كن أول واحد ينشئ جلسة.</div>";return}
+    list.innerHTML=sessions.map(s=>{const g=gameMap[s.game_id]||{icon:"🎮",name:s.game_name,max:s.max_players};const own=mldUser&&s.owner_username===mldUser.username;return `<article class="game-session-row"><span class="game-session-icon">${g.icon}</span><div class="game-session-main"><b>${esc(s.game_name)}</b><small>بواسطة @${esc(s.owner_username)} · ${num(s.players)}/${num(s.max_players)} لاعبين · ${num(s.spectators)} مشاهد</small></div><code>${esc(s.code)}</code><div class="game-session-actions"><button class="primary game-join" data-code="${esc(s.code)}">${own?"🎮 افتح":"انضم"}</button><button class="ghost game-watch" data-code="${esc(s.code)}">👁 مشاهدة</button></div></article>`}).join("");
+    list.querySelectorAll(".game-join").forEach(btn=>btn.onclick=async()=>{const code=btn.dataset.code;const s=sessions.find(x=>x.code===code);if(s){if(!(mldUser&&s.owner_username===mldUser.username)){const r=await fetch("/api/games/sessions/"+encodeURIComponent(code)+"/join",{method:"POST"});if(!r.ok){const d=await r.json().catch(()=>({}));return alert(d.error||"تعذر الانضمام")} } openReadyGame("https://mld-gamenest-production.up.railway.app/");}});
+    list.querySelectorAll(".game-watch").forEach(btn=>btn.onclick=()=>openReadyGame("https://mld-gamenest-production.up.railway.app/"));
+  };
+  document.querySelectorAll("[data-game-choice]").forEach(x=>x.onclick=()=>{selected=x.dataset.game;document.querySelectorAll("[data-game-choice]").forEach(y=>y.classList.toggle("selected",y.dataset.game===selected));});
+  const create=$("#game-create"); if(create)create.onclick=async()=>{await mldMe();if(!mldUser)return authView();const g=gameMap[selected];const max=Math.min(g.max,Number($("#game-max").value)||4);const r=await fetch("/api/games/sessions",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({gameId:g.id,gameName:g.name,maxPlayers:max})});const d=await r.json();$("#game-create-status").textContent=r.ok?"تم إنشاء الجلسة — الكود "+d.session.code:(d.error||"تعذر إنشاء الجلسة");if(r.ok){sessions=[d.session,...sessions];renderSessions();setTimeout(()=>openReadyGame("https://mld-gamenest-production.up.railway.app/"),250)}};
+  $("#games-refresh").onclick=async()=>{sessions=(await fetch("/api/games/sessions?"+Date.now()).then(r=>r.json())).sessions||[];renderSessions()}; 
+  renderSessions();setStatus("صالات الألعاب جاهزة");
 }
-function openReadyGame(path){
- const isGameNest=path.includes("mld-gamenest-production.up.railway.app");
- const name=isGameNest?"MLD GameNest":"MLD Arcade";
- modal.classList.remove("hidden");
- box.innerHTML="<div class='ready-game-modal branded-game-modal'>"+
-   "<div class='ready-game-modal-head'><div><span class='pill'>🎮 MLD GAMES</span><h2>"+esc(name)+"</h2><small class='game-rights-line'>© MLD Community · powered by open-source game software</small></div>"+
-   "<button class='ghost' id='ready-game-close'>إغلاق</button></div>"+
-   "<div class='game-frame-wrap'><div class='game-watermark'>MLD</div><iframe class='ready-game-frame' src='"+esc(path)+"' title='"+esc(name)+"' loading='eager' allow='fullscreen; autoplay'></iframe></div></div>";
- $("#ready-game-close").onclick=closeModal;
+async function ownerGameLogs(){
+  await mldMe(); if(!mldUser||mldUser.role!=="owner")return authView();
+  title.textContent="لوق الألعاب";subtitle.textContent="سجل إنشاء الجلسات والانضمام والبدء والإنهاء.";
+  searchWrap.style.display="none";content.className="feature-grid";
+  const d=await fetch("/api/owner/logs/games").then(r=>r.json()).catch(()=>({logs:[]}));
+  content.innerHTML="<section class='feature-card'><h3>🎮 لوق الألعاب</h3><div class='owner-log-list'>"+(d.logs||[]).map(x=>"<article class='owner-log-row'><b>"+esc(x.action)+"</b><span>"+esc(x.username||"-")+" · "+esc(x.details||"")+"</span><small>"+new Date(x.created_at).toLocaleString("ar-SA")+"</small></article>").join("")||"<p class='muted'>لا يوجد نشاط ألعاب بعد.</p>"+"</div></section>";
+  setStatus("لوق الألعاب جاهز");
 }
-
 function mldNavButton(view,label,extra=""){
   return '<button type="button" data-view="'+view+'" data-admin-nav="1" '+extra+'>'+label+'</button>';
 }
@@ -60,7 +85,7 @@ function rebuildMobileMenu(){
   html+='<button type="button" class="mobile-menu-main" data-view="home">الرئيسية</button>';
   html+=group("المجتمع",[["members","الأعضاء"],["top","TOP"],["roles","الرتب القيادية"],["groups","القروبات"],["reviews","الآراء"]],true);
   html+=group("التواصل",[["chat","الشات"],["message","الزاجل"],["anonymous","الفضفضة"],["tickets","التذاكر"]]);
-  html+=group("الألعاب",[["games","صالات الألعاب"]]);
+  html+=group("الألعاب",[["games","صالات الألعاب"],["game-logs","لوق الألعاب"]]);
   html+=group("الحساب",[["profile","بروفايلي"],["account","حسابي"],["apply","التقديم"]]);
   if(isAdmin) html+=group("الإدارة",[["admin","لوحة الإدارة"]]);
   if(isOwner) html+=group("الأونر",[["owner","مركز الأونر"],["broadcast","برودكاست السيرفر"]]);
@@ -100,6 +125,7 @@ window.change=async function(v){
     if(v==="message"){await messageView();return}
     if(v==="anonymous"){await anonymousView();return}
     if(v==="games"){await renderGames();return}
+    if(v==="game-logs"){await ownerGameLogs();return}
     if(v==="groups"){await groupsReal();return}
     if(v==="account"){await mldMe();if(!mldUser)return authView();await renderAccount();return}
     if(v==="tickets"){await mldMe();await ticketView();return}
