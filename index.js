@@ -10,6 +10,7 @@ const pgSession = require("connect-pg-simple")(session);
 const { Pool } = require("pg");
 const helmet = require("helmet");
 const compression = require("compression");
+const httpProxy = require("http-proxy");
 // game host cleanup hardening v2
 
 const token = process.env.DISCORD_BOT_TOKEN;
@@ -98,6 +99,19 @@ setInterval(()=>{
 const authLimiter=rateLimit(10*60*1000,30,req=>"auth:"+req.ip);
 const resetLimiter=rateLimit(15*60*1000,5,req=>"reset:"+req.ip);
 const writeLimiter=rateLimit(60*1000,90,req=>"write:"+((req.session&&req.session.user?.username)||req.ip));
+
+
+const MLD_GAME_TARGET = process.env.MLD_GAME_TARGET || "https://mld-gamenest-production.up.railway.app";
+const mldGameProxy = httpProxy.createProxyServer({target:MLD_GAME_TARGET,changeOrigin:true,secure:true,ws:true});
+mldGameProxy.on("error",(err,req,res)=>{console.error("MLD game proxy:",err.message);if(res&&!res.headersSent)res.statusCode=502;try{if(res&&!res.writableEnded)res.end("Game service unavailable")}catch{}});
+mldGameProxy.on("proxyRes",(proxyRes)=>{delete proxyRes.headers["x-frame-options"];delete proxyRes.headers["content-security-policy"];});
+function proxyGame(req,res){mldGameProxy.web(req,res,{target:MLD_GAME_TARGET,changeOrigin:true,secure:true});}
+function isGameAssetRequest(req){const ref=String(req.headers.referer||"");return /\/mld-games\/game\.html(?:[?#]|$)/.test(ref);}
+app.use("/mld-games",(req,res)=>proxyGame(req,res));
+app.use((req,res,next)=>{
+  if(isGameAssetRequest(req) && (/^\/(?:style\.css|js\/|assets\/|api\/room-exists\/)/.test(req.url))) return proxyGame(req,res);
+  next();
+});
 
 app.get("/health",(req,res)=>{
   res.status(200).json({ok:true,service:"mld",version:"hardening-6",botReady:client.isReady(),membersCached:Boolean(memberSnapshot)});
@@ -448,12 +462,8 @@ async function ensureOwner(){
 
 app.get("/api/support",async(req,res)=>{try{const g=await getGuild();const wanted=String(process.env.OWNER_DISCORD_USERNAME||process.env.OWNER_USERNAME||"w4px").trim().toLowerCase();let member=null;const members=await getAllMembers(g);for(const m of members){const names=[m.user?.username,m.user?.globalName,m.displayName].filter(Boolean).map(x=>String(x).toLowerCase());if(names.includes(wanted)||names.some(x=>x.split("#")[0]===wanted)){member=m;break;}}const id=member?.user?.id||null;res.json({ok:!!id,username:wanted,url:id?"https://discord.com/users/"+id:null});}catch(e){res.json({ok:false,username:String(process.env.OWNER_DISCORD_USERNAME||process.env.OWNER_USERNAME||"w4px").trim().toLowerCase(),url:null})}});
 app.get("/api/games/sessions",async(req,res)=>{try{const q=await pool.query("SELECT id,code,game_id,game_name,owner_username,status,max_players,players,spectators,created_at,started_at FROM game_sessions WHERE status IN ('open','playing') ORDER BY created_at DESC LIMIT 100");res.json({sessions:q.rows});}catch(e){res.status(500).json({error:"تعذر تحميل جلسات الألعاب"});}});
-app.post("/api/games/sessions",requireAuth,writeLimiter,async(req,res)=>{try{const gameId=String(req.body?.gameId||"").trim().slice(0,60),gameName=String(req.body?.gameName||gameId).trim().slice(0,120),maxPlayers=Math.max(2,Math.min(10,Number(req.body?.maxPlayers)||4));if(!gameId||!gameName)return res.status(400).json({error:"اختر لعبة أولًا"});let code="";for(let i=0;i<12;i++){code=Math.random().toString(36).slice(2,8).toUpperCase();const x=await pool.query("SELECT 1 FROM game_sessions WHERE code=$1",[code]);if(!x.rowCount)break}const q=await pool.query("INSERT INTO game_sessions(code,game_id,game_name,owner_username,max_players,players) VALUES($1,$2,$3,$4,$5,1) RETURNING *",[code,gameId,gameName,req.session.user.username,maxPlayers]);await audit(req.session.user,"game_session_create",gameName+" · "+code);res.json({ok:true,session:q.rows[0]});}catch(e){console.error("Game session create:",e);res.status(500).json({error:"تعذر إنشاء جلسة اللعبة"});}});
-app.post("/api/games/sessions/:code/join",requireAuth,writeLimiter,async(req,res)=>{try{const code=String(req.params.code||"").toUpperCase();const q=await pool.query("SELECT * FROM game_sessions WHERE code=$1 AND status='open' FOR UPDATE",[code]);if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة أو بدأت"});const s=q.rows[0];if(Number(s.players)>=Number(s.max_players))return res.status(409).json({error:"الجلسة مكتملة"});const u=req.session.user;await pool.query("UPDATE game_sessions SET players=players+1 WHERE code=$1",[code]);await audit(u,"game_session_join",s.game_name+" · "+code);res.json({ok:true,session:{...s,players:Number(s.players)+1}});}catch(e){res.status(500).json({error:"تعذر الانضمام للجلسة"});}});
-app.post("/api/games/sessions/:code/start",requireAuth,async(req,res)=>{try{const code=String(req.params.code||"").toUpperCase(),u=req.session.user;const q=await pool.query("SELECT * FROM game_sessions WHERE code=$1",[code]);if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة"});const s=q.rows[0];if(s.owner_username!==u.username)return res.status(403).json({error:"صاحب الجلسة فقط يقدر يبدأ"});await pool.query("UPDATE game_sessions SET status='playing',started_at=NOW() WHERE code=$1",[code]);await audit(u,"game_session_start",s.game_name+" · "+code);res.json({ok:true});}catch(e){res.status(500).json({error:"تعذر بدء الجلسة"});}});
-app.post("/api/games/sessions/:code/end",requireAuth,async(req,res)=>{try{const code=String(req.params.code||"").toUpperCase(),u=req.session.user;const q=await pool.query("SELECT * FROM game_sessions WHERE code=$1",[code]);if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة"});if(q.rows[0].owner_username!==u.username&&u.role!=="owner")return res.status(403).json({error:"غير مصرح"});await pool.query("UPDATE game_sessions SET status='ended',ended_at=NOW() WHERE code=$1",[code]);await audit(u,"game_session_end",q.rows[0].game_name+" · "+code);res.json({ok:true});}catch(e){res.status(500).json({error:"تعذر إنهاء الجلسة"});}});
-app.get("/api/owner/logs/games",requireOwner,async(req,res)=>{try{const q=await pool.query("SELECT id,username,discord_username,action,details,created_at FROM audit_logs WHERE action LIKE 'game_session_%' ORDER BY created_at DESC LIMIT 500");res.json({logs:q.rows});}catch(e){res.status(500).json({error:"تعذر تحميل لوق الألعاب"});}});
-app.get("/api/games/top",async(req,res)=>{try{const q=await pool.query("SELECT owner_username username,COUNT(*)::int sessions FROM game_sessions WHERE status='ended' GROUP BY owner_username ORDER BY sessions DESC LIMIT 20");res.json({gameTop:q.rows});}catch(e){res.status(500).json({gameTop:[]});}});
+app.post("/api/games/sessions",writeLimiter,async(req,res)=>{try{const gameId=String(req.body?.gameId||"").trim().slice(0,60),gameName=String(req.body?.gameName||gameId).trim().slice(0,120),maxPlayers=Math.max(2,Math.min(10,Number(req.body?.maxPlayers)||4)),playerName=String(req.body?.playerName||"زائر").trim().slice(0,32)||"زائر";if(!gameId||!gameName)return res.status(400).json({error:"اختر لعبة أولًا"});let code="";for(let i=0;i<12;i++){code=Math.random().toString(36).slice(2,8).toUpperCase();const x=await pool.query("SELECT 1 FROM game_sessions WHERE code=$1",[code]);if(!x.rowCount)break}const q=await pool.query("INSERT INTO game_sessions(code,game_id,game_name,owner_username,max_players,players) VALUES($1,$2,$3,$4,$5,1) RETURNING *",[code,gameId,gameName,playerName,maxPlayers]);res.json({ok:true,session:q.rows[0]});}catch(e){console.error("Game session create:",e);res.status(500).json({error:"تعذر إنشاء جلسة اللعبة"});}});
+app.post("/api/games/sessions/:code/join",writeLimiter,async(req,res)=>{try{const code=String(req.params.code||"").toUpperCase();const q=await pool.query("SELECT * FROM game_sessions WHERE code=$1 AND status='open' FOR UPDATE",[code]);if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة أو بدأت"});const s=q.rows[0];if(Number(s.players)>=Number(s.max_players))return res.status(409).json({error:"الجلسة مكتملة"});const playerName=String(req.body?.playerName||"زائر").trim().slice(0,32)||"زائر";await pool.query("UPDATE game_sessions SET players=players+1 WHERE code=$1",[code]);res.json({ok:true,session:{...s,players:Number(s.players)+1,owner_username:s.owner_username}});}catch(e){res.status(500).json({error:"تعذر الانضمام للجلسة"});}});
 app.get("/api/site/stats",async(req,res)=>{try{const q=await pool.query("SELECT visits FROM site_stats WHERE id=1");const g=await getGuild();const members=await getAllMembers(g);const presenceCount=[...(g.presences?.cache?.values?.()||[])].filter(p=>p.status&&p.status!=="offline"&&!g.members.cache.get(p.userId)?.user.bot).length;const online=presenceCount||members.filter(m=>!m.user.bot&&m.presence?.status&&m.presence.status!=="offline").length;res.set("Cache-Control","no-store");res.json({visits:Number(q.rows[0]?.visits||0),online,memberCount:Number(g.memberCount||members.length||0),updatedAt:new Date().toISOString()});}catch(e){console.error("Site stats:",e);res.status(503).json({error:"stats_unavailable"});}});
 app.post("/api/site/visit",async(req,res)=>{try{await pool.query("UPDATE site_stats SET visits=visits+1,updated_at=NOW() WHERE id=1");res.json({ok:true});}catch(e){res.status(500).json({error:"stats"});}});
 app.get("/api/site/settings",async(req,res)=>{try{const q=await pool.query("SELECT key,value FROM site_settings");res.json({settings:Object.fromEntries(q.rows.map(x=>[x.key,x.value]))});}catch(e){res.status(500).json({settings:{}});}});
@@ -1210,6 +1220,15 @@ const server = app.listen(port, async () => {
   console.log(`MLD listening on port ${port}`);
   try { await initAppDatabase(); await ensureOwner(); await ensureChatDatabase(); console.log("App database ready"); }
   catch (error) { console.error("Database init failed:", error.message); }
+});
+
+server.on("upgrade",(req,socket,head)=>{
+  if(String(req.url||"").startsWith("/mld-games") || String(req.headers.referer||"").includes("/mld-games/game.html")){
+    const original=req.url||"/";
+    if(original.startsWith("/mld-games")) req.url=original.replace(/^\/mld-games/,"")||"/";
+    return mldGameProxy.ws(req,socket,head,{target:MLD_GAME_TARGET,changeOrigin:true,secure:true});
+  }
+  socket.destroy();
 });
 async function gracefulShutdown(signal){
   console.log(`Shutting down: ${signal}`);
