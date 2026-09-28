@@ -47,6 +47,16 @@ test("every game opens a real multiplayer room", async ({ page, request }) => {
     await page.evaluate((id) => window.openEnhancedGameSession(id, false), id);
     expect(pageErrors, game + " browser JavaScript errors").toEqual([]);
     await expect(page.locator(".game-room")).toBeVisible({ timeout: 10000 });
+    const mySeat = page.locator(".game-seat-choice").first();
+    await expect(mySeat).toBeEnabled();
+    await mySeat.click();
+    await expect(mySeat).toHaveClass(/selected/);
+    await expect(page.locator(".game-perspective-banner")).toContainText(/قائد|عميل|مقعد|أنت/);
+    const start = page.locator("#eg-start");
+    await expect(start).toBeVisible();
+    await expect(start).toBeEnabled();
+    await start.click();
+    await expect(page.locator(".game-live-pill")).toHaveText("LIVE");
     await expect(page.locator(".game-table").first(), game+" game-table missing. room="+await page.locator(".game-room").innerText()).toBeVisible();
     await expect(page.locator("#eg-fullscreen")).toBeVisible();
     await expect(page.locator("#eg-fullscreen-fab")).toHaveCount(1);
