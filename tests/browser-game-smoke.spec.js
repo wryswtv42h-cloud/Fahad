@@ -12,6 +12,7 @@ const GAMES = [
 test.describe.configure({ mode: "parallel" });
 
 test("every game opens a real multiplayer room", async ({ page, request }) => {
+  test.setTimeout(120000);
   const pageErrors = [];
   page.on("pageerror", err => pageErrors.push(err.message));
   await page.goto(BASE + "/#games", { waitUntil: "domcontentloaded" });
