@@ -2,16 +2,17 @@
 "use strict";
 const $=s=>document.querySelector(s);
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const N={CODENAMES:"كود نيمز",SPYFALL:"سباي فول",PICTIONARY:"بيكشنري",CHARADES:"تمثيل",WHOAMI:"من أنا؟",TABOO:"تابو",WORD_BOMB:"قنبلة الكلمات",TRUTH_LIE:"صدق أو كذب",EMOJI_GUESS:"خمن بالإيموجي",TRIVIA:"معلومات عامة",CATEGORIES:"التصنيفات",LIAR:"الكذاب",HOT_SEAT:"المقعد الساخن",WOULD_YOU_RATHER:"ماذا تفضل؟",DRAW_GUESS:"ارسم وخمن",FASTEST:"الأسرع",RIDDLE_RUSH:"سباق الألغاز",SECRET_WORD:"الكلمة السرية",MIMIC:"المقلد",GUESS_PLAYER:"خمن اللاعب",UNO:"UNO",LUDO:"لودو",BALOOT:"بلوت",DAQSH:"دقش",QAWSAR:"قوصر",JAKAROO:"جاكارو"};
-const ICON={CODENAMES:"▦",SPYFALL:"🕵️",PICTIONARY:"✏️",CHARADES:"🎭",WHOAMI:"❓",TABOO:"🚫",WORD_BOMB:"💣",TRUTH_LIE:"⚖️",EMOJI_GUESS:"😀",TRIVIA:"🧠",CATEGORIES:"🗂️",LIAR:"🤥",HOT_SEAT:"🔥",WOULD_YOU_RATHER:"↔️",DRAW_GUESS:"🎨",FASTEST:"⚡",RIDDLE_RUSH:"🧩",SECRET_WORD:"🔐",MIMIC:"🪞",GUESS_PLAYER:"🔎",UNO:"UNO",LUDO:"🎲",BALOOT:"♠",DAQSH:"⚡",JAKAROO:"♟",QAWSAR:"♜"};
-const CAP=g=>g==="CODENAMES"?16:g==="UNO"?12:g==="QAWSAR"?4:4;
+const N={CODENAMES:"كود نيمز",SPYFALL:"سباي فول",UNO:"UNO",LUDO:"لودو",BALOOT:"بلوت",QAWSAR:"قوصر",JAKAROO:"جاكارو"};
+const ICON={CODENAMES:"▦",SPYFALL:"🕵️",UNO:"UNO",LUDO:"🎲",BALOOT:"♠",QAWSAR:"♜",JAKAROO:"♟"};
+const CAP=g=>g==="CODENAMES"?16:g==="UNO"?12:g==="SPYFALL"?8:4;
 const RULES={
-CODENAMES:"القائد يعطي تلميحًا ورقمًا، والعملاء يكشفون الكلمات التابعة لفريقهم. تجنبوا المحايد والقاتل.",
-UNO:"7 أوراق لكل لاعب. طابق اللون أو الرمز، استخدم الأوراق الخاصة، وتخلّص من يدك أولًا.",
-LUDO:"ارمِ النرد، أخرج القطعة عند 6، حرّكها بعدد النرد، وأوصل قطعك الأربع للنهاية.",
-BALOOT:"شراء ثم لعب 8 أكلات. اتبع اللون إذا أمكن، والحكم يتفوق في عقد الحكم.",
-QAWSAR:"أربع أوراق لكل لاعب؛ أول ورقتين مكشوفتان. اسحب أو خذ الوسط، بدّل أو ارمِ، واستخدم قدرات الأوراق.",
-JAKAROO:"أربع قطع وأربع أوراق. A/K للإخراج، الحركة حسب الورقة، 7 للتقسيم وJ للتبديل. الهدف إدخال القطع الأربع."
+CODENAMES:"طاولة كود نيمز: قائدان، فريقان، شبكة كلمات، تلميحات وتخمينات حقيقية. كشف القاتل ينهي الجولة فورًا.",
+SPYFALL:"طاولة سباي فول: لاعب واحد جاسوس، والباقون يعرفون المكان. اسأل، أجب، ثم اتهم أو خمّن المكان.",
+UNO:"توزيع 7 أوراق لكل لاعب، سحب ولعب بالألوان والأرقام والأوراق الخاصة، والفائز يتخلص من يده أولًا.",
+LUDO:"طاولة لودو: نرد، قطع على المسار، خروج عند 6، وحركة فعلية للقطع حتى النهاية.",
+BALOOT:"طاولة بلوت: شراء، حكم/صن، توزيع أوراق، أكلات، احتساب نقاط وفوز بالمباراة.",
+QAWSAR:"طاولة قوصر: 4 أوراق لكل لاعب، أول ورقتين مكشوفتان، سحب ووسط وتبديل وكشف وقدرات الأوراق ونظام الأصفار.",
+JAKAROO:"طاولة جاكارو: فرق، قطع على لوحة المسار، أوراق حركة وتبديل، وتحريك القطع على الطاولة."
 };
 const guest=()=>{let x=localStorage.getItem("mld_guest_id");if(!x){x="g_"+(crypto.randomUUID?.()||Math.random().toString(36).slice(2));localStorage.setItem("mld_guest_id",x)}return x};
 const body=()=>({guestId:guest(),guestName:"زائر"});
