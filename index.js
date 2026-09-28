@@ -976,7 +976,7 @@ app.get("/api/games/:id/watch",async(req,res)=>{
   res.json({game:q.rows[0],spectator:true});
 });
 app.post("/api/games",async(req,res)=>{
-  const game=String(req.body?.game||"").trim().toUpperCase(),requestedMax=Math.max(2,Number(req.body?.maxPlayers)||4),gameCap=game==="CODENAMES"?16:game==="UNO"?12:game==="QAWSAR"?4:4,max=Math.min(requestedMax,gameCap),u=currentUser(req),guestId=String(req.body?.guestId||"").trim().slice(0,80),guestName=String(req.body?.guestName||"زائر").trim().slice(0,40);
+  const game=String(req.body?.game||"").trim().toUpperCase(); if(!READY_GAMES.has(game)) return res.status(400).json({error:"هذه اللعبة غير متاحة حاليًا؛ الألعاب الجاهزة فقط: UNO، لودو، بلوت، جاكارو، قوصر"}); const requestedMax=Math.max(2,Number(req.body?.maxPlayers)||4),gameCap=game==="UNO"?12:game==="QAWSAR"?4:4,max=Math.min(requestedMax,gameCap),u=currentUser(req),guestId=String(req.body?.guestId||"").trim().slice(0,80),guestName=String(req.body?.guestName||"زائر").trim().slice(0,40);
   if(await activeGameFor(req))return res.status(409).json({error:"أنت داخل جلسة بالفعل. اخرج من جلستك الحالية أولًا."});
   if(!GAME_SEATS[game])return res.status(400).json({error:"اللعبة غير مدعومة"});
   const min=GAME_MIN_PLAYERS[game]||2;
