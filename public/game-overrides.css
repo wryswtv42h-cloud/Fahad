@@ -129,3 +129,35 @@ body.mld-game-fullscreen{position:fixed!important;inset:0!important}
 .jack-piece{display:grid;place-items:center;min-width:48px;height:42px;border-radius:14px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);font-weight:900}
 .jackaroo-control-row{display:flex;justify-content:center;flex-wrap:wrap;gap:10px}
 @media(max-width:700px){.jackaroo-board{grid-template-columns:repeat(13,minmax(20px,1fr));gap:3px;padding:10px;border-radius:20px}.jack-cell{font-size:8px}.jackaroo-center{inset:31% 31%;font-size:12px}}
+
+
+/* Mobile-safe fullscreen control + real Codenames role colors */
+.game-fullscreen-btn,.game-fullscreen-fab{
+  min-height:46px!important;min-width:46px!important;border:1px solid rgba(255,255,255,.16)!important;
+  border-radius:14px!important;background:linear-gradient(135deg,rgba(255,156,220,.18),rgba(115,130,255,.18))!important;
+  color:#fff!important;font-weight:900!important;cursor:pointer!important;touch-action:manipulation!important;
+  -webkit-tap-highlight-color:transparent!important;box-shadow:0 8px 24px rgba(0,0,0,.24)!important;
+}
+.game-fullscreen-btn{display:inline-flex!important;align-items:center!important;justify-content:center!important;gap:7px!important}
+.game-fullscreen-fab{
+  position:absolute!important;right:12px!important;top:12px!important;z-index:100!important;
+  display:none!important;align-items:center!important;justify-content:center!important;gap:7px!important;
+  padding:0 13px!important;
+}
+.code-board-mini .code-word{transition:transform .16s ease,filter .16s ease,opacity .16s ease;border:1px solid rgba(0,0,0,.22)!important}
+.code-board-mini .code-role-red{background:linear-gradient(145deg,#ff6b7d,#d92f4b)!important;color:#fff!important}
+.code-board-mini .code-role-blue{background:linear-gradient(145deg,#65aefc,#2869c7)!important;color:#fff!important}
+.code-board-mini .code-role-neutral{background:linear-gradient(145deg,#e5d3ae,#b99e6d)!important;color:#2b241b!important}
+.code-board-mini .code-role-assassin{background:linear-gradient(145deg,#30343a,#080a0d)!important;color:#fff!important}
+.code-board-mini .code-role-hidden{background:linear-gradient(145deg,#d9c7a4,#b9a57d)!important;color:#33291c!important}
+.code-board-mini .code-word.revealed{filter:none!important;opacity:1!important;transform:translateY(-2px)}
+.code-board-mini .code-word.hidden-card{box-shadow:0 7px 15px rgba(0,0,0,.22)!important}
+.codenames-role-badge{position:absolute;top:12px;left:12px;padding:7px 10px;border-radius:999px;background:rgba(0,0,0,.38);border:1px solid rgba(255,255,255,.14);font-size:10px;font-weight:900;color:#fff}
+@media(max-width:700px){
+  .game-fullscreen-fab{display:inline-flex!important}
+  .game-room-actions .game-fullscreen-btn{display:none!important}
+  .codenames-physical{padding:52px 8px 8px!important}
+  .code-board-mini{grid-template-columns:repeat(3,minmax(0,1fr))!important;width:100%!important;gap:6px!important}
+  .code-board-mini .code-word{min-height:58px!important;display:grid!important;place-items:center!important;padding:7px 4px!important;font-size:10px!important}
+}
+@media(min-width:701px){.game-fullscreen-fab{display:none!important}}
