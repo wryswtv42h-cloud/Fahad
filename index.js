@@ -1096,7 +1096,7 @@ app.post("/api/games/:id/leave",async(req,res)=>{
 });
 app.get("/api/games/:id/state",async(req,res)=>{
   const u=currentUser(req),guestId=String(req.query?.guestId||"").trim();
-  const q=await pool.query("SELECT id,game,players,status,state FROM game_lobbies WHERE id=$1",[req.params.id]);
+  const q=await pool.query("SELECT id,game,host_username,host_discord_username,max_players,players,status,state,created_at FROM game_lobbies WHERE id=$1",[req.params.id]);
   if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة"});
   const row=q.rows[0],players=Array.isArray(row.players)?row.players:[],actor=actorFromRequest(players,u,guestId);
   if(row.status==="finished"){
@@ -1117,7 +1117,8 @@ app.get("/api/games/:id/state",async(req,res)=>{
     await pool.query("UPDATE game_lobbies SET state=$1,status=$2 WHERE id=$3",[JSON.stringify(state),state.winner?"finished":"playing",row.id]);
   }
   const publicPlayers=players.map(p=>({username:p.username,guest:!!p.guest,host:!!p.host,seat:p.seat||null,seatLabel:p.seatLabel||null}));
-  res.json({game:{...row,players:publicPlayers,minPlayers:GAME_MIN_PLAYERS[row.game]||2},state:publicGameState(row.game,state,actor)});
+  const viewer=actor?{username:actor.username||null,guest:!!actor.guest,host:!!actor.host,seat:actor.seat||null,seatLabel:actor.seatLabel||null}:null;
+  res.json({game:{...row,players:publicPlayers,minPlayers:GAME_MIN_PLAYERS[row.game]||2},viewer,state:publicGameState(row.game,state,actor)});
 });
 app.post("/api/games/:id/action",async(req,res)=>{
   const u=currentUser(req),guestId=String(req.body?.guestId||"").trim(),action=String(req.body?.action||"").trim();
