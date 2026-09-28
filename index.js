@@ -1381,7 +1381,7 @@ client.on("interactionCreate", async (interaction) => {
   // of truth; editing the original Discord message is only presentation and can never
   // roll back a successful confirmation/cancellation.
   try{
-    if(!interaction.deferred&&!interaction.replied) await interaction.deferReply({ephemeral:true});
+    if(!interaction.deferred&&!interaction.replied) await interaction.deferUpdate();
   }catch(e){
     console.error("Registration interaction acknowledgement:",e.message);
     return;
@@ -1399,7 +1399,7 @@ client.on("interactionCreate", async (interaction) => {
 
     if(!q.rowCount){
       await db.query("ROLLBACK");
-      await interaction.editReply({content:"⚠️ طلب التسجيل انتهى أو تم استخدامه مسبقًا. لم يتم إنشاء حساب من هذا الطلب."}).catch(()=>{});
+      await interaction.message.edit({content:"⚠️ طلب التسجيل انتهى أو تم استخدامه مسبقًا. لم يتم إنشاء حساب من هذا الطلب."}).catch(()=>{});
       return;
     }
 
@@ -1413,7 +1413,7 @@ client.on("interactionCreate", async (interaction) => {
       );
       await db.query("COMMIT");
 
-      await interaction.editReply({content:"❌ تم إلغاء إنشاء الحساب. لم يتم إنشاء أي حساب."}).catch(()=>{});
+      await interaction.message.edit({content:"❌ تم إلغاء إنشاء الحساب. لم يتم إنشاء أي حساب."}).catch(()=>{});
       await interaction.message.edit({
         content:"❌ تم إلغاء إنشاء الحساب. لم يتم إنشاء أي حساب.",
         embeds:[],
@@ -1439,7 +1439,7 @@ client.on("interactionCreate", async (interaction) => {
         [id]
       );
       await db.query("COMMIT");
-      await interaction.editReply({content:"⚠️ الحساب أو Discord مرتبط بحساب موجود مسبقًا. لم يتم إنشاء حساب جديد."}).catch(()=>{});
+      await interaction.message.edit({content:"⚠️ الحساب أو Discord مرتبط بحساب موجود مسبقًا. لم يتم إنشاء حساب جديد."}).catch(()=>{});
       await interaction.message.edit({
         content:"⚠️ لم يتم إنشاء حساب جديد لأن البيانات مرتبطة بحساب موجود.",
         embeds:[],
@@ -1448,10 +1448,16 @@ client.on("interactionCreate", async (interaction) => {
       return;
     }
 
-    await db.query(
-      "INSERT INTO app_users(username,password_hash,discord_username,discord_user_id,role) VALUES($1,$2,$3,$4,'user')",
+    const created=await db.query(
+      "INSERT INTO app_users(username,password_hash,discord_username,discord_user_id,role) VALUES($1,$2,$3,$4,'user') ON CONFLICT DO NOTHING RETURNING id",
       [v.username,v.password_hash,v.discord_username,v.discord_user_id]
     );
+    if(!created.rowCount){
+      await db.query("UPDATE registration_verifications SET used_at=NOW(),decision='rejected' WHERE id=$1 AND used_at IS NULL AND decision='pending'",[id]);
+      await db.query("COMMIT");
+      await interaction.message.edit({content:"⚠️ لم يتم إنشاء الحساب لأن اسم المستخدم أو Discord مرتبط بحساب موجود مسبقًا.",embeds:[],components:[]}).catch(()=>{});
+      return;
+    }
     await db.query(
       "UPDATE registration_verifications SET used_at=NOW(),decision='confirmed' WHERE id=$1 AND used_at IS NULL AND decision='pending'",
       [id]
