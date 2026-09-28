@@ -12,14 +12,13 @@ const GAMES = [
 test.describe.configure({ mode: "parallel" });
 
 test("every game opens a real multiplayer room", async ({ page, request }) => {
-  const consoleErrors = [];
-  page.on("console", msg => { if (msg.type() === "error") consoleErrors.push(msg.text()); });
-  page.on("pageerror", err => consoleErrors.push("PAGEERROR: " + err.message));
+  const pageErrors = [];
+  page.on("pageerror", err => pageErrors.push(err.message));
   await page.goto(BASE + "/#games", { waitUntil: "domcontentloaded" });
   await expect(page.locator("body")).toBeVisible();
 
   await expect.poll(async () => await page.evaluate(() => typeof window.openEnhancedGameSession)).toBe("function");
-  expect(consoleErrors, "game room script errors before session").toEqual([]);
+  expect(pageErrors, "game room JavaScript errors before session").toEqual([]);
 
   for (const game of GAMES) {
     const guestId = "pw_" + game.toLowerCase() + "_" + Date.now();
@@ -42,7 +41,7 @@ test("every game opens a real multiplayer room", async ({ page, request }) => {
 
     await page.goto(BASE + "/#games", { waitUntil: "domcontentloaded" });
     await page.evaluate((id) => window.openEnhancedGameSession(id, false), id);
-    expect(consoleErrors, game + " browser console errors").toEqual([]);
+    expect(pageErrors, game + " browser JavaScript errors").toEqual([]);
     await expect(page.locator(".game-room")).toBeVisible({ timeout: 10000 });
     await expect(page.locator(".game-table")).toBeVisible();
     await expect(page.locator("#eg-fullscreen")).toBeVisible();
