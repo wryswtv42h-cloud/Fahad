@@ -2,17 +2,13 @@
 "use strict";
 const $=s=>document.querySelector(s);
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const N={CODENAMES:"كود نيمز",SPYFALL:"سباي فول",UNO:"UNO",LUDO:"لودو",BALOOT:"بلوت",QAWSAR:"قوصر",JAKAROO:"جاكارو"};
-const ICON={CODENAMES:"▦",SPYFALL:"🕵️",UNO:"UNO",LUDO:"🎲",BALOOT:"♠",QAWSAR:"♜",JAKAROO:"♟"};
+const N={CODENAMES:"كود نيمز",SPYFALL:"سباي فول",PICTIONARY:"بيكشنري",CHARADES:"تمثيل",WHOAMI:"من أنا؟",TABOO:"تابو",WORD_BOMB:"قنبلة الكلمات",TRUTH_LIE:"صدق أو كذب",EMOJI_GUESS:"تخمين الإيموجي",TRIVIA:"معلومات عامة",CATEGORIES:"التصنيفات",LIAR:"الكذاب",HOT_SEAT:"المقعد الساخن",WOULD_YOU_RATHER:"ماذا تفضل؟",DRAW_GUESS:"ارسم وخمّن",FASTEST:"الأسرع",RIDDLE_RUSH:"سباق الألغاز",SECRET_WORD:"الكلمة السرية",MIMIC:"المقلد",GUESS_PLAYER:"خمن اللاعب",UNO:"UNO",LUDO:"لودو",BALOOT:"بلوت",DAQSH:"دقش",QAWSAR:"قوصر",JAKAROO:"جاكارو"};
+const ICON={CODENAMES:"▦",SPYFALL:"🕵️",PICTIONARY:"🎨",CHARADES:"🎭",WHOAMI:"❓",TABOO:"🚫",WORD_BOMB:"💣",TRUTH_LIE:"⚖️",EMOJI_GUESS:"😀",TRIVIA:"🧠",CATEGORIES:"🗂️",LIAR:"🤥",HOT_SEAT:"🔥",WOULD_YOU_RATHER:"⚔️",DRAW_GUESS:"✏️",FASTEST:"⚡",RIDDLE_RUSH:"🧩",SECRET_WORD:"🔐",MIMIC:"🪞",GUESS_PLAYER:"🕵️",UNO:"UNO",LUDO:"🎲",BALOOT:"♠",DAQSH:"⚡",QAWSAR:"♜",JAKAROO:"♟"};
 const CAP=g=>g==="CODENAMES"?16:g==="UNO"?12:g==="SPYFALL"?8:4;
 const RULES={
-CODENAMES:"طاولة كود نيمز: قائدان، فريقان، شبكة كلمات، تلميحات وتخمينات حقيقية. كشف القاتل ينهي الجولة فورًا.",
-SPYFALL:"طاولة سباي فول: لاعب واحد جاسوس، والباقون يعرفون المكان. اسأل، أجب، ثم اتهم أو خمّن المكان.",
-UNO:"توزيع 7 أوراق لكل لاعب، سحب ولعب بالألوان والأرقام والأوراق الخاصة، والفائز يتخلص من يده أولًا.",
-LUDO:"طاولة لودو: نرد، قطع على المسار، خروج عند 6، وحركة فعلية للقطع حتى النهاية.",
-BALOOT:"طاولة بلوت: شراء، حكم/صن، توزيع أوراق، أكلات، احتساب نقاط وفوز بالمباراة.",
-QAWSAR:"طاولة قوصر: 4 أوراق لكل لاعب، أول ورقتين مكشوفتان، سحب ووسط وتبديل وكشف وقدرات الأوراق ونظام الأصفار.",
-JAKAROO:"طاولة جاكارو: فرق، قطع على لوحة المسار، أوراق حركة وتبديل، وتحريك القطع على الطاولة."
+CODENAMES:"طاولة كود نيمز: قائدان وفريقان، شبكة 5×5، تلميح ثم تخمين، والقاتل ينهي الجولة.",SPYFALL:"طاولة سباي فول: جاسوس سري، مكان مشترك، أسئلة واتّهام وتخمين المكان.",
+PICTIONARY:"جلسة رسم وتخمين: لاعب يرى الكلمة والباقون يخمنون.",CHARADES:"جلسة تمثيل صامت وتخمين.",WHOAMI:"جلسة شخصية سرية وأسئلة وتخمين.",TABOO:"اشرح الكلمة بدون الكلمات الممنوعة.",WORD_BOMB:"أجب بكلمة مناسبة قبل انتهاء الدور.",TRUTH_LIE:"ادعاء ثم تصويت على صدقه.",EMOJI_GUESS:"خمّن الإجابة من الخيارات والإيموجي.",TRIVIA:"أسئلة اختيار من متعدد ونقاط.",CATEGORIES:"اكتب إجابة من التصنيف والحرف المطلوب.",LIAR:"ادعاءات وتصويت لكشف الكذاب.",HOT_SEAT:"اختيارات ودور لاعب في المقعد الساخن.",WOULD_YOU_RATHER:"اختيارات جماعية في كل جولة.",DRAW_GUESS:"ارسم وخمّن.",FASTEST:"أجب بأسرع وقت.",RIDDLE_RUSH:"حل اللغز قبل الآخرين.",SECRET_WORD:"كلمة سرية خاصة بالدور.",MIMIC:"قلّد أو مثّل والمخمنون يحاولون معرفة الكلمة.",GUESS_PLAYER:"خمن اللاعب المستهدف.",
+UNO:"طاولة UNO: 7 أوراق، سحب، لعب، ألوان، أوراق خاصة، ودور متتابع.",LUDO:"طاولة لودو: نرد، قطع، خروج وحركة حتى النهاية.",BALOOT:"طاولة بلوت: شراء، حكم/صن، أكلات ونقاط.",DAQSH:"تحدي رد فعل لحظي.",QAWSAR:"طاولة قوصر: أربع أوراق، مكشوف/مخفي، وسط، سحب، تبديل، كشف وأصفار.",JAKAROO:"طاولة جاكارو: أربعة لاعبين، أربع قطع، أوراق حركة وتبديل ومسار طاولة."
 };
 const guest=()=>{let x=localStorage.getItem("mld_guest_id");if(!x){x="g_"+(crypto.randomUUID?.()||Math.random().toString(36).slice(2));localStorage.setItem("mld_guest_id",x)}return x};
 const body=()=>({guestId:guest(),guestName:"زائر"});
