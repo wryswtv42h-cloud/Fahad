@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Connect Four — oriz.games</title>
+<style>
+:root{--bg:#0f172a;--card:#1e293b;--border:#334155;--text:#e2e8f0;--muted:#94a3b8;--accent:#6366f1;--p1:#f87171;--p2:#facc15}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center}
+header{width:100%;max-width:520px;padding:16px 20px 0;display:flex;justify-content:space-between;align-items:center}
+a.back{color:var(--muted);font-size:14px;text-decoration:none}a.back:hover{color:var(--text)}
+h1{font-size:24px;font-weight:800}
+button{cursor:pointer;border:none;font-family:inherit}
+.mode-bar{display:flex;gap:8px;justify-content:center;padding:12px 20px 0}
+.m-btn{background:var(--card);color:var(--muted);border:1px solid var(--border);padding:7px 14px;border-radius:20px;font-size:13px;font-weight:600;transition:all .15s}
+.m-btn.active,.m-btn:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
+#status{font-size:15px;font-weight:600;height:28px;text-align:center;margin:8px 0;color:#facc15}
+#board-wrap{background:#1e3a5f;border-radius:12px;padding:10px;width:min(95vw,462px)}
+.col-btns{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:6px}
+.col-btn{background:transparent;color:var(--muted);font-size:18px;padding:4px 0;border-radius:4px;transition:color .15s}
+.col-btn:hover{color:#e2e8f0}
+#grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.cell{aspect-ratio:1;border-radius:50%;background:#0f172a;transition:background .2s}
+.cell.p1{background:var(--p1)}
+.cell.p2{background:var(--p2)}
+.cell.win{box-shadow:0 0 0 3px #fff}
+.play-btn{background:var(--accent);color:#fff;padding:9px 20px;border-radius:8px;font-size:13px;font-weight:600;margin-top:10px}
+.scores{display:flex;gap:12px;margin:8px 0}
+.sb{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:5px 16px;text-align:center;min-width:60px}
+.sb .l{font-size:11px;color:var(--muted);text-transform:uppercase}
+.sb .v{font-size:20px;font-weight:700}
+</style>
+</head>
+<body>
+<header>
+  <a class="back" href="../index.html">&#8592; Back</a>
+  <h1>Connect Four</h1>
+  <button class="play-btn" onclick="newGame()">New</button>
+</header>
+<div class="mode-bar">
+  <button class="m-btn active" data-m="ai">vs AI</button>
+  <button class="m-btn" data-m="2p">2 Players</button>
+</div>
+<div class="scores">
+  <div class="sb"><div class="l" style="color:var(--p1)">Red</div><div class="v" id="s1">0</div></div>
+  <div class="sb"><div class="l">Draw</div><div class="v" id="sd">0</div></div>
+  <div class="sb"><div class="l" style="color:var(--p2)">Yellow</div><div class="v" id="s2">0</div></div>
+</div>
+<div id="status"></div>
+<div id="board-wrap">
+  <div class="col-btns" id="colBtns"></div>
+  <div id="grid"></div>
+</div>
+
+<script>
+const ROWS=6,COLS=7;
+let board,turn,gameOver,mode='ai',scores={1:0,d:0,2:0};
+
+function newGame(){
+  board=Array.from({length:ROWS},()=>Array(COLS).fill(0));
+  turn=1;gameOver=false;
+  document.getElementById('status').textContent="Red's turn";
+  render();
+}
+
+function render(){
+  const g=document.getElementById('grid');
+  g.innerHTML='';
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    const d=document.createElement('div');
+    d.className='cell'+(board[r][c]?' p'+board[r][c]:'');
+    g.appendChild(d);
+  }
+  const cb=document.getElementById('colBtns');
+  cb.innerHTML='';
+  for(let c=0;c<COLS;c++){
+    const b=document.createElement('button');
+    b.className='col-btn';b.textContent='▼';b.dataset.c=c;
+    if(!gameOver)b.addEventListener('click',()=>drop(c));
+    cb.appendChild(b);
+  }
+}
+
+function drop(c){
+  if(gameOver)return;
+  let row=-1;
+  for(let r=ROWS-1;r>=0;r--){if(!board[r][c]){row=r;break;}}
+  if(row===-1)return;
+  board[row][c]=turn;
+  const win=checkWin();
+  if(win){endGame(turn,win);return;}
+  if(board[0].every((_,c)=>board[0][c])){endGame(0);return;}
+  turn=turn===1?2:1;
+  document.getElementById('status').textContent=`${turn===1?'Red':'Yellow'}'s turn`;
+  render();
+  if(mode==='ai'&&turn===2)setTimeout(aiMove,400);
+}
+
+function aiMove(){
+  if(gameOver)return;
+  // simple: win if possible, block if possible, else center/random
+  const c=getBestMove();
+  drop(c);
+}
+
+function getBestMove(){
+  // check win
+  for(let c=0;c<COLS;c++){const r=topRow(c);if(r>=0){board[r][c]=2;if(checkWin()){board[r][c]=0;return c;}board[r][c]=0;}}
+  // block
+  for(let c=0;c<COLS;c++){const r=topRow(c);if(r>=0){board[r][c]=1;if(checkWin()){board[r][c]=0;return c;}board[r][c]=0;}}
+  // prefer center
+  const order=[3,2,4,1,5,0,6].filter(c=>topRow(c)>=0);
+  return order[0];
+}
+
+function topRow(c){for(let r=ROWS-1;r>=0;r--)if(!board[r][c])return r;return-1;}
+
+function checkWin(){
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    const p=board[r][c];if(!p)continue;
+    const dirs=[[0,1],[1,0],[1,1],[1,-1]];
+    for(const[dr,dc]of dirs){
+      const cells=[[r,c]];
+      for(let i=1;i<4;i++){const nr=r+dr*i,nc=c+dc*i;if(nr>=0&&nr<ROWS&&nc>=0&&nc<COLS&&board[nr][nc]===p)cells.push([nr,nc]);else break;}
+      if(cells.length===4)return cells;
+    }
+  }
+  return null;
+}
+
+function endGame(winner,cells){
+  gameOver=true;
+  if(winner){
+    scores[winner]++;
+    document.getElementById('s'+winner).textContent=scores[winner];
+    document.getElementById('status').textContent=`${winner===1?'Red':'Yellow'} wins!`;
+    render();
+    if(cells){
+      const g=document.getElementById('grid');
+      cells.forEach(([r,c])=>g.children[r*COLS+c].classList.add('win'));
+    }
+  } else {
+    scores.d++;
+    document.getElementById('sd').textContent=scores.d;
+    document.getElementById('status').textContent="Draw!";
+  }
+  setTimeout(newGame,1800);
+}
+
+document.querySelectorAll('.m-btn').forEach(b=>{
+  b.addEventListener('click',()=>{
+    document.querySelector('.m-btn.active').classList.remove('active');
+    b.classList.add('active');mode=b.dataset.m;newGame();
+  });
+});
+
+newGame();
+</script>
+</body>
+</html>
