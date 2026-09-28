@@ -912,7 +912,7 @@ app.get("/api/public/top", async (req, res) => {
   try {
     const members=(await getAllMembers(await getGuild())).map(memberJson);
     const top=(key)=>[...members].sort((a,b)=>(b.stats[key]||0)-(a.stats[key]||0)).slice(0,10);
-    res.json({messages:top("messages"),mentions:top("mentionsReceived"),voice:top("voiceMinutes"),joins:top("voiceJoins"),updatedAt:memberSnapshotAt});
+    const gameQ=await pool.query("SELECT owner_username username,COUNT(*)::int wins FROM game_sessions WHERE status='ended' GROUP BY owner_username ORDER BY wins DESC LIMIT 10"); const gameTop=gameQ.rows.map(x=>({...x,points:Number(x.wins)*10})); res.json({messages:top("messages"),mentions:top("mentionsReceived"),voice:top("voiceMinutes"),joins:top("voiceJoins"),gameTop,updatedAt:memberSnapshotAt});
   } catch(error){console.error("Top endpoint:",error);res.status(503).json({error:"Top is temporarily unavailable"});}
 });
 app.get("/api/public/member/:id", async (req, res) => {
