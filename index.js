@@ -1017,6 +1017,7 @@ app.post("/api/games/:id/start",async(req,res)=>{
   const u=currentUser(req),guestId=String(req.body?.guestId||"").trim(),q=await pool.query("SELECT * FROM game_lobbies WHERE id=$1",[req.params.id]);if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة"});
   const g=q.rows[0],players=Array.isArray(g.players)?g.players:[],hostMatches=u?g.host_username===u.username:String(players[0]?.guestId||"")===guestId;
   if(!hostMatches)return res.status(403).json({error:"فقط صاحب الجلسة يقدر يبدأ"});
+  if(!players.some(p=>!p.bot))return res.status(409).json({error:"لا يمكن تشغيل جلسة بدون لاعب حقيقي"});
   if(g.status==="playing")return res.json({ok:true,game:g});
   if(g.status!=="waiting"&&g.status!=="ready")return res.status(409).json({error:"لا يمكن بدء هذه الجلسة الآن"});
   const minPlayers=GAME_MIN_PLAYERS[g.game]||2;
@@ -1064,6 +1065,12 @@ app.post("/api/games/:id/leave",async(req,res)=>{
   if(g.status==="playing"){
     const human=players[i], bot={...human,username:"بوت "+(human.username||"لاعب"),discordUsername:"بوت",guestId:null,guest:false,bot:true,host:false};
     players[i]=bot;
+    const humansRemaining=players.filter(p=>!p.bot).length;
+    if(humansRemaining===0){
+      await pool.query("UPDATE game_lobbies SET status='closed',players=$1::jsonb,state=jsonb_set(COALESCE(state,'{}'::jsonb),'{closedAt}',to_jsonb(NOW()::text),true) WHERE id=$2",[JSON.stringify(players),g.id]);
+      if(u)await audit(u,"game_leave","session "+g.id+" · no_human_players · closed");
+      return res.json({ok:true,closed:true,replacedByBot:false});
+    }
     await pool.query("UPDATE game_lobbies SET players=$1 WHERE id=$2",[JSON.stringify(players),g.id]);
     if(u)await audit(u,"game_leave","session "+g.id+" · replaced_by_bot");
     return res.json({ok:true,closed:false,replacedByBot:true});
