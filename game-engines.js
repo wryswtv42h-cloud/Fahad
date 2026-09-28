@@ -18,7 +18,8 @@ function jackaroo(p){
   const hands=p.map(()=>deck.splice(0,4));
   return Object.assign(base("JAKAROO",p),{
     kind:"jackaroo",phase:"playing",turnIndex:0,hands,deck,discard:null,
-    tokens:p.map(()=>[-1,-1,-1,-1]),lastAction:null,selectedToken:null
+    tokens:p.map(()=>[-1,-1,-1,-1]),pendingCard:null,pendingToken:null,
+    lastAction:null,selectedToken:null,moveOptions:[]
   });
 }
 function jackSteps(card){
@@ -37,6 +38,26 @@ function jackLegalTokens(s,i,card){
     else if(v>=0 && v<56 && ((step>=0&&v+step<=56)||(step<0&&v+step>=0)))out.push(n);
   }
   return out;
+}
+function jackCardMoves(s,i,card){
+  const r=String(card?.rank||"");
+  if(r==="J") return [0,1,2,3].filter(t=>s.tokens[i][t]>=0);
+  if(r==="7") return [0,1,2,3].filter(t=>s.tokens[i][t]>=0);
+  const step=jackSteps(card);
+  return jackLegalTokens(s,i,card).filter(t=>step!==0);
+}
+function jackMoveToken(s,i,t,steps){
+  const v=s.tokens[i][t];
+  if(v<0){ if(steps!==1&&steps!==13) throw new Error("هذه الورقة لا تُخرج القطعة من البيت"); s.tokens[i][t]=0; return; }
+  let next=v+steps;
+  if(next<0||next>56) throw new Error("الحركة تتجاوز مسار القطعة");
+  s.tokens[i][t]=next;
+}
+function jackFinish(s,p){
+  const done=s.tokens.map(ts=>ts.filter(v=>v>=56).length);
+  const winner=done.findIndex(n=>n===4);
+  if(winner>=0){s.winner=p[winner]?.username||("لاعب "+(winner+1));s.phase="finished";return true}
+  return false;
 }
 function baloot(p){
  let d=sh(S.flatMap(s=>R.map(r=>({suit:s,rank:r})))),h=[[],[],[],[]];
@@ -123,6 +144,53 @@ if(act==="answer" && ["WORD_BOMB","CATEGORIES","FASTEST","RIDDLE_RUSH","TABOO","
 if(game==="CODENAMES"){let r=s.playerRoles[k(a)],team=r?.startsWith("red")?"red":"blue";if(act==="clue"){if(!r?.endsWith("spymaster")||team!==s.team)throw Error("ليس دورك");s.clue={word:String(x.word||"").trim().split(/\s+/)[0],number:Math.max(1,Math.min(9,Number(x.number)||1))};s.guesses=s.clue.number;return s}if(act==="guess"){if(!r?.endsWith("agent")||team!==s.team||!s.clue)throw Error("لا يمكنك التخمين");let c=s.words[Number(x.index)];if(!c||c.revealed)throw Error("كلمة غير صالحة");c.revealed=true;if(c.role==="assassin"){s.winner=team==="red"?"blue":"red";s.phase="finished"}else if(c.role===team){s.teamScores[team]++;if(!s.words.some(q=>q.role===team&&!q.revealed)){s.winner=team;s.phase="finished"}else if(--s.guesses<=0){s.team=team==="red"?"blue":"red";s.clue=null}}else{s.team=team==="red"?"blue":"red";s.clue=null}return s}if(act==="endTurn"){s.team=team==="red"?"blue":"red";s.clue=null;return s}}
 if(game==="SPYFALL"){if(act==="question"){if(s.turnIndex!==i)throw Error("ليس دورك");let t=Number(x.target);if(t===i||!p[t])throw Error("هدف غير صالح");s.lastQuestion={from:i,to:t,text:String(x.text||"").slice(0,200)};s.turnIndex=t;return s}if(act==="answer"){if(s.turnIndex!==i)throw Error("ليس دورك");s.lastAnswer=String(x.text||"").slice(0,250);return s}if(act==="accuse"){let t=Number(x.target);s.winner=s.roles[t]?.spy?"المحققون":"الجاسوس";s.phase="finished";return s}if(act==="spyGuess"){if(!s.roles[i].spy)throw Error("أنت لست الجاسوس");s.winner=String(x.location||"")===s.location?"الجاسوس":"المحققون";s.phase="finished";return s}}
 if(game==="UNO"){if(s.turnIndex!==i)throw Error("ليس دورك");let h=s.hands[i];if(act==="draw"){let c=s.drawPile.pop();if(c)h.push(c);return s}if(act==="playCard"){let n=Number(x.index),c=h[n];if(!c||!(c.color==="wild"||c.color===s.color||c.value===s.top.value))throw Error("ورقة غير قانونية");h.splice(n,1);s.discardPile.push(c);s.top=c;s.color=c.color==="wild"?(C.includes(x.color)?x.color:null):c.color;if(!s.color)throw Error("اختر لونًا");if(!h.length){s.winner=p[i].username;s.phase="finished";return s}if(c.value==="Reverse")s.direction*=-1;s.turnIndex=(i+(["Skip","+2","+4"].includes(c.value)?2:1)*s.direction+p.length)%p.length;return s}}
+if(game==="JAKAROO"){
+  if(s.turnIndex!==i)throw new Error("ليس دورك الآن");
+  const hand=s.hands[i]||[];
+  if(act==="playCard"){
+    const n=Number(x.index),card=hand[n];
+    if(!card)throw new Error("الورقة غير موجودة");
+    const legal=jackCardMoves(s,i,card);
+    if(!legal.length)throw new Error("لا توجد حركة قانونية بهذه الورقة");
+    s.pendingCard=n;s.pendingToken=null;s.moveOptions=legal;
+    if(legal.length===1){s.pendingToken=legal[0];}
+    return s;
+  }
+  if(act==="moveToken"){
+    const t=Number(x.token);
+    if(s.pendingCard==null)throw new Error("اختر ورقة أولًا");
+    if(!s.moveOptions.includes(t))throw new Error("هذه القطعة لا يمكن تحريكها بهذه الورقة");
+    const card=hand[s.pendingCard],r=String(card.rank||"");
+    if(r==="J"){
+      const targetPlayer=Number(x.targetPlayer),targetToken=Number(x.targetToken);
+      if(!Number.isInteger(targetPlayer)||targetPlayer===i||!s.tokens[targetPlayer]?.[targetToken]===undefined)throw new Error("هدف التبديل غير صالح");
+      if(!s.tokens[targetPlayer]||s.tokens[targetPlayer][targetToken]<0)throw new Error("قطعة الخصم غير موجودة على المسار");
+      [s.tokens[i][t],s.tokens[targetPlayer][targetToken]]=[s.tokens[targetPlayer][targetToken],s.tokens[i][t]];
+    }else if(r==="7"&&Number.isInteger(x.splitSteps)){
+      const a=Math.max(1,Math.min(6,Number(x.splitSteps))),b=7-a;
+      if(a+b!==7)throw new Error("تقسيم السبعة غير صحيح");
+      jackMoveToken(s,i,t,a);
+      const t2=Number(x.token2);
+      if(!Number.isInteger(t2)||t2===t||s.tokens[i][t2]<0)throw new Error("اختر القطعة الثانية");
+      jackMoveToken(s,i,t2,b);
+    }else{
+      jackMoveToken(s,i,t,jackSteps(card));
+    }
+    hand.splice(s.pendingCard,1);
+    s.discard=card;s.pendingCard=null;s.pendingToken=null;s.moveOptions=[];
+    jackFinish(s,p);
+    if(s.phase!=="finished")s.turnIndex=ni(s,p.length);
+    return s;
+  }
+  if(act==="swap"){
+    if(s.pendingCard==null)throw new Error("اختر ورقة أولًا");
+    const card=hand[s.pendingCard];
+    const targetPlayer=Number(x.targetPlayer),targetToken=Number(x.targetToken);
+    if(card.rank!=="J"||targetPlayer===i||!s.tokens[targetPlayer]?.[targetToken]===undefined||s.tokens[targetPlayer][targetToken]<0)throw new Error("تبديل غير صالح");
+    [s.tokens[i][Number(x.token)],s.tokens[targetPlayer][targetToken]]=[s.tokens[targetPlayer][targetToken],s.tokens[i][Number(x.token)]];
+    hand.splice(s.pendingCard,1);s.discard=card;s.pendingCard=null;s.moveOptions=[];s.turnIndex=ni(s,p.length);return s;
+  }
+}
 if(game==="LUDO"){if(s.turnIndex!==i)throw Error("ليس دورك");if(act==="roll"){if(s.awaitingMove)throw Error("اختر قطعة");s.dice=1+Math.floor(Math.random()*6);s.awaitingMove=true;s.legalTokens=[];s.tokens[i].forEach((v,n)=>{if(v===-1&&s.dice===6)s.legalTokens.push(n);else if(v>=0&&v<57&&v+s.dice<=57)s.legalTokens.push(n)});if(!s.legalTokens.length){s.awaitingMove=false;if(s.dice!==6)s.turnIndex=ni(s,p.length)}return s}if(act==="moveToken"){if(!s.awaitingMove||!s.legalTokens.includes(Number(x.token)))throw Error("قطعة غير قانونية");let t=Number(x.token),v=s.tokens[i][t];s.tokens[i][t]=v===-1?0:v+s.dice;s.awaitingMove=false;if(s.tokens[i].every(v=>v>=57)){s.winner=p[i].username;s.phase="finished";return s}if(s.dice!==6)s.turnIndex=ni(s,p.length);return s}}
 if(game==="BALOOT"){
  if(s.turnIndex!==i)throw Error("ليس دورك");
@@ -257,7 +325,14 @@ function bot(game,s,p){
  if(s.phase==="finished"||!p[s.turnIndex]?.bot)return s;
  const a=p[game==="QAWSAR"?s.qawsarTurn:s.turnIndex];
  if(game==="UNO"){let i=s.turnIndex,h=s.hands[i],n=h.findIndex(c=>c.color==="wild"||c.color===s.color||c.value===s.top.value);if(n<0)return apply(game,s,p,a,"draw",{});return apply(game,s,p,a,"playCard",{index:n,color:C[Math.floor(Math.random()*4)]})}
- if(game==="JAKAROO"){const h=s.hands[s.turnIndex]||[];for(let n=0;n<h.length;n++){const legal=jackLegalTokens(s,s.turnIndex,h[n]);if(legal.length){apply(game,s,p,a,"playCard",{index:n});return apply(game,s,p,a,"moveToken",{token:legal[0]});}}return s}
+ if(game==="JAKAROO"){
+  const i=s.turnIndex,h=s.hands[i]||[];
+  if(s.pendingCard==null){
+    for(let n=0;n<h.length;n++){const legal=jackCardMoves(s,i,h[n]);if(legal.length){apply(game,s,p,a,"playCard",{index:n});break}}
+  }
+  if(s.pendingCard!=null&&s.moveOptions.length){const t=s.moveOptions[0];return apply(game,s,p,a,"moveToken",{token:t})}
+  return s
+}
  if(game==="LUDO"){apply(game,s,p,a,"roll",{});if(s.awaitingMove&&s.legalTokens.length)apply(game,s,p,a,"moveToken",{token:s.legalTokens[0]});return s}
  if(game==="BALOOT"){
    if(s.phase==="bidding"){const suit=s.turnCard?.suit||S[0],h=s.hands[s.turnIndex]||[],strength=h.filter(c=>c.suit===suit).length+(h.filter(c=>c.suit===suit&&["A","10","K","Q","J"].includes(c.rank)).length*0.5);if(strength>=3)return apply(game,s,p,a,"bid",{bid:"hokum",suit});if(s.bidRound===2&&h.some(c=>["A","10"].includes(c.rank)))return apply(game,s,p,a,"bid",{bid:"sun"});return apply(game,s,p,a,"bid",{bid:"pass"})}
