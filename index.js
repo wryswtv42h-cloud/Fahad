@@ -1478,8 +1478,10 @@ client.on("interactionCreate", async (interaction) => {
   }catch(e){
     if(db) await db.query("ROLLBACK").catch(()=>{});
     console.error("Registration button transaction:",e.message);
-    await interaction.editReply({
-      content:"⚠️ تعذر تنفيذ طلب التسجيل. لم يتم إنشاء الحساب."
+    await interaction.message.edit({
+      content:"⚠️ تعذر تنفيذ طلب التسجيل. لم يتم إنشاء الحساب.",
+      embeds:[],
+      components:[]
     }).catch(()=>{});
   }finally{
     db?.release();
