@@ -875,7 +875,7 @@ const GAME_SEATS={
   QAWSAR:["مقعد 1","مقعد 2","مقعد 3","مقعد 4"],
   JAKAROO:["فريق A - 1","فريق A - 2","فريق B - 1","فريق B - 2"]
 };
-const READY_GAMES=new Set(["CODENAMES","SPYFALL","PICTIONARY","CHARADES","WHOAMI","TABOO","WORD_BOMB","TRUTH_LIE","EMOJI_GUESS","TRIVIA","CATEGORIES","LIAR","HOT_SEAT","WOULD_YOU_RATHER","DRAW_GUESS","FASTEST","RIDDLE_RUSH","SECRET_WORD","MIMIC","GUESS_PLAYER","UNO","LUDO","BALOOT","DAQSH","QAWSAR","JAKAROO"]);
+const READY_GAMES=new Set(["CODENAMES","SPYFALL","UNO","LUDO","BALOOT","QAWSAR","JAKAROO"]);
 const GAME_MIN_PLAYERS={CODENAMES:2,SPYFALL:3,PICTIONARY:2,CHARADES:2,WHOAMI:2,TABOO:2,WORD_BOMB:2,TRUTH_LIE:2,EMOJI_GUESS:2,TRIVIA:2,CATEGORIES:2,LIAR:3,HOT_SEAT:2,WOULD_YOU_RATHER:2,DRAW_GUESS:2,FASTEST:2,RIDDLE_RUSH:2,SECRET_WORD:2,MIMIC:2,GUESS_PLAYER:3,UNO:2,LUDO:2,BALOOT:4,DAQSH:2,QAWSAR:4,JAKAROO:4};
 function makeDeck32(){const suits=["♠","♥","♦","♣"];const ranks=["7","8","9","10","J","Q","K","A"];const deck=suits.flatMap(s=>ranks.map(r=>({id:"baloot-"+s+"-"+r,color:s,suit:s,value:r,rank:r})));for(let i=deck.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[deck[i],deck[j]]=[deck[j],deck[i]];}return deck;}
 function makeUnoDeck(){const colors=["🔴","🟡","🟢","🔵"],deck=[];for(const color of colors){deck.push({id:color+"-0",color,value:"0"});for(const value of ["1","2","3","4","5","6","7","8","9","Skip","Reverse","+2"])deck.push({id:color+"-"+value+"-a",color,value},{id:color+"-"+value+"-b",color,value})}for(let i=0;i<4;i++)deck.push({id:"wild-"+i,color:"wild",value:"Wild"},{id:"wild4-"+i,color:"wild",value:"+4"});return shuffle(deck)}
@@ -977,7 +977,7 @@ app.get("/api/games/:id/watch",async(req,res)=>{
   res.json({game:q.rows[0],spectator:true});
 });
 app.post("/api/games",async(req,res)=>{
-  const game=String(req.body?.game||"").trim().toUpperCase(); if(!READY_GAMES.has(game)) return res.status(400).json({error:"هذه اللعبة غير متاحة حاليًا؛ الألعاب الجاهزة فقط: UNO، لودو، بلوت، جاكارو، قوصر"}); const requestedMax=Math.max(2,Number(req.body?.maxPlayers)||4),gameCap=game==="CODENAMES"?16:game==="UNO"?12:game==="QAWSAR"?4:4,max=Math.min(requestedMax,gameCap),u=currentUser(req),guestId=String(req.body?.guestId||"").trim().slice(0,80),guestName=String(req.body?.guestName||"زائر").trim().slice(0,40);
+  const game=String(req.body?.game||"").trim().toUpperCase(); if(!READY_GAMES.has(game)) return res.status(400).json({error:"هذه اللعبة غير متاحة حاليًا؛ الألعاب الجاهزة فقط: كود نيمز، سباي فول، UNO، لودو، بلوت، قوصر، جاكارو"}); const requestedMax=Math.max(2,Number(req.body?.maxPlayers)||4),gameCap=game==="CODENAMES"?16:game==="UNO"?12:game==="QAWSAR"?4:game==="SPYFALL"?8:game==="LUDO"?4:game==="BALOOT"?4:game==="JAKAROO"?4:4,max=Math.min(requestedMax,gameCap),u=currentUser(req),guestId=String(req.body?.guestId||"").trim().slice(0,80),guestName=String(req.body?.guestName||"زائر").trim().slice(0,40);
   if(await activeGameFor(req))return res.status(409).json({error:"أنت داخل جلسة بالفعل. اخرج من جلستك الحالية أولًا."});
   if(!GAME_SEATS[game])return res.status(400).json({error:"اللعبة غير مدعومة"});
   const min=GAME_MIN_PLAYERS[game]||2;
