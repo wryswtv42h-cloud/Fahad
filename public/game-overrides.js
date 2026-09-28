@@ -16,7 +16,7 @@ JAKAROO:"أربع قطع وأربع أوراق. A/K للإخراج، الحرك�
 const guest=()=>{let x=localStorage.getItem("mld_guest_id");if(!x){x="g_"+(crypto.randomUUID?.()||Math.random().toString(36).slice(2));localStorage.setItem("mld_guest_id",x)}return x};
 const body=()=>({guestId:guest(),guestName:"زائر"});
 const api=async(u,o={})=>{const r=await fetch(u,o);let d={};try{d=await r.json()}catch{}if(!r.ok){const e=new Error(d.error||"تعذر تنفيذ العملية");e.status=r.status;throw e}return d};
-let activeId=null,timer=null,spectator=false,actionBusy=false,gameFullscreen=false;
+let activeId=null,timer=null,spectator=false,actionBusy=false,gameFullscreen=false,selectedSeat=null;
 const stop=()=>{if(timer){clearInterval(timer);timer=null}};
 const list=()=>{stop();activeId=null;gameFullscreen=false;localStorage.removeItem("mld_active_game_id");document.body.classList.remove("mld-game-fullscreen");document.documentElement.classList.remove("mld-game-fullscreen");document.body.style.overflow="";document.body.style.touchAction="";return typeof window.change==="function"?window.change("games"):null};
 const tone=(f=520,d=.07,type="sine")=>{try{const C=AudioContext||webkitAudioContext,c=new C(),o=c.createOscillator(),g=c.createGain();o.type=type;o.frequency.value=f;g.gain.setValueAtTime(.025,c.currentTime);g.gain.exponentialRampToValueAtTime(.001,c.currentTime+d);o.connect(g);g.connect(c.destination);o.start();o.stop(c.currentTime+d)}catch{}};
@@ -84,7 +84,7 @@ function controls(g,s,players,me,current){
  return "<div class='control-box'><p>"+esc(s.prompt||"الجلسة فعالة.")+"</p></div>";
 }
 async function openSession(id,watch=false){
- stop();activeId=id;spectator=!!watch;localStorage.setItem("mld_active_game_id",String(id));
+ stop();activeId=id;spectator=!!watch;selectedSeat=null;localStorage.setItem("mld_active_game_id",String(id));
  const render=async()=>{
   try{
    const d=await api("/api/games/"+id+"/state?guestId="+encodeURIComponent(guest()));
@@ -94,7 +94,7 @@ async function openSession(id,watch=false){
    const seatButtons=Array.from({length:Number(g.max_players)||players.length||4},(_,i)=>{
      const seat=(g.seats&&g.seats[i])||seatName(g.game,i);
      const occupant=players.find(p=>p.seat===seat);
-     const selected=viewer?.seat===seat;
+     const selected=viewer?.seat===seat||selectedSeat===seat;
      const mine=occupant&&(occupant.guest&&occupant.guestId===guest()||occupant.username===viewer?.username);
      return "<button type='button' class='game-seat-choice "+(selected?"selected ":"")+(occupant&&!mine?"occupied":"")+"' data-seat='"+esc(seat)+"' "+(occupant&&!mine?"disabled":"")+"><b>"+esc(seat)+"</b><small>"+(occupant?(mine?"أنت":esc(occupant.username||"محجوز")):"مقعد فارغ — اختره")+"</small></button>";
    }).join("");
@@ -109,7 +109,7 @@ async function openSession(id,watch=false){
    $("#game-back").onclick=list;$("#eg-fullscreen").onclick=fs;$("#eg-fullscreen-fab").onclick=fs;$("#game-menu-toggle").onclick=()=>{const b=$("#game-menu-toggle"),p=$("#game-menu-panel"),open=p.classList.toggle("open");b.setAttribute("aria-expanded",String(open));b.classList.toggle("open",open);b.querySelector("b").textContent=open?"⌃":"⌄";if(open)p.scrollIntoView({behavior:"smooth",block:"nearest"})};$("#game-rules").onclick=()=>alert(RULES[g.game]||"القوانين تظهر حسب الدور داخل الجلسة.");
    $("#eg-leave").onclick=async()=>{if(!spectator)await api("/api/games/"+id+"/leave",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body())});list()};
    $("#game-finish")?.addEventListener("click",async()=>{await api("/api/games/"+id+"/finish",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body())});list()});
-   document.querySelectorAll("[data-seat]").forEach(b=>b.onclick=async()=>{if(b.disabled)return;const seat=b.dataset.seat;b.disabled=true;b.classList.add("selected");b.setAttribute("aria-pressed","true");document.querySelectorAll("[data-seat]").forEach(x=>{if(x!==b){x.classList.remove("selected");x.setAttribute("aria-pressed","false")}});try{const d=await api("/api/games/"+id+"/seat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...body(),seat})});if(d?.game?.players){const me=d.game.players.find(p=>(p.guest&&p.guestId===guest())||(!p.guest&&p.username===d.game.host_username&&p.host));if(!me||me.seat!==seat)throw Error("تعذر تثبيت المقعد على الخادم")}await render()}catch(e){b.classList.remove("selected");b.setAttribute("aria-pressed","false");const x=$(".room-status");if(x)x.textContent=e.message||"تعذر اختيار المقعد"}finally{b.disabled=false}});
+   document.querySelectorAll("[data-seat]").forEach(b=>b.onclick=async()=>{if(b.disabled)return;const seat=b.dataset.seat;b.disabled=true;b.classList.add("selected");b.setAttribute("aria-pressed","true");document.querySelectorAll("[data-seat]").forEach(x=>{if(x!==b){x.classList.remove("selected");x.setAttribute("aria-pressed","false")}});try{const d=await api("/api/games/"+id+"/seat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...body(),seat})});if(d?.game?.players){const me=d.game.players.find(p=>(p.guest&&p.guestId===guest())||(!p.guest&&p.username===d.game.host_username&&p.host));if(!me||me.seat!==seat)throw Error("تعذر تثبيت المقعد على الخادم");selectedSeat=seat;const banner=$(".game-perspective-banner");if(banner)banner.textContent="🎮 منظورك: "+seat;const start=$("#eg-start");if(start)start.disabled=false}catch(e){b.classList.remove("selected");b.setAttribute("aria-pressed","false");const x=$(".room-status");if(x)x.textContent=e.message||"تعذر اختيار المقعد"}finally{b.disabled=false}});
    $("#eg-start")?.addEventListener("click",async()=>{const b=$("#eg-start");b.disabled=true;try{await api("/api/games/"+id+"/start",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body())});await render()}catch(e){const st=$(".room-status");if(st)st.textContent=e.message||"تعذر بدء الجلسة";}finally{b.disabled=false}});
    document.querySelectorAll("[data-card]").forEach(b=>b.onclick=()=>{if(g.game==="QAWSAR"){window.__mldQawsarSelected=Number(b.dataset.card);tone(620,.05);render();return}act("playCard",{index:Number(b.dataset.card)})});
    document.querySelectorAll("[data-choice]").forEach(b=>b.onclick=()=>act("choose",{choice:Number(b.dataset.choice)}));
