@@ -1049,7 +1049,7 @@ app.post("/api/games/:id/start",async(req,res)=>{
 app.post("/api/games/:id/finish",async(req,res)=>{
   const u=currentUser(req),guestId=String(req.body?.guestId||"").trim(),q=await pool.query("SELECT * FROM game_lobbies WHERE id=$1",[req.params.id]);
   if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة"});
-  const g=q.rows[0],players=Array.isArray(g.players)?g.players:[],host= u?g.host_username===u.username:String(players[0]?.guestId||"")===guestId;
+  const g=q.rows[0],players=Array.isArray(g.players)?g.players:[],originalPlayers=Array.isArray(g.state?.__players)?g.state.__players:[],host= u?players.some(p=>p.host&&!p.bot&&p.username===u.username):players.some(p=>p.host&&!p.bot&&p.guestId===guestId)||originalPlayers.some(p=>p.host&&!p.bot&&p.guestId===guestId);
   const ownerOverride=!!u&&u.role==="owner";
   if(!host&&!ownerOverride)return res.status(403).json({error:"فقط صاحب الجلسة أو الأونر يقدر ينهي اللعبة"});
   if(g.status==="finished"||g.status==="closed")return res.json({ok:true,finished:true});
