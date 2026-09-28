@@ -1454,18 +1454,13 @@ client.on("interactionCreate", async (interaction) => {
     );
     await db.query("COMMIT");
 
-    // Everything above is committed before any Discord presentation work.
+    // The transaction is already committed. Update the original message exactly once.
     await interaction.message.edit({
       content:"✅ تم تأكيد إنشاء حساب MLD بنجاح.",
       embeds:[],
       components:[]
-    }).catch(()=>{});
-    await interaction.message.edit({
-      content:"✅ تم تأكيد إنشاء حساب MLD بنجاح.",
-      embeds:[],
-      components:[]
-    }).catch(()=>{});
-    await audit(
+    }).catch((editError)=>console.error("Registration confirmation message edit:",editError.message));
+    await audit
       {username:v.username,discordUsername:v.discord_username},
       "register_confirmed",
       "تأكيد إنشاء الحساب من زر Discord"
