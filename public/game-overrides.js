@@ -16,7 +16,7 @@ JAKAROO:"أربع قطع وأربع أوراق. A/K للإخراج، الحرك�
 const guest=()=>{let x=localStorage.getItem("mld_guest_id");if(!x){x="g_"+(crypto.randomUUID?.()||Math.random().toString(36).slice(2));localStorage.setItem("mld_guest_id",x)}return x};
 const body=()=>({guestId:guest(),guestName:"زائر"});
 const api=async(u,o={})=>{const r=await fetch(u,o);let d={};try{d=await r.json()}catch{}if(!r.ok){const e=new Error(d.error||"تعذر تنفيذ العملية");e.status=r.status;throw e}return d};
-let activeId=null,timer=null,spectator=false;
+let activeId=null,timer=null,spectator=false,actionBusy=false;
 const stop=()=>{if(timer){clearInterval(timer);timer=null}};
 const list=()=>{stop();activeId=null;localStorage.removeItem("mld_active_game_id");document.body.classList.remove("mld-game-fullscreen");document.documentElement.classList.remove("mld-game-fullscreen");document.body.style.overflow="";return typeof window.change==="function"?window.change("games"):null};
 const tone=(f=520,d=.07,type="sine")=>{try{const C=AudioContext||webkitAudioContext,c=new C(),o=c.createOscillator(),g=c.createGain();o.type=type;o.frequency.value=f;g.gain.setValueAtTime(.025,c.currentTime);g.gain.exponentialRampToValueAtTime(.001,c.currentTime+d);o.connect(g);g.connect(c.destination);o.start();o.stop(c.currentTime+d)}catch{}};
@@ -89,7 +89,7 @@ async function openSession(id,watch=false){
    $("#game-back").onclick=list;$("#eg-fullscreen").onclick=fs;$("#eg-fullscreen-fab").onclick=fs;$("#game-menu-toggle").onclick=()=>{const b=$("#game-menu-toggle"),p=$("#game-menu-panel"),open=p.classList.toggle("open");b.setAttribute("aria-expanded",String(open));b.classList.toggle("open",open);b.querySelector("b").textContent=open?"⌃":"⌄";if(open)p.scrollIntoView({behavior:"smooth",block:"nearest"})};$("#game-rules").onclick=()=>alert(RULES[g.game]||"القوانين تظهر حسب الدور داخل الجلسة.");
    $("#game-leave").onclick=async()=>{if(!spectator)await api("/api/games/"+id+"/leave",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body())});list()};
    $("#game-finish")?.addEventListener("click",async()=>{await api("/api/games/"+id+"/finish",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body())});list()});
-   document.querySelectorAll("[data-seat]").forEach(b=>b.onclick=async()=>{await api("/api/games/"+id+"/seat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...body(),seat:b.dataset.seat})});render()});
+   document.querySelectorAll("[data-seat]").forEach(b=>b.onclick=async()=>{if(b.disabled)return;b.disabled=true;try{await api("/api/games/"+id+"/seat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...body(),seat:b.dataset.seat})});await render()}catch(e){const x=$(".room-status");if(x)x.textContent=e.message||"تعذر اختيار المقعد"}finally{b.disabled=false}});
    $("#eg-start")?.addEventListener("click",async()=>{const b=$("#eg-start");b.disabled=true;try{await api("/api/games/"+id+"/start",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body())});render()}catch(e){b.disabled=false;alert(e.message)}});
    document.querySelectorAll("[data-card]").forEach(b=>b.onclick=()=>{if(g.game==="QAWSAR"){window.__mldQawsarSelected=Number(b.dataset.card);tone(620,.05);render();return}act("playCard",{index:Number(b.dataset.card)})});
    document.querySelectorAll("[data-choice]").forEach(b=>b.onclick=()=>act("choose",{choice:Number(b.dataset.choice)}));
@@ -103,7 +103,7 @@ async function openSession(id,watch=false){
    if(e.status===404||e.status===410){if(typeof content!=="undefined")content.innerHTML="<section class='game-room'><h2>انتهت الجلسة</h2><p>"+esc(e.message)+"</p><button class='primary' id='dead-back'>العودة للألعاب</button></section>";$("#dead-back").onclick=list;stop();return}
   }
  };
- const act=async(action,x={})=>{try{await api("/api/games/"+id+"/action",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...body(),action,...x})});tone(action==="playCard"?680:520);await render()}catch(e){const x=$(".room-status");if(x)x.textContent=e.message;tone(180,.1,"square")}};
+ const act=async(action,x={})=>{if(actionBusy)return;actionBusy=true;try{await api("/api/games/"+id+"/action",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...body(),action,...x})});tone(action==="playCard"?680:520);await render()}catch(e){const x=$(".room-status");if(x)x.textContent=e.message||"تعذر تنفيذ الحركة";tone(180,.1,"square")}finally{actionBusy=false}};
  await render();timer=setInterval(render,1200);
 }
 async function games(){
