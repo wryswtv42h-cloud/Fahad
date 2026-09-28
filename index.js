@@ -846,7 +846,7 @@ const GAME_ENGINE={
 };
 function makeGameState(game,players=[]){ return GAME_ENGINE_V4.create(game,players); }
 const GAME_SEATS={
-  CODENAMES:Array.from({length:16},(_,i)=>i<2?"قائد "+(i?"الأزرق":"الأحمر"):"عميل "+(i<8?"الأحمر":"الأزرق")),
+  CODENAMES:["قائد الأحمر",...Array.from({length:7},(_,i)=>"عميل أحمر "+(i+1)),"قائد الأزرق",...Array.from({length:7},(_,i)=>"عميل أزرق "+(i+1))],
 
   SPYFALL:["المحقق 1","المحقق 2","المحقق 3","الجاسوس"],
   PICTIONARY:["الرسام","المخمن 1","المخمن 2","المخمن 3"],
