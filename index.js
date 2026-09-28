@@ -12,7 +12,7 @@ const helmet = require("helmet");
 const compression = require("compression");
 const GAME_ENGINE_V4 = require("./game-engines");
 const GAME_RESULT_TTL_MS = 5*60*1000;
-// game host cleanup hardening
+// game host cleanup hardening v2
 
 const token = process.env.DISCORD_BOT_TOKEN;
 const guildId = process.env.DISCORD_GUILD_ID;
