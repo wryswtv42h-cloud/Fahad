@@ -889,7 +889,7 @@ function playerKey(p){return p?.guestId?("g:"+p.guestId):("u:"+String(p?.usernam
 function actorFromRequest(players,u,guestId){return u?players.find(p=>!p.bot&&p.username===u.username):players.find(p=>!p.bot&&p.guestId===guestId);}
 function seatOptions(game,max){
  const base=GAME_SEATS[game]||[];
- const n=Math.max(2,Math.min(Number(max)||4,8));
+ const hardCap=game==="CODENAMES"?16:game==="UNO"?12:game==="QAWSAR"?4:4; const n=Math.max(2,Math.min(Number(max)||4,hardCap));
  const out=base.slice(0,n);
  while(out.length<n)out.push("مقعد "+(out.length+1));
  return out;
