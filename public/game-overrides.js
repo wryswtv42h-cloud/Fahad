@@ -122,7 +122,7 @@ async function games(){
  document.querySelectorAll("[data-watch]").forEach(b=>b.onclick=()=>openSession(b.dataset.watch,true));
 }
 window.enhancedGames=games;window.renderGames=games;window.openEnhancedGameSession=openSession;
-if(typeof window.change==="function"&&!window.__mldGameRoomV2){const oldChange=window.change;window.__mldGameRoomV2=true;window.change=async r=>{if(activeId&&r!=="games"){const id=activeId,sp=spectator;stop();activeId=null;const out=await oldChange(r);if(!sp)api("/api/games/"+id+"/leave",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body())}).catch(()=>{});return out}return oldChange(r)}}
+if(typeof window.change==="function"&&!window.__mldGameRoomV2){const oldChange=window.change;window.__mldGameRoomV2=true;window.change=async r=>{if(activeId&&r!=="games"&&!document.body.classList.contains("mld-booting")){const id=activeId,sp=spectator;stop();activeId=null;const out=await oldChange(r);if(!sp)api("/api/games/"+id+"/leave",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body())}).catch(()=>{});return out}return oldChange(r)}}
 document.addEventListener("fullscreenchange",()=>{document.body.style.overflow=document.fullscreenElement?"hidden":""});
 if(typeof renderGames==="function")games();
 })();
