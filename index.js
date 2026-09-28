@@ -1363,7 +1363,8 @@ client.on("interactionCreate", async (interaction) => {
   try{
     // Use an ephemeral reply instead of relying on a message edit as the acknowledgement.
     // This prevents Discord mobile/desktop from showing an expired/ended interaction state.
-    if(!interaction.deferred&&!interaction.replied) await interaction.deferReply({ephemeral:true});
+    // Acknowledge the Discord button immediately so mobile/desktop never sees an expired interaction.
+    if(!interaction.deferred&&!interaction.replied) await interaction.deferUpdate();
     const db=await pool.connect();
     try{
       await db.query("BEGIN");
@@ -1377,7 +1378,7 @@ client.on("interactionCreate", async (interaction) => {
       if(action==="register_no"){
         await db.query("UPDATE registration_verifications SET used_at=NOW() WHERE id=$1 AND used_at IS NULL",[id]);
         await db.query("COMMIT");
-        await interaction.editReply({content:"❌ تم إلغاء إنشاء الحساب نهائيًا. لم يتم إنشاء أي حساب."}).catch(()=>{});
+        await interaction.followUp({content:"❌ تم إلغاء إنشاء الحساب نهائيًا. لم يتم إنشاء أي حساب.",ephemeral:true}).catch(()=>{});
         await interaction.message.edit({content:"❌ تم إلغاء إنشاء الحساب — لم يتم إنشاء أي حساب.",embeds:[],components:[]}).catch(()=>{});
         await audit({username:v.username,discordUsername:v.discord_username},"register_cancelled","إلغاء إنشاء الحساب من زر Discord").catch(()=>{});
         return;
@@ -1386,14 +1387,14 @@ client.on("interactionCreate", async (interaction) => {
       if(exists.rowCount){
         await db.query("UPDATE registration_verifications SET used_at=NOW() WHERE id=$1 AND used_at IS NULL",[id]);
         await db.query("COMMIT");
-        await interaction.editReply({content:"⚠️ الحساب موجود مسبقًا أو Discord مرتبط بحساب آخر. لم يتم إنشاء حساب جديد."}).catch(()=>{});
+        await interaction.followUp({content:"⚠️ الحساب موجود مسبقًا أو Discord مرتبط بحساب آخر. لم يتم إنشاء حساب جديد.",ephemeral:true}).catch(()=>{});
         await interaction.message.edit({content:"⚠️ تم استخدام طلب التسجيل، والحساب موجود مسبقًا.",embeds:[],components:[]}).catch(()=>{});
         return;
       }
       await db.query("INSERT INTO app_users(username,password_hash,discord_username,discord_user_id,role) VALUES($1,$2,$3,$4,'user')",[v.username,v.password_hash,v.discord_username,v.discord_user_id]);
       await db.query("UPDATE registration_verifications SET used_at=NOW() WHERE id=$1 AND used_at IS NULL",[id]);
       await db.query("COMMIT");
-      await interaction.editReply({content:"✅ تم إنشاء حساب MLD بنجاح. أرسلت لك بيانات الحساب في الخاص."}).catch(()=>{});
+      await interaction.followUp({content:"✅ تم إنشاء حساب MLD بنجاح. أرسلت لك بيانات الحساب في الخاص.",ephemeral:true}).catch(()=>{});
       await interaction.message.edit({content:"✅ تم إنشاء حساب MLD بنجاح.",embeds:[],components:[]}).catch(()=>{});
       await audit({username:v.username,discordUsername:v.discord_username},"register_confirmed","تم تأكيد إنشاء الحساب من زر Discord").catch(()=>{});
       await interaction.user.send({content:"بيانات حسابك في MLD:\nاسم المستخدم: **"+v.username+"**\nDiscord: **"+v.discord_username+"**\nكلمة المرور: هي كلمة المرور التي اخترتها في الموقع، ولا يمكنني إظهارها أو استعادتها كنص.\n\nتقدر الآن تسجل الدخول من الموقع."}).catch(()=>{});
@@ -1403,7 +1404,7 @@ client.on("interactionCreate", async (interaction) => {
     }finally{db.release();}
   }catch(e){
     console.error("Registration button:",e.message);
-    if(interaction.deferred||interaction.replied) await interaction.editReply({content:"⚠️ تعذر تنفيذ الطلب حاليًا. لم يتم إنشاء الحساب تلقائيًا؛ حاول مرة أخرى من نفس رسالة التأكيد إذا كانت ما زالت فعالة."}).catch(()=>{});
+    if(interaction.deferred||interaction.replied) await interaction.followUp({content:"⚠️ تعذر تنفيذ الطلب حاليًا. لم يتم إنشاء الحساب تلقائيًا؛ إذا لم تظهر نتيجة فابدأ طلب تسجيل جديد.",ephemeral:true}).catch(()=>{});
     else await interaction.reply({content:"⚠️ تعذر تنفيذ الطلب حاليًا. لم يتم إنشاء الحساب تلقائيًا.",ephemeral:true}).catch(()=>{});
   }
 });
