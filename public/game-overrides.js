@@ -27,9 +27,12 @@ JAKAROO:"لكل لاعب 4 قطع و4 أوراق. استخدم A أو K لإخر
     return (seats[game]||[]).concat(Array.from({length:Math.max(0,n-(seats[game]||[]).length)},(_,i)=>"مقعد "+((seats[game]||[]).length+i+1))).slice(0,n);
   };
   const gameCap=game=>game==="CODENAMES"?16:game==="UNO"?12:4;
-  const guestId = localStorage.getItem("mld_guest_id") || ("g_"+crypto.randomUUID());
-  localStorage.setItem("mld_guest_id", guestId);
-  const payload = () => ({guestId,guestName:"زائر"});
+  const getGuestId = () => {
+    let id = localStorage.getItem("mld_guest_id");
+    if(!id){ id = "g_"+crypto.randomUUID(); localStorage.setItem("mld_guest_id",id); }
+    return id;
+  };
+  const payload = () => ({guestId:getGuestId(),guestName:"زائر"});
   const api = async (url,opt={}) => { const r=await fetch(url,opt); let d={}; try{d=await r.json()}catch{} if(!r.ok) throw Error(d.error||"تعذر تنفيذ العملية"); return d; };
   let timer=null, activeId=null, spectator=false;
   const clearActive=()=>{localStorage.removeItem("mld_active_game_id");activeId=null};
@@ -73,9 +76,15 @@ JAKAROO:"لكل لاعب 4 قطع و4 أوراق. استخدم A أو K لإخر
         const focused=document.activeElement;
         if(focused&&focused.closest&&focused.closest(".game-room")&&focused.matches("input,textarea,select")) return;
       try{
-        const d=await api("/api/games/"+id+"/state?guestId="+encodeURIComponent(guestId));
+        let d;
+        let lastStateError=null;
+        for(let attempt=0;attempt<3;attempt++){
+          try{ d=await api("/api/games/"+id+"/state?guestId="+encodeURIComponent(getGuestId())); lastStateError=null; break; }
+          catch(e){ lastStateError=e; if(attempt<2) await new Promise(r=>setTimeout(r,350*(attempt+1))); }
+        }
+        if(!d) throw lastStateError||new Error("تعذر تحميل حالة الجلسة");
         const g=d.game,s=d.state||{},players=g.players||[];
-        const me=players.find(p=>window.mldUser?p.username===window.mldUser.username:p.guestId===guestId); const isHost=!!me?.host || (!window.mldUser && players[0]?.guestId===guestId) || (!!window.mldUser && g.host_username===window.mldUser.username);
+        const me=players.find(p=>window.mldUser?p.username===window.mldUser.username:p.guestId===getGuestId()); const isHost=!!me?.host || (!window.mldUser && players[0]?.guestId===guestId) || (!!window.mldUser && g.host_username===window.mldUser.username);
         const myIndex=players.findIndex(p=>window.mldUser?p.username===window.mldUser.username:p.guestId===guestId);
         const current=Number(s.turnPlayerIndex ?? s.turnIndex);
         const roomMeta=meta[g.game]||["◆","default"];
