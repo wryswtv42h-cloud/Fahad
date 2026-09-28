@@ -48,7 +48,7 @@ document.addEventListener("fullscreenchange",()=>{
  if(native!==gameFullscreen){gameFullscreen=native;applyFullscreen();}
 });
 const card=(c,back=false,extra="")=>{if(back)return "<div class='playing-card back'><i>MLD</i><b>✦</b></div>";c=c||{};const suit=esc(c.suit||"");const rank=esc(c.rank??c.value??"");const red=["♥","♦"].includes(c.suit)||c.color==="red";return "<button type='button' class='playing-card "+(red?"red ":"")+" "+extra+"'><span>"+suit+"</span><strong>"+rank+"</strong><small>"+suit+"</small></button>"};
-const seatName=(g,i)=>{if(g==="CODENAMES"){if(i===0)return"قائد الأحمر";if(i===1)return"قائد الأزرق";return i%2?"عميل أزرق "+Math.ceil((i-1)/2):"عميل أحمر "+Math.ceil((i-1)/2)}return"مقعد "+(i+1)};
+const seatName=(g,i)=>{const maps={CODENAMES:["قائد الأحمر",...Array.from({length:7},(_,n)=>"عميل أحمر "+(n+1)),"قائد الأزرق",...Array.from({length:7},(_,n)=>"عميل أزرق "+(n+1))],BALOOT:["فريق A - 1","فريق A - 2","فريق B - 1","فريق B - 2"],JAKAROO:["فريق A - 1","فريق A - 2","فريق B - 1","فريق B - 2"]};return maps[g]?.[i]||"مقعد "+(i+1)};
 const renderSeats=(g,players,current,me)=>players.map((p,i)=>"<div class='player-seat p"+Math.min(i,5)+" "+(i===current?"turn ":"")+(i===me?"self ":"")+(p.bot?"bot":"")+"'><div class='seat-avatar'>"+(p.bot?"BOT":esc((p.username||"لاعب").slice(0,2)))+"</div><div><b>"+esc(i===me?"أنت":p.username||"لاعب")+"</b><small>"+esc(p.seatLabel||seatName(g,i))+(i===current?" · دورك الآن":"")+"</small></div></div>").join("");
 const tableCards=(s,g,me)=>{
  if(g==="UNO")return "<div class='center-piles'><div><span>السحب</span>"+card(null,true)+"<small>"+(s.drawCount??0)+" ورقة</small></div><div class='active-card'>"+card(s.discardTop||s.top)+"<small>اللون "+esc(s.currentColor||s.color||"—")+"</small></div></div>";
