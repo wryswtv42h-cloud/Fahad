@@ -84,8 +84,8 @@ JAKAROO:"لكل لاعب 4 قطع و4 أوراق. استخدم A أو K لإخر
         }
         if(!d) throw lastStateError||new Error("تعذر تحميل حالة الجلسة");
         const g=d.game,s=d.state||{},players=g.players||[];
-        const me=players.find(p=>window.mldUser?p.username===window.mldUser.username:p.guestId===getGuestId()); const isHost=!!me?.host || (!window.mldUser && players[0]?.guestId===guestId) || (!!window.mldUser && g.host_username===window.mldUser.username);
-        const myIndex=players.findIndex(p=>window.mldUser?p.username===window.mldUser.username:p.guestId===guestId);
+        const me=players.find(p=>window.mldUser?p.username===window.mldUser.username:p.guestId===getGuestId()); const isHost=!!me?.host || (!window.mldUser && players[0]?.guestId===getGuestId()) || (!!window.mldUser && g.host_username===window.mldUser.username);
+        const myIndex=players.findIndex(p=>window.mldUser?p.username===window.mldUser.username:p.guestId===getGuestId());
         const current=Number(s.turnPlayerIndex ?? s.turnIndex);
         const roomMeta=meta[g.game]||["◆","default"];
         const occupied=new Set(players.map(p=>p.seat).filter(Boolean));
