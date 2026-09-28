@@ -331,3 +331,18 @@ body.mld-booting #mld-welcome{opacity:1;visibility:visible}
 .mobile-menu-main{margin:5px 0;font-weight:900}
 .mobile-menu-logout{color:#ff9eaf}
 @media(min-width:801px){.mobile-menu-group{display:none}}
+
+
+/* FINAL COMPACT MOBILE MENU */
+@media(max-width:820px){
+  .mobile-menu{grid-template-columns:1fr!important;gap:5px!important;padding:9px 10px 14px!important}
+  .mobile-menu-group{margin:0!important;border-radius:14px}
+  .mobile-menu-main{margin:0!important;min-height:44px!important}
+  .mobile-menu-group-toggle{min-height:44px!important}
+  .mobile-menu-sub{padding:0 5px!important}
+  .mobile-menu-group.is-open .mobile-menu-sub{padding-bottom:5px!important}
+  .mobile-menu-group.is-open .mobile-menu-sub>*{min-height:40px!important}
+}
+@media(max-width:560px){
+  .mobile-menu{top:74px!important;max-height:calc(100dvh - 74px)!important}
+}
