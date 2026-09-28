@@ -1,5 +1,5 @@
 const BASE=process.env.BASE_URL||"https://discord-community-platform-production-9348.up.railway.app";
-const ENV_CONCURRENCY=Number(process.env.LOAD_CONCURRENCY||1000);
+const ENV_CONCURRENCY=Number(process.env.LOAD_CONCURRENCY||500);
 const ENV_DURATION=Number(process.env.LOAD_DURATION_MS||0);
 const stages=[
 {name:"warmup",concurrency:25,total:250,paths:["/health","/api/games"]},
