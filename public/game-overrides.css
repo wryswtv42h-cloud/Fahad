@@ -239,3 +239,20 @@ body.mld-game-fullscreen .game-fullscreen-fab{z-index:2147483647!important}
 .game-room .table-own-hand .hand-card{animation:dealIn .24s ease both}
 @keyframes dealIn{from{opacity:0;transform:translateY(18px) rotate(-3deg) scale(.94)}to{opacity:1;transform:none}}
 .q-target-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0}.q-target-row label{display:grid;gap:5px;font-size:11px;color:var(--muted)}.q-target-row select{min-height:42px;border-radius:11px;border:1px solid var(--line);background:#111827;color:#fff;padding:0 10px}@media(max-width:600px){.q-target-row{grid-template-columns:1fr}}
+
+
+/* HOTFIX: clickable table options on every device */
+.game-room .game-menu-toggle{position:relative!important;z-index:100!important;pointer-events:auto!important}
+.game-room .game-menu-panel{position:relative!important;z-index:99!important;pointer-events:none!important}
+.game-room .game-menu-panel.open{pointer-events:auto!important;display:block!important;max-height:none!important;overflow:visible!important}
+.game-room .game-menu-panel.open>*{pointer-events:auto!important;overflow:visible!important;min-height:0!important}
+.game-room .game-menu-panel.open .control-box,
+.game-room .game-menu-panel.open .lobby,
+.game-room .game-menu-panel.open button,
+.game-room .game-menu-panel.open input,
+.game-room .game-menu-panel.open select,
+.game-room .game-menu-panel.open textarea{pointer-events:auto!important;position:relative!important;z-index:101!important}
+@media(max-width:700px){
+ .game-room .game-menu-panel.open{max-height:38dvh!important;overflow:auto!important;-webkit-overflow-scrolling:touch!important}
+ .game-room .game-menu-panel.open>*{overflow:visible!important}
+}
