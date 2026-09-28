@@ -88,7 +88,7 @@ QAWSAR:"اسحب أوراقك والعب حسب الدور؛ الفائز من �
           controls="<div class='game-spectator'>وضع المشاهدة — لا توجد لك يد أو دور خاص.</div>";
         } else if(s.version>=4 && g.game==="CODENAMES"){
           const role=s.playerRole||"spectator",mineClue=role.endsWith("spymaster"),mineGuess=role.endsWith("agent");
-          controls="<div class='game-phase-banner'>"+esc(role)+" · فريق "+esc(s.team||"—")+"</div>";
+          controls="<div class='game-phase-banner'>"+(role==="red_spymaster"?"🔴 قائد الأحمر":role==="blue_spymaster"?"🔵 قائد الأزرق":role==="red_agent"?"🔴 عميل الأحمر":role==="blue_agent"?"🔵 عميل الأزرق":"مشاهد")+" · الدور: "+esc(s.team==="red"?"الأحمر":"الأزرق")+"</div>";
           if(s.clue)controls+="<div class='game-prompt'>التلميح: <b>"+esc(s.clue.word)+"</b> · "+esc(s.clue.number)+"</div>";
           controls+="<div class='codenames-board'>"+(s.words||[]).map((w,i)=>"<button class='code-word "+(w.revealed?"revealed":"")+"' data-eg-guess='"+i+"' "+(!mineGuess||w.revealed||!s.clue?"disabled":"")+">"+esc(w.word)+"</button>").join("")+"</div>";
           if(mineClue)controls+="<div class='game-control-row'><input id='eg-clue' class='full' maxlength='30' placeholder='كلمة واحدة للتلميح'><input id='eg-clue-num' type='number' min='1' max='9' value='1'><button class='primary' data-eg-action='clue'>إعطاء التلميح</button></div>";
