@@ -1589,7 +1589,7 @@ const server = app.listen(port, async () => {
   server.headersTimeout = 70_000;
   server.requestTimeout = 30_000;
   console.log(`MLD listening on port ${port}`);
-  try { await initAppDatabase(); await ensureOwner(); await ensureChatDatabase(); console.log("App database ready"); }
+  try { await initAppDatabase(); await pool.query("DELETE FROM game_lobbies WHERE game NOT IN ('UNO','LUDO','BALOOT','JAKAROO','QAWSAR')"); await ensureOwner(); await ensureChatDatabase(); console.log("App database ready"); }
   catch (error) { console.error("Database init failed:", error.message); }
 });
 async function gracefulShutdown(signal){
