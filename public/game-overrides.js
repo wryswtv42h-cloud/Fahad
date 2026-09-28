@@ -66,7 +66,7 @@ async function openSession(id,watch=false){
    $("#game-leave").onclick=async()=>{if(!spectator)await api("/api/games/"+id+"/leave",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body())});list()};
    $("#game-finish")?.addEventListener("click",async()=>{await api("/api/games/"+id+"/finish",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body())});list()});
    document.querySelectorAll("[data-seat]").forEach(b=>b.onclick=async()=>{await api("/api/games/"+id+"/seat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...body(),seat:b.dataset.seat})});render()});
-   $("#eg-start")?.addEventListener("click",async()=>{const b=$("#game-start");b.disabled=true;try{await api("/api/games/"+id+"/start",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body())});render()}catch(e){b.disabled=false;alert(e.message)}});
+   $("#eg-start")?.addEventListener("click",async()=>{const b=$("#eg-start");b.disabled=true;try{await api("/api/games/"+id+"/start",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body())});render()}catch(e){b.disabled=false;alert(e.message)}});
    document.querySelectorAll("[data-card]").forEach(b=>b.onclick=()=>act("playCard",{index:Number(b.dataset.card)}));
    document.querySelectorAll("[data-choice]").forEach(b=>b.onclick=()=>act("choose",{choice:Number(b.dataset.choice)}));
    document.querySelectorAll("[data-token]").forEach(b=>b.onclick=()=>act("moveToken",{token:Number(b.dataset.token)}));
@@ -90,14 +90,15 @@ async function games(){
  if(typeof content==="undefined")return;
  content.className="feature-grid game-page";
  content.innerHTML="<section class='game-create'><div class='create-copy'><span>LIVE GAME ROOMS</span><h2>ابنِ طاولتك وابدأ اللعب</h2><p>كل لعبة لها جلسة مستقلة. بعد البداية تتحول الشاشة إلى طاولة لعب فعلية.</p></div><div class='create-form'><label>اللعبة<select id='eg-kind'>"+Object.entries(N).map(([k,v])=>"<option value='"+k+"'>"+esc(v)+"</option>").join("")+"</select></label><label>عدد اللاعبين<input id='eg-max' type='number' min='2' max='16' value='4'></label><button id='eg-create' class='primary huge'>إنشاء طاولة</button></div></section><section class='lobbies'><header><div><span>OPEN TABLES</span><h2>الجلسات المفتوحة</h2></div><button id='refresh-games'>تحديث</button></header><div id='eg-list' class='lobby-grid'>"+(gs.length?gs.map(g=>"<article class='lobby-card'><div class='lobby-icon'>"+esc(ICON[g.game]||"✦")+"</div><div><b>"+esc(N[g.game]||g.game)+"</b><small>جلسة #"+g.id+" · "+(g.players||[]).length+"/"+g.max_players+" · "+esc(g.host_username||"زائر")+"</small></div><div><button class='primary' data-join='"+g.id+"'>انضمام</button><button data-watch='"+g.id+"'>مشاهدة</button></div></article>").join(""):"<div class='empty-games'>لا توجد طاولات مفتوحة الآن.</div>")+"</div></section>";
- const sync=()=>{$("#eg-max").max=String(CAP($("#eg-kind").value));if(Number($("#new-max").value)>CAP($("#new-game").value))$("#new-max").value=CAP($("#new-game").value)};
- $("#new-game").onchange=sync;sync();
- $("#eg-create").onclick=async()=>{try{const game=$("#new-game").value,maxPlayers=Math.min(CAP(game),Math.max(2,Number($("#new-max").value)||4));const d=await api("/api/games",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...body(),game,maxPlayers})});openSession(d.game.id,false)}catch(e){alert(e.message)}};
+ const sync=()=>{$("#eg-max").max=String(CAP($("#eg-kind").value));if(Number($("#eg-max").value)>CAP($("#eg-kind").value))$("#eg-max").value=CAP($("#eg-kind").value)};
+ $("#eg-kind").onchange=sync;sync();
+ $("#eg-create").onclick=async()=>{try{const game=$("#eg-kind").value,maxPlayers=Math.min(CAP(game),Math.max(2,Number($("#eg-max").value)||4));const d=await api("/api/games",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...body(),game,maxPlayers})});openSession(d.game.id,false)}catch(e){alert(e.message)}};
  $("#refresh-games").onclick=games;
  document.querySelectorAll("[data-join]").forEach(b=>b.onclick=async()=>{try{await api("/api/games/"+b.dataset.join+"/join",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body())});openSession(b.dataset.join,false)}catch(e){alert(e.message)}});
  document.querySelectorAll("[data-watch]").forEach(b=>b.onclick=()=>openSession(b.dataset.watch,true));
 }
 window.enhancedGames=games;window.renderGames=games;window.openEnhancedGameSession=openSession;
 if(typeof window.change==="function"&&!window.__mldGameRoomV2){const oldChange=window.change;window.__mldGameRoomV2=true;window.change=async r=>{if(activeId&&r!=="games"){const id=activeId,sp=spectator;stop();activeId=null;const out=await oldChange(r);if(!sp)api("/api/games/"+id+"/leave",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body())}).catch(()=>{});return out}return oldChange(r)}}
+document.addEventListener("fullscreenchange",()=>{document.body.style.overflow=document.fullscreenElement?"hidden":""});
 if(typeof renderGames==="function")games();
 })();
