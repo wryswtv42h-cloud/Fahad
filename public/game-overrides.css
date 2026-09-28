@@ -161,3 +161,41 @@ body.mld-game-fullscreen{position:fixed!important;inset:0!important}
   .code-board-mini .code-word{min-height:58px!important;display:grid!important;place-items:center!important;padding:7px 4px!important;font-size:10px!important}
 }
 @media(min-width:701px){.game-fullscreen-fab{display:none!important}}
+
+/* Stable physical table layer */
+.game-room .game-table{min-height:clamp(520px,72vh,900px);padding:24px;overflow:hidden}
+.game-room .game-board{position:relative;min-height:clamp(430px,64vh,780px);border-radius:34px;overflow:hidden}
+.game-room .physical-table{position:relative;min-height:clamp(390px,58vh,690px);display:flex;align-items:center;justify-content:center}
+.game-room .generic-physical{padding:24px}
+.game-room .table-center-core{width:min(520px,70vw);min-height:180px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;padding:28px}
+.game-room .table-center-core strong{font-size:clamp(20px,3vw,34px)}
+.game-room .table-center-core span{opacity:.75}
+.game-room .table-center-core p{max-width:420px;margin:8px auto 0;opacity:.82}
+.game-room .generic-hand{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);width:min(94%,900px);z-index:8}
+.game-room .table-own-hand{z-index:8}
+.game-room .table-hand-cards{display:flex;justify-content:center;align-items:flex-end;gap:clamp(4px,1vw,12px);flex-wrap:wrap}
+.game-room .table-card-button{background:none;border:0;padding:0;cursor:pointer}
+.game-room .table-card-button:hover{transform:translateY(-8px)}
+.game-room .table-card{width:clamp(52px,7vw,88px);height:clamp(76px,10vw,126px);border-radius:12px;display:flex;flex-direction:column;justify-content:space-between;padding:8px;background:#fff;color:#171717;box-shadow:0 12px 30px rgba(0,0,0,.28);font-weight:800}
+.game-room .table-card b{font-size:clamp(20px,3vw,34px);text-align:center}
+.game-room .table-card small{text-align:right}
+.game-room .table-card.card-back{background:repeating-linear-gradient(45deg,#202838 0 8px,#39465e 8px 16px);color:#fff;border:2px solid rgba(255,255,255,.35)}
+.game-room .game-fullscreen-btn{min-width:110px}
+.game-room.game-focus-mode .game-room-top{position:sticky;top:0;z-index:30}
+html.mld-game-fullscreen,body.mld-game-fullscreen{overflow:hidden!important}
+@media(max-width:700px){
+ .game-room .game-table{padding:8px;min-height:calc(100dvh - 105px)}
+ .game-room .game-board{min-height:calc(100dvh - 130px);border-radius:20px}
+ .game-room .physical-table{min-height:calc(100dvh - 180px)}
+ .game-room .table-center-core{width:min(78vw,360px);min-height:150px;padding:18px}
+ .game-room .table-card{width:48px;height:70px;padding:5px}
+ .game-room .table-card b{font-size:20px}
+ .game-room .generic-hand{bottom:6px}
+ .game-room .game-room-actions .game-fullscreen-btn{min-width:46px;padding:8px}
+ .game-room .fullscreen-label{display:none}
+}
+@media(orientation:landscape) and (max-height:600px){
+ .game-room .game-table{min-height:calc(100dvh - 72px)}
+ .game-room .game-board{min-height:calc(100dvh - 90px)}
+ .game-room .physical-table{min-height:calc(100dvh - 130px)}
+}
