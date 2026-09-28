@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Snake — oriz.games</title>
+<style>
+:root{--bg:#0f172a;--card:#1e293b;--border:#334155;--text:#e2e8f0;--muted:#94a3b8;--accent:#6366f1}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center}
+header{width:100%;max-width:500px;padding:16px 20px 0;display:flex;justify-content:space-between;align-items:center}
+a.back{color:var(--muted);font-size:14px;text-decoration:none}a.back:hover{color:var(--text)}
+h1{font-size:24px;font-weight:800}
+.meta{display:flex;gap:12px;margin:12px 0 8px}
+.box{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:6px 18px;text-align:center}
+.box .l{font-size:11px;color:var(--muted);text-transform:uppercase}
+.box .v{font-size:20px;font-weight:700}
+canvas{border:2px solid var(--border);border-radius:10px;display:block;touch-action:none}
+#overlay{position:fixed;inset:0;background:rgba(15,23,42,.85);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;z-index:10}
+#overlay h2{font-size:36px}
+#overlay p{color:var(--muted)}
+button{cursor:pointer;border:none;font-family:inherit;background:var(--accent);color:#fff;padding:10px 24px;border-radius:8px;font-size:14px;font-weight:600}
+.dpad{display:grid;grid-template-areas:'. u .' 'l . r' '. d .';gap:4px;margin-top:10px}
+.dp{width:52px;height:52px;background:var(--card);border:1px solid var(--border);border-radius:8px;font-size:22px;display:flex;align-items:center;justify-content:center}
+.dp[data-dir=up]{grid-area:u}.dp[data-dir=left]{grid-area:l}.dp[data-dir=right]{grid-area:r}.dp[data-dir=down]{grid-area:d}
+</style>
+</head>
+<body>
+<header>
+  <a class="back" href="../index.html">&#8592; Back</a>
+  <h1>Snake</h1>
+  <button onclick="startGame()">New</button>
+</header>
+<div class="meta">
+  <div class="box"><div class="l">Score</div><div class="v" id="score">0</div></div>
+  <div class="box"><div class="l">Best</div><div class="v" id="best">0</div></div>
+</div>
+<canvas id="c" width="360" height="360"></canvas>
+<div class="dpad" id="dpad">
+  <button class="dp" data-dir="up">▲</button>
+  <button class="dp" data-dir="left">◀</button>
+  <button class="dp" data-dir="right">▶</button>
+  <button class="dp" data-dir="down">▼</button>
+</div>
+<div id="overlay">
+  <h2 id="ovTitle">Snake</h2>
+  <p id="ovSub">Arrow keys / WASD / swipe to move</p>
+  <button onclick="startGame()">Play</button>
+</div>
+
+<script>
+const CELL=20,COLS=18,ROWS=18;
+const canvas=document.getElementById('c');
+const ctx=canvas.getContext('2d');
+canvas.width=COLS*CELL;canvas.height=ROWS*CELL;
+let snake,dir,next,food,score,best=+localStorage.getItem('snake-best')||0,loop;
+
+function startGame(){
+  clearInterval(loop);
+  snake=[{x:9,y:9},{x:8,y:9},{x:7,y:9}];
+  dir={x:1,y:0};next={x:1,y:0};
+  score=0;
+  document.getElementById('score').textContent=0;
+  document.getElementById('best').textContent=best;
+  document.getElementById('overlay').style.display='none';
+  placeFood();
+  loop=setInterval(tick,130);
+}
+
+function placeFood(){
+  do{food={x:Math.floor(Math.random()*COLS),y:Math.floor(Math.random()*ROWS)};}
+  while(snake.some(s=>s.x===food.x&&s.y===food.y));
+}
+
+function tick(){
+  dir={...next};
+  const head={x:snake[0].x+dir.x,y:snake[0].y+dir.y};
+  if(head.x<0||head.x>=COLS||head.y<0||head.y>=ROWS||snake.some(s=>s.x===head.x&&s.y===head.y)){
+    clearInterval(loop);
+    document.getElementById('ovTitle').textContent='Game Over';
+    document.getElementById('ovSub').textContent='Score: '+score;
+    document.getElementById('overlay').style.display='flex';
+    return;
+  }
+  snake.unshift(head);
+  if(head.x===food.x&&head.y===food.y){
+    score++;
+    document.getElementById('score').textContent=score;
+    if(score>best){best=score;localStorage.setItem('snake-best',best);document.getElementById('best').textContent=best;}
+    placeFood();
+  } else snake.pop();
+  draw();
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle='#f87171';ctx.fillRect(food.x*CELL+1,food.y*CELL+1,CELL-2,CELL-2);
+  snake.forEach((s,i)=>{
+    ctx.fillStyle=i===0?'#4ade80':'#6366f1';
+    ctx.fillRect(s.x*CELL+1,s.y*CELL+1,CELL-2,CELL-2);
+  });
+}
+
+const MAP={ArrowLeft:{x:-1,y:0},ArrowRight:{x:1,y:0},ArrowUp:{x:0,y:-1},ArrowDown:{x:0,y:1},a:{x:-1,y:0},d:{x:1,y:0},w:{x:0,y:-1},s:{x:0,y:1}};
+document.addEventListener('keydown',e=>{
+  const d=MAP[e.key];
+  if(d&&!(d.x===-dir.x&&d.y===0)&&!(d.y===-dir.y&&d.x===0)){e.preventDefault();next=d;}
+});
+
+document.getElementById('dpad').querySelectorAll('.dp').forEach(b=>{
+  const DMAP={up:{x:0,y:-1},down:{x:0,y:1},left:{x:-1,y:0},right:{x:1,y:0}};
+  b.addEventListener('click',()=>{const d=DMAP[b.dataset.dir];if(d&&!(d.x===-dir.x&&d.y===0)&&!(d.y===-dir.y&&d.x===0))next=d;});
+});
+
+let tx,ty;
+canvas.addEventListener('touchstart',e=>{tx=e.touches[0].clientX;ty=e.touches[0].clientY;},{passive:true});
+canvas.addEventListener('touchend',e=>{
+  const dx=e.changedTouches[0].clientX-tx,dy=e.changedTouches[0].clientY-ty;
+  if(Math.max(Math.abs(dx),Math.abs(dy))<20)return;
+  if(Math.abs(dx)>Math.abs(dy)){next=dx>0?{x:1,y:0}:{x:-1,y:0};}else{next=dy>0?{x:0,y:1}:{x:0,y:-1};}
+});
+</script>
+</body>
+</html>
