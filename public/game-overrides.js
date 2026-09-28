@@ -70,7 +70,6 @@ JAKAROO:"لكل لاعب 4 قطع و4 أوراق. استخدم A أو K لإخر
   async function openSession(id,watch){
     stop();activeId=id;spectator=!!watch;localStorage.setItem("mld_active_game_id",String(id));
     const render=async()=>{
-      try{
         const focused=document.activeElement;
         if(focused&&focused.closest&&focused.closest(".game-room")&&focused.matches("input,textarea,select")) return;
       try{
