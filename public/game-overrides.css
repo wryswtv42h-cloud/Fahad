@@ -245,3 +245,15 @@ body.mld-game-fullscreen{position:relative!important}
   .mld-game-fullscreen .game-room-top,.game-room.game-focus-mode .game-room-top,.game-room:fullscreen .game-room-top{min-height:40px!important}
   .mld-game-fullscreen .game-controls,.game-room.game-focus-mode .game-controls,.game-room:fullscreen .game-controls{max-height:30dvh!important}
 }
+
+
+/* Cross-device game fullscreen hardening */
+html.mld-game-fullscreen,body.mld-game-fullscreen{width:100%;height:100%;overflow:hidden!important}
+.game-room.game-focus-mode{position:fixed;inset:0;width:100vw!important;height:100dvh!important;min-height:100dvh!important;max-width:none!important;margin:0!important;border-radius:0!important;padding:max(12px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));overflow:auto;overscroll-behavior:none;box-sizing:border-box}
+.game-room:fullscreen{width:100vw!important;height:100dvh!important;min-height:100dvh!important;max-width:none!important;margin:0!important;border-radius:0!important;padding:max(12px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));overflow:auto;box-sizing:border-box}
+.game-room.game-focus-mode .game-table,.game-room:fullscreen .game-table{min-height:calc(100dvh - 150px);height:auto}
+.game-room.game-focus-mode .physical-table,.game-room:fullscreen .physical-table{min-height:calc(100dvh - 190px)}
+.game-fullscreen-btn[aria-pressed="true"],.game-fullscreen-fab[aria-pressed="true"]{border-color:rgba(255,156,220,.8);box-shadow:0 0 0 1px rgba(255,156,220,.25) inset}
+@media(max-width:700px){.game-room.game-focus-mode,.game-room:fullscreen{padding:max(8px,env(safe-area-inset-top)) max(8px,env(safe-area-inset-right)) max(8px,env(safe-area-inset-bottom)) max(8px,env(safe-area-inset-left))}.game-room.game-focus-mode .game-room-top,.game-room:fullscreen .game-room-top{position:sticky;top:0;z-index:20;padding:6px 0;background:linear-gradient(180deg,rgba(8,10,18,.98),rgba(8,10,18,.78),transparent)}.game-room.game-focus-mode .game-table,.game-room:fullscreen .game-table{min-height:calc(100dvh - 105px)}.game-room.game-focus-mode .physical-table,.game-room:fullscreen .physical-table{min-height:calc(100dvh - 140px)}}
+@media(orientation:landscape) and (max-height:600px){.game-room.game-focus-mode .game-room-top,.game-room:fullscreen .game-room-top{padding:2px 0}.game-room.game-focus-mode .game-table,.game-room:fullscreen .game-table{min-height:calc(100dvh - 70px)}.game-room.game-focus-mode .physical-table,.game-room:fullscreen .physical-table{min-height:calc(100dvh - 90px)}}
+@supports not (height:100dvh){.game-room.game-focus-mode,.game-room:fullscreen{height:100vh!important;min-height:100vh!important}.game-room.game-focus-mode .game-table,.game-room:fullscreen .game-table{min-height:calc(100vh - 150px)}}
