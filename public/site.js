@@ -87,7 +87,7 @@ async function renderGames(){
     content.prepend(s);
     $("#game-close").onclick=()=>s.remove();
     $("#game-fullscreen").onclick=async()=>{try{await s.querySelector(".mld-game-frame-wrap").requestFullscreen()}catch{const f=s.querySelector("iframe");if(f.requestFullscreen)f.requestFullscreen()}};
-    s.querySelector("iframe").addEventListener("load",()=>{try{s.querySelector("iframe").contentWindow.postMessage({type:"mld_player_name",name:sessionStorage.getItem("mldGamePlayerName")||""},"*")}catch{}});
+    s.querySelector("iframe").addEventListener("load",()=>{try{const f=s.querySelector("iframe"),d=f.contentDocument,n=d&&d.getElementById("nameInput"),name=sessionStorage.getItem("mldGamePlayerName")||"";if(n&&name){n.value=name;n.dispatchEvent(new Event("change",{bubbles:true}))}}catch(e){console.warn("MLD game name sync",e)}});
     s.scrollIntoView({behavior:"smooth",block:"start"});
   }
   async function createRoom(){
