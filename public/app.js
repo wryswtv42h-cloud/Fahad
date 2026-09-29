@@ -6,7 +6,7 @@ const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const esc=s=>{const d=document.createElement("div");d.textContent=String(s??"");return d.innerHTML};
 const initials=s=>String(s||"?").trim().slice(0,1).toUpperCase();
 let me=null,stats=null,gamePoll=null,activeGame=null;
-async function api(url,opt={}){const o={credentials:"same-origin",cache:"no-store",...opt};if(o.body&&typeof o.body!=="string"){o.headers={"Content-Type":"application/json",...(o.headers||{})};o.body=JSON.stringify(o.body)}const r=await fetch(url,o);let d={};try{d=await r.json()}catch{}if(!r.ok)throw Error(d.error||"تعذر تنفيذ الطلب");return d}
+async function api(url,opt={}){const ctl=new AbortController();const timer=setTimeout(()=>ctl.abort(),9000);const o={credentials:"same-origin",cache:"no-store",signal:ctl.signal,...opt};if(o.body&&typeof o.body!=="string"){o.headers={"Content-Type":"application/json",...(o.headers||{})};o.body=JSON.stringify(o.body)}const r=await fetch(url,o);let d={};try{d=await r.json()}catch{}if(!r.ok)throw Error(d.error||"تعذر تنفيذ الطلب");clearTimeout(timer);return d}
 function toast(t){const x=$("#toast");if(!x)return;x.textContent=t;x.classList.add("show");clearTimeout(window.__toast);window.__toast=setTimeout(()=>x.classList.remove("show"),2800)}
 function avatar(url,name){return url?'<img class="avatar" src="'+esc(url)+'" alt="">':'<span class="avatar avatar-fallback">'+esc(initials(name))+"</span>"}
 function date(x){try{return new Date(x).toLocaleString("ar-SA",{dateStyle:"short",timeStyle:"short"})}catch{return""}}
@@ -33,11 +33,11 @@ function setUser(){
 }
 function drawer(open){$("#drawer").classList.toggle("open",open);$("#drawerShade").classList.toggle("open",open);$("#drawer").setAttribute("aria-hidden",String(!open));$("#menuBtn").setAttribute("aria-expanded",String(open))}
 async function boot(){
- try{const d=await api("/api/auth/me");me=d.user||null}catch{}
+ try{const d=await Promise.race([api("/api/auth/me"),new Promise((_,rej)=>setTimeout(()=>rej(Error("auth timeout")),5000))]);me=d.user||null}catch(e){console.warn("auth boot:",e.message)}
  setUser();menu();
- try{await api("/api/site/visit",{method:"POST"})}catch{}
- $("#boot").style.opacity="0";setTimeout(()=>$("#boot").remove(),500);
- const v=(location.hash||"#home").slice(1)||"home";render(V[v]?v:"home");
+ try{await Promise.race([api("/api/site/visit",{method:"POST"}),new Promise((_,rej)=>setTimeout(()=>rej(Error("visit timeout")),2500))])}catch(e){console.warn("visit:",e.message)}
+ $("#boot").style.opacity="0";setTimeout(()=>$("#boot").remove(),350);
+ const v=(location.hash||"#home").slice(1)||"home";await render(V[v]?v:"home");
 }
 async function render(v=(location.hash||"#home").slice(1)){
  if(!V[v])v="home";drawer(false);$$("#menu .menu-item").forEach(x=>x.classList.toggle("active",x.dataset.view===v));
