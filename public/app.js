@@ -47,7 +47,7 @@ async function stats(){
 }
 async function home(){
  $("#status").textContent="آراء المجتمع";
- let reviews=[];try{const d=await api("/api/ratings");reviews=d.reviews||[]}catch{}
+ let reviews=[];try{const d=await api("/api/ratings");reviews=Array.isArray(d.items)?d.items:(Array.isArray(d.reviews)?d.reviews:[])}catch{}
  const sample=reviews.slice(0,12);
  const ratings=sample.map(x=>'<article class="card review-card"><div class="row"><div class="review-stars">★★★★★</div><span class="muted">'+esc(x.username||"عضو")+'</span></div><p>'+esc(x.body||x.text||x.content||"رأي من المجتمع")+'</p></article>').join("")||'<article class="card"><b>آراء المجتمع</b><p class="muted">كن أول من يضيف رأيه.</p></article>';
  $("#content").innerHTML='<section class="home-reviews"><div class="home-section-title"><div><p class="kicker">تجارب المجتمع</p><h3>التقييمات والآراء</h3></div><button class="ghost" data-view="reviews">عرض الكل</button></div><div class="content">'+ratings+'</div></section>'+
@@ -294,7 +294,7 @@ async function botPanel(id){
 async function render(v){
  clearInterval(pollTimer);v=V[v]?v:"home";$("#viewTitle").textContent=V[v][0];$("#viewSub").textContent=V[v][1];$("#status").textContent="جاري تحميل البيانات...";$("#content").innerHTML="";
  try{
-  if(v==="home")return home();if(v==="bots")return bots();if(v==="members")return membersView();if(v==="roles")return roles();if(v==="top")return top();if(v==="groups")return groups();if(v==="chat")return chat();if(v==="private-chat")return privateChat();if(v==="message")return message();if(v==="anonymous")return anonymous();if(v==="jokes")return jokes();if(v==="stories")return stories();if(v==="tickets")return tickets();if(v==="apply")return applyView();if(v==="reviews")return reviews();if(v==="profile")return profile();if(v==="account")return account();if(v==="login")return auth();if(v==="games")return games();
+  if(v==="home")return await home();if(v==="bots")return await bots();if(v==="members")return await membersView();if(v==="roles")return await roles();if(v==="top")return await top();if(v==="groups")return await groups();if(v==="chat")return await chat();if(v==="private-chat")return await privateChat();if(v==="message")return await message();if(v==="anonymous")return await anonymous();if(v==="jokes")return await jokes();if(v==="stories")return await stories();if(v==="tickets")return await tickets();if(v==="apply")return await applyView();if(v==="reviews")return await reviews();if(v==="profile")return await profile();if(v==="account")return await account();if(v==="login")return await auth();if(v==="games")return await games();
  }catch(e){$("#status").textContent=e.message;toast(e.message)}
 }
 async function boot(){
@@ -323,7 +323,7 @@ if(menuBtn&&drawer){
   drawer.setAttribute("aria-hidden",String(!open));
   menuBtn.setAttribute("aria-expanded",String(open));
  };
- menuBtn.addEventListener("pointerup",runMenu);
+ menuBtn.addEventListener("click",runMenu);
  menuBtn.addEventListener("keydown",e=>{
   if(e.key==="Enter"||e.key===" "){e.preventDefault();runMenu(e)}
  });
