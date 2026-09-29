@@ -709,7 +709,7 @@ app.get("/api/platform/admin", auth, ownerOnly, (req, res) => {
   });
 });
 
-require("./platform-extra")({ app, client, auth, ownerOnly, logPlatform, getGuild, getAllMembers });
+require("./platform-extra")({ app, client, auth, ownerOnly, logPlatform, getGuild, getAllMembers, platform, savePlatform });
 
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
