@@ -83,21 +83,30 @@ function rebuildMobileMenu(){
   const role=mldUser?.role||"";
   const isAdmin=role==="admin" || role==="owner";
   const isOwner=role==="owner";
-  const group=(title,items,open=false)=>'<div class="mobile-menu-group '+(open?"is-open":"")+'"><button type="button" class="mobile-menu-group-toggle" aria-expanded="'+(open?"true":"false")+'"><span>'+title+'</span><span class="mobile-menu-chevron">⌄</span></button><div class="mobile-menu-sub">'+items.map(x=>'<button type="button" data-view="'+x[0]+'">'+x[1]+'</button>').join("")+'</div></div>';
+  const group=(icon,name,items,open=false)=>{
+    return '<section class="mobile-menu-folder '+(open?"is-open":"")+'">'+
+      '<button type="button" class="mobile-menu-folder-head" aria-expanded="'+(open?"true":"false")+'">'+
+      '<span class="folder-icon" aria-hidden="true">'+icon+'</span><span class="folder-name">'+name+'</span><span class="folder-count">'+items.length+'</span><span class="mobile-menu-chevron">⌄</span></button>'+
+      '<div class="mobile-menu-folder-body">'+
+      items.map(x=>'<button type="button" class="mobile-menu-item" data-view="'+x[0]+'"><span class="menu-item-icon">'+x[2]+'</span><span>'+x[1]+'</span><span class="menu-item-arrow">‹</span></button>').join("")+
+      '</div></section>';
+  };
   let html='';
-  html+='<button type="button" class="mobile-menu-main" data-view="home">الرئيسية</button>';
-  html+=group("المجتمع",[["members","الأعضاء"],["top","TOP"],["roles","الرتب القيادية"],["groups","القروبات"],["reviews","الآراء"]],true);
-  html+=group("التواصل",[["chat","الشات"],["message","الزاجل"],["anonymous","الفضفضة"],["tickets","التذاكر"]]);
-  html+=group("الألعاب",[["games","صالات الألعاب"],["jokes","😂 النكت"],["stories","📖 القصص والصوت"],["game-logs","لوق الألعاب"]]);
-  html+=group("الحساب",[["profile","بروفايلي"],["account","حسابي"],["apply","التقديم"]]);
-  if(isAdmin) html+=group("الإدارة",[["admin","لوحة الإدارة"]]);
-  if(isOwner) html+=group("الأونر",[["owner","مركز الأونر"],["broadcast","برودكاست السيرفر"]]);
-  if(!mldUser) html+='<button type="button" class="mobile-menu-main" data-view="login">تسجيل الدخول</button>';
-  else html+='<button type="button" class="mobile-menu-main mobile-menu-logout" data-view="logout">تسجيل الخروج</button>';
-  menu.innerHTML=html+'<a id="invite-mobile" class="invite" target="_blank">انضم للسيرفر</a>';
-  menu.querySelectorAll(".mobile-menu-group-toggle").forEach(b=>b.onclick=()=>{
-    const group=b.closest(".mobile-menu-group"); if(!group)return;
-    const open=group.classList.toggle("is-open"); b.setAttribute("aria-expanded",open?"true":"false");
+  html+='<button type="button" class="mobile-menu-home" data-view="home"><span class="folder-icon">⌂</span><span>الرئيسية</span><span class="menu-item-arrow">‹</span></button>';
+  html+=group("◈","المجتمع",[["members","الأعضاء","👥"],["top","TOP","🏆"],["roles","الرتب القيادية","🎖️"],["groups","القروبات","🫂"],["reviews","الآراء","⭐"]],true);
+  html+=group("◉","التواصل",[["chat","الشات العام","💬"],["private-chat","المحادثات الخاصة","💌"],["message","رسالة خاصة","✉️"],["anonymous","الفضفضة","🤫"],["tickets","التذاكر","🎫"]]);
+  html+=group("🎮","الألعاب",[["games","صالات الألعاب","🎲"],["jokes","النكت","😂"],["stories","القصص والصوت","📖"],["game-logs","لوق الألعاب","📋"]]);
+  html+=group("◎","الحساب",[["profile","بروفايلي","👤"],["account","حسابي","⚙️"],["apply","التقديم","📝"]]);
+  if(isAdmin) html+=group("◆","الإدارة",[["admin","لوحة الإدارة","🛡️"]]);
+  if(isOwner) html+=group("♛","الأونر",[["owner","مركز الأونر","👑"],["broadcast","برودكاست السيرفر","📢"]]);
+  if(!mldUser) html+='<button type="button" class="mobile-menu-auth" data-view="login"><span>🔐</span><span>تسجيل الدخول</span><span class="menu-item-arrow">‹</span></button>';
+  else html+='<button type="button" class="mobile-menu-auth mobile-menu-logout" data-view="logout"><span>🚪</span><span>تسجيل الخروج</span><span class="menu-item-arrow">‹</span></button>';
+  menu.innerHTML=html+'<a id="invite-mobile" class="invite mobile-menu-invite" target="_blank"><span>🔗</span> انضم للسيرفر</a>';
+  menu.querySelectorAll(".mobile-menu-folder-head").forEach(b=>b.onclick=(e)=>{
+    e.preventDefault(); e.stopPropagation();
+    const folder=b.closest(".mobile-menu-folder"); if(!folder)return;
+    const open=folder.classList.toggle("is-open");
+    b.setAttribute("aria-expanded",open?"true":"false");
   });
 }
 
