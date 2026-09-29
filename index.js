@@ -652,6 +652,8 @@ app.get("/api/platform/admin", auth, ownerOnly, (req, res) => {
   });
 });
 
+require("./platform-extra")({ app, client, auth, ownerOnly, logPlatform, getGuild, getAllMembers });
+
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
