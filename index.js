@@ -456,7 +456,7 @@ let platform = loadPlatform();
 
 function savePlatform() {
   fs.mkdirSync(platformDir, { recursive: true });
-  const tmp = \${platformFile}.tmp;
+  const tmp = `${platformFile}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(platform, null, 2));
   fs.renameSync(tmp, platformFile);
 }
