@@ -32,17 +32,18 @@ function menu(){
 }
 async function stats(){
  try{
-  const [d,s]=await Promise.all([api("/api/site/stats"),api("/api/public/server").catch(()=>({}))]);
+  const d=await api("/api/site/stats");
+  const s=await api("/api/public/server").catch(()=>({}));
   const memberCount=Number(d.memberCount||s.memberCount||0);
   const online=Number(d.online||0);
   const visits=Number(d.visits||0);
   $("#membersStat").textContent=memberCount.toLocaleString("ar-SA");
   $("#onlineStat").textContent=online.toLocaleString("ar-SA");
   $("#visitsStat").textContent=visits.toLocaleString("ar-SA");
-  $("#discordStat").textContent=s.name?"متصل":"متصل";
-  $("#heroSubtitle").textContent=s.name?("مجتمع "+s.name+" — متصل مباشرة ببيانات السيرفر."): "مجتمع متكامل بتجربة عربية سلسة، مرتبط مباشرة ببيانات السيرفر.";
+  $("#discordStat").textContent="متصل";
+  $("#heroSubtitle").textContent=s.name?("مجتمع "+s.name+" — متصل مباشرة ببيانات السيرفر."):"مجتمع متكامل بتجربة عربية سلسة، مرتبط مباشرة ببيانات السيرفر.";
  }catch(e){
-  $("#membersStat").textContent="0";$("#onlineStat").textContent="0";$("#visitsStat").textContent="0";$("#discordStat").textContent="غير متاح";
+  $("#membersStat").textContent="—";$("#onlineStat").textContent="—";$("#visitsStat").textContent="—";$("#discordStat").textContent="غير متاح";
  }
 }
 function home(){
@@ -190,14 +191,24 @@ async function gameState(){
  }catch(e){toast(e.message);clearInterval(pollTimer)}
 }
 function gameControls(s,st){
- const p=st.private||{},turn=s.players?.[st.turnIndex]?.username||s.players?.[st.qawsarTurn]?.username||"—";
- let h='<article class="card" style="grid-column:1/-1"><b>الدور: '+esc(turn)+"</b><p class="muted">"+esc(st.prompt||st.lastAction?.type||st.lastAction||"")+"</p>";
- if(st.game==="UNO"){h+="<p>لون اللعب: "+esc(st.color||"—")+" · السحب: "+st.drawCount+"</p><div class="row" style="flex-wrap:wrap">"+(st.hand||[]).map((c,i)=>'<button class="primary" data-action="playCard" data-index="'+i+'" data-color="'+esc(c.color==="wild"?"🔴":c.color)+'">'+esc(c.value)+" "+esc(c.color)+"</button>").join("")+"</div><button class="ghost" data-action="draw">سحب ورقة</button>"}
- else if(st.game==="LUDO"){h+="<p>النرد: "+esc(st.dice??"—")+"</p><button class="primary" data-action="roll">🎲 رمي النرد</button><div class="row" style="margin-top:10px">"+(st.legalTokens||[]).map(i=>'<button class="ghost" data-action="moveToken" data-token="'+i+'">تحريك القطعة '+(i+1)+"</button>").join("")+"</div>"}
- else if(st.game==="JAKAROO"){h+="<p>الأوراق: "+(st.hand||[]).map((c,i)=>'<button class="ghost" data-action="playCard" data-index="'+i+'">'+esc(c.rank+c.suit)+"</button>").join(" ")+"</p>"+(st.moveOptions?.length?'<p>اختر القطعة:</p>'+st.moveOptions.map(i=>'<button class="primary" data-action="moveToken" data-token="'+i+'">قطعة '+(i+1)+"</button>").join(" "):"")+"<p class="muted">القطع: "+esc((st.tokens||[]).join(" · "))+"</p>"}
- else if(st.game==="BALOOT"){if(st.phase==="bidding")h+='<button class="ghost" data-action="bid" data-bid="pass">بس</button><button class="primary" data-action="bid" data-bid="sun">صن</button><button class="primary" data-action="bid" data-bid="hokum">حكم</button>';else h+=(st.hand||[]).map((c,i)=><button class="ghost" data-action="playCard" data-index="'+i+'">'+esc(c.rank+c.suit)+"</button>").join(" ")}
- else if(st.game==="QAWSAR"){h+="<p>الحالة: "+esc(st.qawsarPhase||"draw")+" · الورقة المطروحة: "+esc(st.discarded?.rank||"—")+"</p>";if(st.qawsarPhase==="draw"){h+='<button class="primary" data-action="draw">سحب</button>';h+='<button class="ghost" data-action="takeDiscard" data-index="0">خذ المطروحة مكان أول ورقة</button>'}else h+='<button class="primary" data-action="playCard" data-index="0" data-mode="swap">استبدل الورقة المسحوبة بالأولى</button>';h+='<p class="muted">يدك: '+(p.hand||[]).map((x,i)=>esc(x.card?.rank||x.rank||"?")).join(" · ")+"</p>"}
- else {h+='<div class="row"><input id="genericText" placeholder="إجابتك"><button class="primary" id="genericSend">إرسال</button></div>';setTimeout(()=>$("#genericSend")?.addEventListener("click",async()=>{try{await api("/api/games/sessions/"+currentGame+"/action",{method:"POST",body:{action:"submit",data:{text:$("#genericText").value}}});gameState()}catch(e){toast(e.message)}}),0)}
+ const p=st.private||{},turn=st.players?.[st.turnIndex]?.username||st.players?.[st.qawsarTurn]?.username||"—";
+ let h=`<article class="card" style="grid-column:1/-1"><b>الدور: ${esc(turn)}</b><p class="muted">${esc(st.prompt||st.lastAction?.type||st.lastAction||"")}</p>`;
+ if(st.game==="UNO"){
+  h+=`<p>لون اللعب: ${esc(st.color||"—")} · السحب: ${st.drawCount}</p><div class="row" style="flex-wrap:wrap">${(st.hand||[]).map((card,i)=>`<button class="primary" data-action="playCard" data-index="${i}" data-color="${esc(card.color||"")}" >${esc(card.value)} ${esc(card.color)}</button>`).join("")}</div><button class="ghost" data-action="draw">سحب ورقة</button>`;
+ }else if(st.game==="LUDO"){
+  h+=`<p>النرد: ${esc(st.dice??"—")}</p><button class="primary" data-action="roll">🎲 رمي النرد</button><div class="row" style="margin-top:10px">${(st.legalTokens||[]).map(i=>`<button class="ghost" data-action="moveToken" data-token="${i}">تحريك القطعة ${i+1}</button>`).join("")}</div>`;
+ }else if(st.game==="JAKAROO"){
+  h+=`<p>الأوراق: ${(st.hand||[]).map((card,i)=>`<button class="ghost" data-action="playCard" data-index="${i}">${esc((card.rank||"")+ (card.suit||""))}</button>`).join(" ")}</p>`;
+ }else if(st.game==="BALOOT"){
+  h+=st.phase==="bidding"?'<button class="ghost" data-action="bid" data-bid="pass">بس</button><button class="primary" data-action="bid" data-bid="sun">صن</button><button class="primary" data-action="bid" data-bid="hokum">حكم</button>':(st.hand||[]).map((card,i)=>`<button class="ghost" data-action="playCard" data-index="${i}">${esc((card.rank||"")+(card.suit||""))}</button>`).join(" ");
+ }else if(st.game==="QAWSAR"){
+  h+=`<p>الحالة: ${esc(st.qawsarPhase||"draw")} · الورقة المطروحة: ${esc(st.discarded?.rank||"—")}</p>`;
+  h+=st.qawsarPhase==="draw"?'<button class="primary" data-action="draw">سحب</button><button class="ghost" data-action="takeDiscard" data-index="0">خذ المطروحة</button>':'<button class="primary" data-action="playCard" data-index="0" data-mode="swap">استبدل الورقة</button>';
+  h+=`<p class="muted">يدك: ${(p.hand||[]).map(x=>esc(x.card?.rank||x.rank||"?")).join(" · ")}</p>`;
+ }else{
+  h+='<div class="row"><input id="genericText" placeholder="إجابتك"><button class="primary" id="genericSend">إرسال</button></div>';
+  setTimeout(()=>$("#genericSend")?.addEventListener("click",async()=>{try{await api("/api/games/sessions/"+currentGame+"/action",{method:"POST",body:{action:"submit",data:{text:$("#genericText").value}}});gameState()}catch(e){toast(e.message)}}),0);
+ }
  return h+"</article>";
 }
 async function render(v){
@@ -217,8 +228,16 @@ document.addEventListener("click",e=>{
  const b=e.target.closest("[data-view]");if(b){const v=b.dataset.view;$("#drawer").classList.remove("open");history.replaceState(null,"","#"+v);render(v);return}
 });
 const menuBtn=$("#menuBtn"),drawer=$("#drawer");
+function toggleMenu(e){
+ if(e){e.preventDefault();e.stopPropagation()}
+ if(!drawer)return;
+ const open=!drawer.classList.contains("open");
+ drawer.classList.toggle("open",open);
+ drawer.setAttribute("aria-hidden",String(!open));
+}
 if(menuBtn&&drawer){
- menuBtn.addEventListener("click",e=>{e.preventDefault();e.stopPropagation();drawer.classList.toggle("open");drawer.setAttribute("aria-hidden",String(!drawer.classList.contains("open")))});
+ menuBtn.onclick=toggleMenu;
+ menuBtn.addEventListener("touchend",toggleMenu,{passive:false});
 }
 document.addEventListener("click",e=>{
  if(drawer&&drawer.classList.contains("open")&&!drawer.contains(e.target)&&!menuBtn?.contains(e.target)){drawer.classList.remove("open");drawer.setAttribute("aria-hidden","true")}
