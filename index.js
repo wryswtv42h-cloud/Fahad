@@ -40,7 +40,7 @@ async function members(){if(memberCache&&Date.now()-memberAt<30000)return member
 function me(req){return req.session.user||null}
 function auth(req,res,next){if(!me(req))return res.status(401).json({error:"تسجيل الدخول مطلوب"});next()}
 function owner(req,res,next){const u=me(req);if(!u||!["owner","admin"].includes(u.role))return res.status(403).json({error:"ليس لديك صلاحية"});next()}
-function memberJson(m){const rs=m.roles.cache.filter(r=>r.id!==m.guild.id).sort((a,b)=>b.position-a.position).map(r=>({id:r.id,name:r.name,color:r.hexColor,position:r.position,mentionable:r.mentionable}));const lead=rs.filter(r=>roleIds.has(r.id));return{id:m.id,name:m.displayName,username:m.user.username,globalName:m.user.globalName,bot:m.user.bot,avatar:m.user.displayAvatarURL({extension:"png",size:256}),joinedAt:m.joinedAt,roles:rs,importantRoles:lead,rank:lead[0]?.name||rs[0]?.name||"عضو"}}
+function memberJson(m){const rs=m.roles.cache.filter(r=>r.id!==m.guild.id).sort((a,b)=>b.position-a.position).map(r=>({id:r.id,name:r.name,color:r.hexColor,position:r.position,mentionable:r.mentionable}));const lead=rs.filter(r=>roleIds.has(r.id));return{id:m.id,name:m.displayName,username:m.user.username,globalName:m.user.globalName,bot:m.user.bot,avatar:(m.user.avatarURL({extension:"png",size:256,forceStatic:true})||m.user.displayAvatarURL({extension:"png",size:256,forceStatic:true})),joinedAt:m.joinedAt,roles:rs,importantRoles:lead,rank:lead[0]?.name||rs[0]?.name||"عضو"}}
 async function init(){await pool.query(`
 CREATE TABLE IF NOT EXISTS app_users(id SERIAL PRIMARY KEY,username VARCHAR(32) UNIQUE NOT NULL,password_hash TEXT NOT NULL,discord_username VARCHAR(100) NOT NULL,discord_user_id VARCHAR(32),role VARCHAR(20) NOT NULL DEFAULT 'user',banned BOOLEAN NOT NULL DEFAULT false,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),last_login_at TIMESTAMPTZ);
 CREATE TABLE IF NOT EXISTS site_stats(id INTEGER PRIMARY KEY DEFAULT 1,visits BIGINT NOT NULL DEFAULT 0,updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
@@ -107,7 +107,7 @@ app.post("/api/auth/register",async(req,res)=>{
   try{dm=(await members()).find(m=>m.user.username.toLowerCase()===discordUsername.toLowerCase()||m.displayName.toLowerCase()===discordUsername.toLowerCase()||String(m.user.globalName||"").toLowerCase()===discordUsername.toLowerCase())}catch{}
   if(!dm)return res.status(400).json({error:"لم يتم العثور على اسم Discord داخل السيرفر"});
   const hash=await bcrypt.hash(password,12);
-  const q=await pool.query("INSERT INTO app_users(username,password_hash,discord_username,discord_user_id,avatar_url) VALUES($1,$2,$3,$4,$5) RETURNING id,username,discord_username,discord_user_id,role,banned,created_at,points,bio,avatar_url",[username,hash,dm.user.username,dm.id,dm.user.displayAvatarURL({extension:"png",size:256})]);
+  const q=await pool.query("INSERT INTO app_users(username,password_hash,discord_username,discord_user_id,avatar_url) VALUES($1,$2,$3,$4,$5) RETURNING id,username,discord_username,discord_user_id,role,banned,created_at,points,bio,avatar_url",[username,hash,dm.user.username,dm.id,d(m.user.avatarURL({extension:"png",size:256,forceStatic:true})||m.user.displayAvatarURL({extension:"png",size:256,forceStatic:true}))]);
   const r=q.rows[0];req.session.user={username:r.username,discordUsername:r.discord_username,discordUserId:r.discord_user_id,role:r.role};
   res.status(201).json({ok:true,user:{...req.session.user,points:r.points,bio:r.bio,avatar:r.avatar_url}});
  }catch(e){console.error("register",e);res.status(500).json({error:"تعذر إنشاء الحساب"})}
@@ -271,7 +271,7 @@ app.patch("/api/profile",auth,async(req,res)=>{
  if(discordUsername){
   const m=(await members()).find(x=>x.user.username.toLowerCase()===discordUsername.toLowerCase()||x.displayName.toLowerCase()===discordUsername.toLowerCase()||String(x.user.globalName||"").toLowerCase()===discordUsername.toLowerCase());
   if(!m)return res.status(400).json({error:"اسم Discord غير موجود في السيرفر"});
-  avatar=m.user.displayAvatarURL({extension:"png",size:256});
+  avatar=(m.user.avatarURL({extension:"png",size:256,forceStatic:true})||m.user.displayAvatarURL({extension:"png",size:256,forceStatic:true}));
   await pool.query("UPDATE app_users SET discord_username=$1,discord_user_id=$2,avatar_url=$3,bio=$4 WHERE username=$5",[m.user.username,m.id,avatar,bio,me(req).username]);
   req.session.user.discordUsername=m.user.username;req.session.user.discordUserId=m.id;req.session.user.avatar=avatar; }else{
   await pool.query("UPDATE app_users SET bio=$1,avatar_url=CASE WHEN $2='' THEN avatar_url ELSE $2 END WHERE username=$3",[bio,avatar,me(req).username]);
