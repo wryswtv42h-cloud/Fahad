@@ -211,13 +211,61 @@ function gameControls(s,st){
  }
  return h+"</article>";
 }
-async function bots(){if(!me){auth();return}const d=await api("/api/bots"),a=d.bots||[];$("#status").textContent=a.length+" بوت";let html=formCard("ربط بوت جديد",'<input id="botName" placeholder="اسم البوت"><input id="botToken" type="password" autocomplete="off" placeholder="Bot Token"><button class="primary" id="botInspect">فحص التوكن واختيار السيرفر</button><div id="botGuildPicker" style="display:none;margin-top:12px"></div><button class="primary" id="botAdd" style="display:none">ربط وتشغيل البوت</button><p class="muted">أولًا نفحص التوكن بدون حفظه. بعدها تظهر فقط السيرفرات التي أنت فيها Administrator/مالك والبوت موجود فيها، ولا يمكن ربط نفس البوت بأكثر من سيرفر.</p>');html+=a.map(b=>'<article class="card"><div class="row"><div><b>'+esc(b.name)+'</b><div class="muted">ID: '+esc(b.client_id||"—")+'</div><div class="muted">السيرفر: '+esc(b.guild_name||b.linked_guild_id||"—")+'</div></div><span class="badge">'+esc(b.status||"offline")+'</span></div><p class="muted">Prefix: '+esc(b.prefix||"!")+' · '+esc(b.presence_mode||"watching")+'</p><button class="primary" data-bot="'+b.id+'">لوحة التحكم</button><button class="ghost" data-botlogs="'+b.id+'">اللوقات</button></article>').join("");$("#content").innerHTML=html;let inspected=null;$("#botInspect").onclick=async()=>{try{const token=$("#botToken").value.trim();if(!token)throw Error("اكتب توكن البوت");const d=await api("/api/bots/inspect",{method:"POST",body:{token}});inspected=d;const picker=$("#botGuildPicker");picker.style.display="block";picker.innerHTML='<label><b>اختر السيرفر</b><select id="botGuild" style="width:100%;margin-top:8px">'+d.guilds.map(g=>'<option value="'+esc(g.id)+'">'+esc(g.name)+' · Administrator · رتبتك '+esc(g.userRole)+' · البوت '+esc(g.botRole)+'</option>').join("")+'</select></label><p class="muted" style="margin-top:8px">لا يظهر هنا إلا السيرفر الذي يسمح فيه Discord بصلاحياتك وبموقع رتبتك فوق رتبة البوت.</p>';$("#botAdd").style.display="block"}catch(e){toast(e.message)}};$("#botAdd").onclick=async()=>{try{if(!inspected)throw Error("افحص التوكن أولًا");const guildId=$("#botGuild").value;await api("/api/bots",{method:"POST",body:{name:$("#botName").value.trim(),token:$("#botToken").value.trim(),guildId}});toast("تم الربط بالسيرفر وتشغيل البوت");bots()}catch(e){toast(e.message)}};$$("[data-bot]").forEach(x=>x.onclick=()=>botPanel(x.dataset.bot));$$("[data-botlogs]").forEach(x=>x.onclick=()=>botLogs(x.dataset.botlogs))}
-async function botPanel(id){const d=await api("/api/bots/"+id),b=d.bot;$("#status").textContent="لوحة "+b.name;$("#content").innerHTML=formCard("إدارة البوت",'<div class="row"><b>'+esc(b.name)+'</b><span class="badge">'+esc(b.status)+'</span></div><p class="muted">السيرفر المربوط: <b>'+esc(b.linked_guild_id||"—")+'</b> — هذا البوت مقيد بسيرفر واحد فقط.</p><input id="botPrefix" maxlength="8" value="'+esc(b.prefix||"!")+'" placeholder="Prefix"><select id="botPresence"><option value="watching" '+(b.presence_mode==="watching"?"selected":"")+' >Watching</option><option value="playing" '+(b.presence_mode==="playing"?"selected":"")+' >Playing</option></select><input id="botPresenceText" maxlength="190" value="'+esc(b.presence_text||"")+'" placeholder="نص الحالة"><label class="row"><input id="botHide" type="checkbox" style="width:auto" '+(b.hide_website?"checked":"")+'> إخفاء رابط الموقع (اشتراك)</label><button class="primary" id="botSave">حفظ الإعدادات</button><h3>الخدمات</h3><div class="row" style="flex-wrap:wrap">'+["حماية","إدارة","تذاكر","تقديمات","برودكاست","قيفاوي","ألعاب","بنك","موسيقى","ستريك"].map(x=>'<span class="badge">'+x+'</span>').join("")+'</div><p class="muted">البيانات واللوقات لا تُحذف عند انتهاء الاشتراك؛ الاشتراك يوقف الميزة فقط. ولا يمكن نقل هذا البوت إلى سيرفر ثانٍ.</p>');$("#botSave").onclick=async()=>{try{await api("/api/bots/"+id,{method:"PATCH",body:{prefix:$("#botPrefix").value,presenceMode:$("#botPresence").value,presenceText:$("#botPresenceText").value,hideWebsite:$("#botHide").checked}});toast("تم حفظ إعدادات البوت");botPanel(id)}catch(e){toast(e.message)}}}
-async function botLogs(id){
- const d=await api("/api/bots/"+id+"/logs");
- $("#status").textContent="لوقات البوت";
- $("#content").innerHTML=formCard("السجل الكامل",(d.items||[]).map(x=>'<div class="card" style="margin-bottom:8px"><b>'+esc(x.event_type)+'</b><p class="muted">'+esc(x.username||"system")+' · '+new Date(x.created_at).toLocaleString("ar-SA")+'</p><pre style="white-space:pre-wrap">'+esc(JSON.stringify(x.details||{},null,2))+'</pre></div>').join("")||'<p class="muted">لا توجد لوقات بعد.</p>');
+async function bots(){
+ if(!me){auth();return}
+ const d=await api("/api/bots"),a=d.bots||[];
+ $("#status").textContent=a.length+" بوت";
+ let html=formCard("ربط بوت جديد",
+ '<div class="card" style="background:rgba(255,255,255,.025)"><b>ربط آمن ومتدرج</b><p class="muted">نفحص التوكن أولًا بدون حفظه، ثم نعرض فقط السيرفرات المسموح بها. كل بوت مربوط بسيرفر واحد.</p></div>'+
+ '<input id="botName" placeholder="اسم البوت">'+
+ '<input id="botToken" type="password" autocomplete="off" placeholder="Bot Token">'+
+ '<button class="primary" id="botInspect">فحص التوكن واختيار السيرفر</button><div id="botGuildPicker" style="display:none;margin-top:12px"></div>'+
+ '<button class="primary" id="botAdd" style="display:none">ربط وتشغيل البوت</button>');
+ html+=a.map(b=>'<article class="card"><div class="row"><div><b>'+esc(b.name)+'</b><div class="muted">السيرفر: '+esc(b.guild_name||b.linked_guild_id||"—")+'</div></div><span class="badge">'+esc(b.status||"offline")+'</span></div><p class="muted">Prefix: '+esc(b.prefix||"!")+' · '+esc(b.presence_mode||"watching")+'</p><button class="primary" data-bot="'+b.id+'">لوحة التحكم</button> <button class="ghost" data-botlogs="'+b.id+'">اللوقات</button></article>').join("");
+ $("#content").innerHTML=html||'<div class="card">لا توجد بوتات.</div>';
+ let inspected=null;
+ $("#botInspect")?.addEventListener("click",async()=>{try{const token=$("#botToken").value.trim();if(!token)throw Error("اكتب توكن البوت");const d=await api("/api/bots/inspect",{method:"POST",body:{token}});inspected=d;const p=$("#botGuildPicker");p.style.display="block";p.innerHTML='<label><b>اختر السيرفر</b><select id="botGuild" style="width:100%;margin-top:8px">'+d.guilds.map(g=>'<option value="'+esc(g.id)+'">'+esc(g.name)+' · '+esc(g.userRole)+' · البوت: '+esc(g.botRole)+'</option>').join("")+'</select></label>';$("#botAdd").style.display="block"}catch(e){toast(e.message)}});
+ $("#botAdd")?.addEventListener("click",async()=>{try{if(!inspected)throw Error("افحص التوكن أولًا");await api("/api/bots",{method:"POST",body:{name:$("#botName").value.trim(),token:$("#botToken").value.trim(),guildId:$("#botGuild").value}});toast("تم الربط وتشغيل البوت");bots()}catch(e){toast(e.message)}});
+ $$("[data-bot]").forEach(x=>x.onclick=()=>botPanel(x.dataset.bot));$$("[data-botlogs]").forEach(x=>x.onclick=()=>botLogs(x.dataset.botlogs));
 }
+async function botPanel(id){
+ const d=await api("/api/bots/"+id),b=d.bot;
+ const c=await api("/api/bots/"+id+"/control");
+ const perms=c.permissions||[];
+ const pluginNames=["protection","tickets","applications","broadcast","giveaways","games","bank","music","streak"];
+ $("#status").textContent="مركز قيادة "+b.name;
+ const accessRows=(c.access||[]).map(x=>'<div class="card" style="margin-bottom:8px"><b>'+esc(x.username)+'</b><div class="muted">'+esc((x.permissions||[]).join(" · ")||"بدون صلاحيات")+'</div></div>').join("")||'<p class="muted">لا يوجد مديرون إضافيون.</p>';
+ const templateRows=(c.templates||[]).map(x=>'<div class="card" style="margin-bottom:8px"><div class="row"><b>'+esc(x.command)+'</b><button class="ghost" data-tpl-toggle="'+x.id+'">'+(x.enabled?"تعطيل":"تفعيل")+'</button></div><p class="muted">'+esc(x.name)+' · '+esc(x.description||"")+'</p><p>'+esc(x.response_template)+'</p></div>').join("")||'<p class="muted">لا توجد قوالب. أضف أول أمر من النموذج.</p>';
+ const pluginRows=pluginNames.map(k=>{const p=(c.plugins||[]).find(x=>x.plugin_key===k);return '<div class="card"><div class="row"><div><b>'+esc(k)+'</b><div class="muted">إضافة مستقلة قابلة للإيقاف والتكوين</div></div><button class="'+(p?.enabled===false?"ghost":"primary")+'" data-plugin="'+k+'">'+(p?.enabled===false?"تشغيل":"مفعلة")+'</button></div></div>'}).join("");
+ $("#content").innerHTML=formCard("الإعدادات الأساسية",
+ '<div class="row" style="flex-wrap:wrap"><span class="badge">سيرفر واحد</span><span class="badge">بيانات دائمة</span><span class="badge">صلاحيات دقيقة</span><span class="badge">قوالب أوامر</span></div>'+
+ '<input id="botPrefix" maxlength="8" value="'+esc(b.prefix||"!")+'" placeholder="Prefix">'+
+ '<select id="botPresence"><option value="watching" '+(b.presence_mode==="watching"?"selected":"")+'>Watching</option><option value="playing" '+(b.presence_mode==="playing"?"selected":"")+'>Playing</option></select>'+
+ '<input id="botPresenceText" maxlength="190" value="'+esc(b.presence_text||"")+'" placeholder="نص الحالة">'+
+ '<label class="row"><input id="botHide" type="checkbox" style="width:auto" '+(b.hide_website?"checked":"")+'> إخفاء رابط الموقع (يتطلب اشتراكًا)</label>'+
+ '<button class="primary" id="botSave">حفظ الإعدادات</button>')+
+ formCard("قوالب الأوامر",
+ '<input id="tplName" placeholder="اسم القالب — مثال: ترحيب">'+
+ '<input id="tplCommand" placeholder="الأمر بدون prefix — مثال: welcome">'+
+ '<input id="tplDesc" placeholder="وصف مختصر">'+
+ '<textarea id="tplResponse" rows="4" placeholder="الرد. متغيرات: {user} {username} {bot} {guild} {args}"></textarea>'+
+ '<input id="tplRoles" placeholder="رتب مسموحة: IDs أو أسماء، مفصولة بفاصلة (اختياري)">'+
+ '<input id="tplChannels" placeholder="قنوات مسموحة: IDs مفصولة بفاصلة (اختياري)">'+
+ '<button class="primary" id="tplAdd">إضافة الأمر</button><div style="margin-top:12px">'+templateRows+'</div>')+
+ formCard("الإضافات",
+ '<p class="muted">كل إضافة تعمل كوحدة مستقلة؛ إيقافها لا يحذف إعداداتها أو بياناتها.</p><div class="content">'+pluginRows+'</div>')+
+ formCard("الصلاحيات الدقيقة",
+ '<input id="accessUser" placeholder="اسم مستخدم المنصة">'+
+ '<div class="row" style="flex-wrap:wrap">'+perms.map(p=>'<label class="badge"><input type="checkbox" class="accessPerm" value="'+p+'" style="width:auto"> '+p+'</label>').join("")+'</div>'+
+ '<button class="primary" id="accessAdd">منح الصلاحيات</button><div style="margin-top:12px">'+accessRows+'</div>')+
+ '<div class="card"><b>مبدأ النظام</b><p class="muted">المالك يحتفظ بالتحكم الكامل. كل تغيير مهم يسجل في اللوقات، والاشتراك يوقف الميزة فقط ولا يحذف البيانات.</p></div>';
+ $("#botSave").onclick=async()=>{try{await api("/api/bots/"+id,{method:"PATCH",body:{prefix:$("#botPrefix").value,presenceMode:$("#botPresence").value,presenceText:$("#botPresenceText").value,hideWebsite:$("#botHide").checked}});toast("تم حفظ الإعدادات");botPanel(id)}catch(e){toast(e.message)}};
+ $("#tplAdd").onclick=async()=>{try{const roles=$("#tplRoles").value.split(",").map(x=>x.trim()).filter(Boolean),channels=$("#tplChannels").value.split(",").map(x=>x.trim()).filter(Boolean);await api("/api/bots/"+id+"/templates",{method:"POST",body:{name:$("#tplName").value,command:$("#tplCommand").value,description:$("#tplDesc").value,responseTemplate:$("#tplResponse").value,allowedRoles:roles,channels}});toast("تمت إضافة الأمر");botPanel(id)}catch(e){toast(e.message)}};
+ $$("[data-tpl-toggle]").forEach(x=>x.onclick=async()=>{const t=(c.templates||[]).find(q=>String(q.id)===String(x.dataset.tplToggle));if(!t)return;try{await api("/api/bots/"+id+"/templates/"+t.id,{method:"PATCH",body:{enabled:!t.enabled}});botPanel(id)}catch(e){toast(e.message)}});
+ $$("[data-plugin]").forEach(x=>x.onclick=async()=>{try{const old=(c.plugins||[]).find(p=>p.plugin_key===x.dataset.plugin),enabled=old?.enabled===false;await api("/api/bots/"+id+"/plugins/"+x.dataset.plugin,{method:"PATCH",body:{enabled}});toast(enabled?"تم تشغيل الإضافة":"تم إيقاف الإضافة");botPanel(id)}catch(e){toast(e.message)}});
+ $("#accessAdd").onclick=async()=>{try{const permissions=$$(".accessPerm:checked").map(x=>x.value);await api("/api/bots/"+id+"/access",{method:"POST",body:{username:$("#accessUser").value,permissions}});toast("تم تحديث صلاحيات المستخدم");botPanel(id)}catch(e){toast(e.message)}};
+}
+
 
 async function render(v){
  clearInterval(pollTimer);v=V[v]?v:"home";$("#viewTitle").textContent=V[v][0];$("#viewSub").textContent=V[v][1];$("#status").textContent="جاري تحميل البيانات...";$("#content").innerHTML="";
