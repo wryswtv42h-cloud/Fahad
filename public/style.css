@@ -388,3 +388,98 @@ body.mld-booting #mld-welcome{opacity:1;visibility:visible}
 
 /* Final fix: remove the full-page welcome blur overlay */
 #mld-welcome,.mld-welcome{display:none!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;filter:none!important;}
+
+
+/* MLD FINAL VISUAL QA — contrast, focus, touch and responsive polish */
+:root{
+  --line-strong:#a86bbd;
+  --focus:#ffe1f6;
+  --surface:#130c1b;
+  --surface-2:#21132d;
+}
+body{
+  text-rendering:optimizeLegibility;
+  -webkit-font-smoothing:antialiased;
+}
+button,a,input,select,textarea{ -webkit-tap-highlight-color:transparent; }
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{
+  outline:3px solid var(--focus)!important;
+  outline-offset:3px!important;
+}
+button:disabled{cursor:not-allowed;opacity:.55}
+input::placeholder,textarea::placeholder{color:#bfa9c5;opacity:1}
+select.full option{background:#130c1b;color:#fff8ff}
+.search-wrap:focus-within,.full:focus{
+  border-color:var(--pink)!important;
+  box-shadow:0 0 0 3px #ff9cde18,0 8px 25px #0005;
+}
+.panel,.feature-card,.message-box,.home-reviews-section{
+  border-color:#9a68ad;
+}
+.card,.role-card,.top-card,.review-card-vertical,.stat-card,.game-live,.game-room{
+  border-color:#8f5da4;
+}
+.card:hover,.role-card:hover,.top-card:hover,.review-card-vertical:hover{
+  border-color:#ff9cde;
+}
+.muted,.status,.card p,.top-card small,.creator,.server-strip small,.loading{
+  color:#dfcde2;
+}
+.role-card>small{color:#d0b8d4}
+.game-board-status,.game-phase-banner,.game-lobby-note,.game-spectator{color:#dfcde2}
+.primary,.invite{
+  min-height:46px;
+}
+.desktop-nav button,.mobile-menu button,.stage-actions button,.stage-controls button,.group-item button,.auth-chip button,.joke-item button{
+  min-height:44px;
+}
+.game-tile{
+  min-height:92px;
+}
+.game-tile:focus-visible{
+  outline:3px solid var(--focus);
+  outline-offset:3px;
+}
+@media(max-width:820px){
+  .wrap{width:min(100% - 24px,1200px)}
+  .hero{min-height:auto;padding:42px 0 32px}
+  .hero-art{max-width:82vw;max-height:82vw}
+  .server-strip{gap:9px;margin-bottom:28px}
+  .server-strip>div{padding:16px}
+  .panel{margin-bottom:34px}
+  .section-head{gap:12px}
+  .search-wrap{margin-top:14px}
+  .game-room{min-height:0}
+  .game-table{gap:10px}
+  .game-controls{overflow:hidden}
+}
+@media(max-width:560px){
+  .brand{gap:8px}
+  .brand img{width:44px;height:44px;border-radius:13px}
+  .brand b{font-size:19px;letter-spacing:4px}
+  .brand small{font-size:9px}
+  .hero h1{letter-spacing:-3px}
+  .hero-art{border-radius:54px}
+  .hero-art img{border-radius:46px}
+  .server-strip>div{padding:13px 11px;border-radius:16px}
+  .server-strip strong{font-size:15px}
+  .grid,.role-grid,.top-grid{grid-template-columns:1fr}
+  .game-catalog{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .game-tile{min-height:88px;padding:11px}
+  .game-room-top{gap:8px}
+  .game-room-title b{font-size:14px}
+  .game-room-title small{font-size:10px}
+  .game-board{min-height:270px!important}
+  .game-hand{justify-content:center}
+  .game-card-button{width:62px;min-height:90px!important}
+  .game-control-row{grid-template-columns:1fr}
+  .game-control-row button{grid-column:auto}
+  .game-seat-picker,.game-bid-actions,.game-choice-grid{grid-template-columns:1fr 1fr}
+  .codenames-clue-form{grid-template-columns:1fr 80px}
+  .codenames-clue-form button{grid-column:1/-1}
+}
+@media(max-width:380px){
+  .game-catalog{grid-template-columns:1fr}
+  .game-seat-picker,.game-bid-actions,.game-choice-grid{grid-template-columns:1fr}
+  .hero h1{font-size:46px}
+}
