@@ -21,7 +21,9 @@
     "helmet": "^8.1.0",
     "pg": "^8.16.3",
     "socket.io": "^4.8.1",
-    "compression": "^1.8.1"
+    "compression": "^1.8.1",
+    "@discordjs/voice": "^0.18.0",
+    "google-tts-api": "^2.0.2"
   },
   "devDependencies": {
     "@playwright/test": "^1.55.0"
