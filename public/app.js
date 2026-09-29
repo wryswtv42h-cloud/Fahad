@@ -163,11 +163,11 @@ async function reviews(){
 async function games(){
  const d=await api("/api/games/sessions"),sessions=d.sessions||[];
  $("#status").textContent="الجلسات المفتوحة";
- const cards=GAMES.map(g=>'<article class="card"><b>'+g[1]+'</b><p class="muted">حتى '+g[2]+" لاعبين</p>"+(me?'<button class="primary" data-create="'+g[0]+'">إنشاء جلسة</button>':"<p class="muted">سجل الدخول للإنشاء</p>")+"</article>").join("");
- const list=sessions.map(s=>'<article class="card"><b>'+esc(s.gameName)+" · "+esc(s.code)+'</b><p class="muted">المضيف: '+esc(s.ownerUsername)+" · "+s.players.length+"/"+s.maxPlayers+" لاعبين · "+s.spectators.length+" مشاهدين</p><button class="ghost" data-join="'+esc(s.code)+'">انضمام</button> <button class="ghost" data-watch="'+esc(s.code)+'">مشاهدة</button></article>').join("");
+ const cards=GAMES.map(g=>'<article class="card"><b>'+esc(g[1])+'</b><p class="muted">حتى '+g[2]+' لاعبين</p>'+(me?'<button class="primary" data-create="'+g[0]+'">إنشاء جلسة</button>':'<p class="muted">سجل الدخول للإنشاء</p>')+'</article>').join("");
+ const list=sessions.map(x=>'<article class="card"><b>'+esc(x.gameName)+' · '+esc(x.code)+'</b><p class="muted">المضيف: '+esc(x.ownerUsername)+' · '+x.players.length+'/'+x.maxPlayers+' لاعبين · '+x.spectators.length+' مشاهدين</p><button class="ghost" data-join="'+esc(x.code)+'">انضمام</button> <button class="ghost" data-watch="'+esc(x.code)+'">مشاهدة</button></article>').join("");
  $("#content").innerHTML=cards+list;
  $$("[data-create]").forEach(b=>b.onclick=async()=>{try{const g=GAMES.find(x=>x[0]===b.dataset.create);const d=await api("/api/games/sessions",{method:"POST",body:{gameId:g[0],gameName:g[1],maxPlayers:g[2]}});toast("الجلسة "+d.session.code+" جاهزة");openGame(d.session.code)}catch(e){toast(e.message)}});
- const list=sessions.map(s=>'<article class="card"><b>'+esc(s.gameName)+" · "+esc(s.code)+'</b><p class="muted">المضيف: '+esc(s.ownerUsername)+" · "+s.players.length+"/"+s.maxPlayers+" لاعبين · "+s.spectators.length+" مشاهدين</p><button class="ghost" data-join="'+esc(s.code)+'">انضمام</button> <button class="ghost" data-watch="'+esc(s.code)+'">مشاهدة</button></article>').join("");
+ $$("[data-join]").forEach(b=>b.onclick=async()=>{try{await api("/api/games/sessions/"+b.dataset.join+"/join",{method:"POST"});openGame(b.dataset.join)}catch(e){toast(e.message)}});
  $$("[data-watch]").forEach(b=>b.onclick=async()=>{try{await api("/api/games/sessions/"+b.dataset.watch+"/spectate",{method:"POST"});openGame(b.dataset.watch)}catch(e){toast(e.message)}});
 }
 async function openGame(code){
