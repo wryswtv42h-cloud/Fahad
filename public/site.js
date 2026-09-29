@@ -294,19 +294,6 @@ async function homeView(){
   }
 }
 
-function openReadyGame(url,gameId){
-  const u=new URL(url||"/mld-games/",window.location.origin);
-  u.searchParams.set("lang","en");
-  gameId=gameId||document.querySelector(".game-choice.selected")?.dataset.game||""; if(gameId)u.searchParams.set("game",gameId);
-  const wrap=document.createElement("div");
-  wrap.className="mld-game-modal";
-  wrap.innerHTML="<div class='mld-game-modal-card'><div class='mld-game-modal-head'><div><b>🎮 ملاذ ألعاب</b><small>واجهة الألعاب داخل ملاذ</small></div><button type='button' class='mld-game-modal-close' aria-label='إغلاق'>×</button></div><iframe class='mld-game-modal-frame' title='MLD Game' allow='autoplay; fullscreen' src='"+esc(u.toString())+"'></iframe></div>";
-  document.body.appendChild(wrap);
-  const close=()=>wrap.remove();
-  wrap.querySelector(".mld-game-modal-close").onclick=close;
-  wrap.addEventListener("click",e=>{if(e.target===wrap)close()});
-}
-
 async function mldChatView(mode="public"){
   await mldMe();
   if(!mldUser)return authView();
