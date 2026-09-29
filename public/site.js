@@ -246,32 +246,49 @@ Promise.race([mldMe(),new Promise(r=>setTimeout(r,700))]).catch(()=>null).then((
 
 
 /* MLD 2026 hardening: restored home route, real-time chat UI, game bridge. */
-async function homeView(){
+async async function homeView(){
   await mldMe();
   title.textContent="الرئيسية";
-  subtitle.textContent="لوحة ملاذ الحية — بيانات السيرفر والأعضاء والتفاعل تتحدث تلقائيًا.";
+  subtitle.textContent="لوحة ملاذ الحية — وتقييمات المجتمع تتحدث تلقائيًا.";
   searchWrap.style.display="none";
   content.className="home-dashboard";
   try{
     const data=await Promise.all([
       fetch("/api/public/server?live="+Date.now(),{cache:"no-store"}).then(x=>x.json()),
-      fetch("/api/public/top?live="+Date.now(),{cache:"no-store"}).then(x=>x.json()),
-      fetch("/api/public/roles?live="+Date.now(),{cache:"no-store"}).then(x=>x.json()),
+      fetch("/api/reviews?live="+Date.now(),{cache:"no-store"}).then(x=>x.json()),
       siteStats()
     ]);
-    const s=data[0],t=data[1],r=data[2],stats=data[3];
-    const members=(t.messages||[]).slice(0,6);
+    const s=data[0],reviews=data[1]?.reviews||[],stats=data[2];
+    const allReviews=reviews.length?reviews:[{id:"demo-1",username:"زائر ملاذ",rating:5,message:"موقع مرتب وسهل الاستخدام، والتجربة جميلة."},{id:"demo-2",username:"عضو في السيرفر",rating:5,message:"الألعاب والشات في مكان واحد، شيء ممتاز."},{id:"demo-3",username:"مجتمع ملاذ",rating:4,message:"واجهة جميلة وسريعة، وأتمنى إضافة ألعاب أكثر."}];
+    let reviewOffset=0;
+    const renderReviews=()=>{
+      const shown=Array.from({length:Math.min(3,allReviews.length)},(_,i)=>allReviews[(reviewOffset+i)%allReviews.length]);
+      const cards=shown.map(r=>{
+        const rating=Math.max(1,Math.min(5,Number(r.rating)||5));
+        return "<article class='home-review-card'><div class='home-review-top'><div class='home-review-avatar'>"+esc((r.username||"زائر").trim().charAt(0)||"ز")+"</div><div><b>"+esc(r.username||"زائر")+"</b><div class='home-review-stars' aria-label='"+rating+" من 5'>"+("★".repeat(rating)+"☆".repeat(5-rating))+"</div></div></div><p>"+esc(r.message||"")+"</p></article>";
+      }).join("");
+      const count=Math.min(3,allReviews.length);
+      const indicators=Array.from({length:count},(_,i)=>"<span class='home-review-dot "+(i===0?"active":"")+"'></span>").join("");
+      const wrap=$("#home-reviews");
+      if(wrap)wrap.innerHTML="<div class='home-reviews-grid'>"+cards+"</div><div class='home-reviews-footer'><span>تقييمات من مجتمع ملاذ</span><span class='home-review-dots'>"+indicators+"</span><button type='button' class='games-secondary' data-view='reviews'>إضافة تقييم</button></div>";
+    };
     content.innerHTML=
-      "<section class='home-live-card'><span class='pill'>● LIVE</span><h2>"+esc(s.name||"MLD")+"</h2><p>السيرفر متصل · آخر مزامنة "+new Date().toLocaleTimeString("ar-SA",{hour:"2-digit",minute:"2-digit",second:"2-digit"})+"</p><div class='home-stats'><b>"+num(s.memberCount)+"<small>عضو</small></b><b>"+num(stats.online)+"<small>متصل الآن</small></b><b>"+num(stats.visits)+"<small>زيارة</small></b><b>"+num((r.roles||[]).length)+"<small>رتب قيادية</small></b></div></section>"+
-      "<section class='home-grid'><article class='feature-card'><h3>🔥 الأكثر تفاعلًا</h3><div class='joke-list'>"+
-      (members.map((m,i)=>"<button type='button' class='home-member' data-member='"+esc(m.id)+"'><span>"+(i+1)+"</span><img src='"+esc(avatar(m))+"' onerror=\"this.src='/logo.svg'\"><b>"+esc(m.name)+"</b><small>"+num(m.stats?.messages)+" رسالة</small></button>").join("")||"<p class='muted'>لا توجد بيانات.</p>")+
-      "</div></article><article class='feature-card'><h3>⚡ وصول سريع</h3><div class='home-actions'><button type='button' class='primary' data-view='members'>الأعضاء</button><button type='button' class='games-secondary' data-view='top'>TOP</button><button type='button' class='games-secondary' data-view='chat'>الشات العام</button><button type='button' class='games-secondary' data-view='games'>الألعاب</button><button type='button' class='games-secondary' data-view='roles'>الرتب</button><button type='button' class='games-secondary' data-view='groups'>القروبات</button></div></article></section>"+
+      "<section class='home-live-card'><span class='pill'>● LIVE</span><h2>"+esc(s.name||"MLD")+"</h2><p>السيرفر متصل · آخر مزامنة "+new Date().toLocaleTimeString("ar-SA",{hour:"2-digit",minute:"2-digit",second:"2-digit"})+"</p><div class='home-stats'><b>"+num(s.memberCount)+"<small>عضو</small></b><b>"+num(stats.online)+"<small>متصل الآن</small></b><b>"+num(stats.visits)+"<small>زيارة</small></b></div></section>"+
+      "<section class='feature-card home-reviews-section'><div class='home-section-head'><div><span class='eyebrow'>آراء المجتمع</span><h3>⭐ تقييمات الناس عن ملاذ</h3><p class='muted'>تتحدث تلقائيًا كل 5 ثوانٍ بشكل مرتب.</p></div></div><div id='home-reviews'></div></section>"+
+      "<section class='feature-card'><h3>⚡ وصول سريع</h3><div class='home-actions'><button type='button' class='primary' data-view='top'>TOP</button><button type='button' class='games-secondary' data-view='chat'>الشات العام</button><button type='button' class='games-secondary' data-view='games'>الألعاب</button><button type='button' class='games-secondary' data-view='roles'>الرتب</button><button type='button' class='games-secondary' data-view='groups'>القروبات</button><button type='button' class='games-secondary' data-view='reviews'>كل التقييمات</button></div></section>"+
       "<div class='home-rights'>© 2026 ملاذ — جميع الحقوق محفوظة · حقوق السيرفر: ملاذ · المؤسس والمالك: فهد المطيري</div>";
+    renderReviews();
+    if(allReviews.length>3){
+      setInterval(()=>{
+        reviewOffset=(reviewOffset+3)%allReviews.length;
+        renderReviews();
+      },5000);
+    }
     bind();
-    setStatus("بيانات ملاذ محدثة");
+    setStatus("بيانات ملاذ وتقييماته محدثة");
   }catch(e){
     console.error("homeView",e);
-    content.innerHTML="<section class='feature-card'><h3>الرئيسية</h3><p class='muted'>جاري إعادة مزامنة بيانات السيرفر…</p><button type='button' class='primary' data-view='members'>فتح الأعضاء</button></section>";
+    content.innerHTML="<section class='feature-card'><h3>الرئيسية</h3><p class='muted'>جاري إعادة مزامنة بيانات السيرفر…</p><button type='button' class='primary' data-view='reviews'>عرض التقييمات</button></section>";
     setStatus("تعذر تحديث البيانات مؤقتًا");
   }
 }
