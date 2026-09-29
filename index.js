@@ -23,7 +23,8 @@ const client = new Client({
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildVoiceStates
+    GatewayIntentBits.GuildVoiceStates,
+    GatewayIntentBits.GuildPresences
   ]
 });
 
@@ -64,6 +65,32 @@ const importantPermissionNames = new Set([
 const activity = new Map();
 const voiceSessions = new Map();
 const sendHits = new Map();
+const publicStatsFile = path.join(__dirname, "data", "public-stats.json");
+let publicStats = { totalVisits: 0, recentVisitors: {} };
+try {
+  fs.mkdirSync(path.dirname(publicStatsFile), { recursive: true });
+  if (fs.existsSync(publicStatsFile)) publicStats = JSON.parse(fs.readFileSync(publicStatsFile, "utf8"));
+} catch (error) {
+  console.error("Public stats read:", error);
+}
+function savePublicStats() {
+  try {
+    const tmp = publicStatsFile + ".tmp";
+    fs.writeFileSync(tmp, JSON.stringify(publicStats, null, 2));
+    fs.renameSync(tmp, publicStatsFile);
+  } catch (error) {
+    console.error("Public stats write:", error);
+  }
+}
+function onlineMemberCount(members) {
+  return members.filter((member) => member.presence && member.presence.status && member.presence.status !== "offline").length;
+}
+function onlineBotCount(members) {
+  return members.filter((member) => member.user.bot && member.presence && member.presence.status && member.presence.status !== "offline").length;
+}
+function onlineHumanCount(members) {
+  return members.filter((member) => !member.user.bot && member.presence && member.presence.status && member.presence.status !== "offline").length;
+}
 
 let guildCache = null;
 let guildCacheAt = 0;
@@ -202,6 +229,36 @@ app.get("/health", (req, res) => {
     membersCachedCount: memberSnapshot?.length || 0,
     membersUpdatedAt: memberSnapshotAt || null
   });
+});
+
+app.get("/api/public/stats", async (req, res) => {
+  try {
+    const guild = await getGuild();
+    const members = await getAllMembers(guild);
+    const visitorKey = crypto.createHash("sha256").update(String(req.ip || "") + "|" + String(req.headers["user-agent"] || "")).digest("hex");
+    const now = Date.now();
+    const last = Number(publicStats.recentVisitors[visitorKey] || 0);
+    if (now - last > 30 * 60 * 1000) {
+      publicStats.totalVisits = Number(publicStats.totalVisits || 0) + 1;
+      publicStats.recentVisitors[visitorKey] = now;
+      const cutoff = now - 24 * 60 * 60 * 1000;
+      for (const [key, value] of Object.entries(publicStats.recentVisitors)) {
+        if (Number(value) < cutoff) delete publicStats.recentVisitors[key];
+      }
+      savePublicStats();
+    }
+    res.json({
+      totalVisits: Number(publicStats.totalVisits || 0),
+      online: onlineMemberCount(members),
+      onlineHumans: onlineHumanCount(members),
+      onlineBots: onlineBotCount(members),
+      totalMembers: members.length,
+      updatedAt: Date.now()
+    });
+  } catch (error) {
+    console.error("Public stats endpoint:", error);
+    res.status(503).json({ error: "الإحصائيات غير متاحة مؤقتًا" });
+  }
 });
 
 app.get("/api/public/server", async (req, res) => {
