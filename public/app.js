@@ -240,7 +240,7 @@ async function botPanel(id){
  $("#content").innerHTML=formCard("الإعدادات الأساسية",
  '<div class="row" style="flex-wrap:wrap"><span class="badge">سيرفر واحد</span><span class="badge">بيانات دائمة</span><span class="badge">صلاحيات دقيقة</span><span class="badge">قوالب أوامر</span></div>'+
  '<input id="botPrefix" maxlength="8" value="'+esc(b.prefix||"!")+'" placeholder="Prefix">'+
- '<select id="botPresence"><option value="watching" '+(b.presence_mode==="watching"?"selected":"")+'>Watching</option><option value="playing" '+(b.presence_mode==="playing"?"selected":"")+'>Playing</option></select>'+
+ '<select id="botPresence"><option value="watching" '+(b.presence_mode==="watching"?"selected":"")+' >Watching</option><option value="playing" '+(b.presence_mode==="playing"?"selected":"")+' >Playing</option></select>'+
  '<input id="botPresenceText" maxlength="190" value="'+esc(b.presence_text||"")+'" placeholder="نص الحالة">'+
  '<label class="row"><input id="botHide" type="checkbox" style="width:auto" '+(b.hide_website?"checked":"")+'> إخفاء رابط الموقع (يتطلب اشتراكًا)</label>'+
  '<button class="primary" id="botSave">حفظ الإعدادات</button>')+
