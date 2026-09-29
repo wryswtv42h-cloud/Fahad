@@ -287,6 +287,9 @@ function sortedMemberJson(members, limit = members.length) {
 async function initAppDatabase() {
   if (!process.env.DATABASE_URL) return;
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS mld_jokes (id BIGSERIAL PRIMARY KEY, body TEXT NOT NULL, author VARCHAR(80) NOT NULL DEFAULT 'ملاذ الذكي', likes INTEGER NOT NULL DEFAULT 0, dislikes INTEGER NOT NULL DEFAULT 0, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+    CREATE TABLE IF NOT EXISTS mld_joke_reactions (joke_id BIGINT NOT NULL REFERENCES mld_jokes(id) ON DELETE CASCADE, username VARCHAR(80) NOT NULL, reaction VARCHAR(10) NOT NULL, PRIMARY KEY(joke_id,username));
+    CREATE TABLE IF NOT EXISTS mld_stories (id BIGSERIAL PRIMARY KEY, genre VARCHAR(40) NOT NULL, body TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
     CREATE TABLE IF NOT EXISTS app_users (id SERIAL PRIMARY KEY, username VARCHAR(32) UNIQUE NOT NULL, password_hash TEXT NOT NULL, discord_username VARCHAR(100) NOT NULL, role VARCHAR(20) NOT NULL DEFAULT 'user', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), last_login_at TIMESTAMPTZ); ALTER TABLE app_users ADD COLUMN IF NOT EXISTS discord_user_id VARCHAR(32);
     ALTER TABLE app_users ADD COLUMN IF NOT EXISTS username VARCHAR(32);
     ALTER TABLE app_users ADD COLUMN IF NOT EXISTS password_hash TEXT;
@@ -460,6 +463,27 @@ async function ensureOwner(){
 }
 
 
+const jokeSeeds=[
+"واحد قال لخويه: عندي سالفة طويلة… قاله: ارسلها واتساب لا تتعبنا 😂",
+"قلت للربع بنام بدري… جلست معهم لين الفجر عشان أتأكد إنهم ناموا 😭",
+"الراتب عندي سريع مرة… يدخل الحساب ويطلع قبل لا أقول السلام عليكم 😂",
+"دخلت المطبخ أدور شيء آكله… الثلاجة قالت: تراك قبل شوي جيتني لا تحرجني 😂",
+"واحد اشترى ساعة ذكية… صارت أذكى منه وقالت له نام بدري 😭"
+];
+const storySeed={
+"مغامرة":["في ليلة هادئة وصلته رسالة تقول: لا تفتح الباب إذا سمعت ثلاث دقات.","نزل إلى آخر الممر فوجد مفتاحًا صغيرًا مكتوبًا عليه ملاذ.","فتح الباب فظهرت خريطة تقوده إلى مكان لم يره أحد من قبل."],
+"غموض":["توقفت ساعة المحل عند الدقيقة نفسها منذ سنوات.","وجد في جيبه ورقة لم يكتبها، وفيها موعد الليلة التالية.","عندما وصل الموعد اكتشف أن صاحب الرسالة يعرف عنه كل شيء."],
+"رعب خفيف":["انطفأت الأنوار لحظة واحدة، وعندما عادت كان الكرسي قد تحرك وحده.","ضحك وقال أكيد أحد يمزح، ثم سمع نفس الضحكة من الغرفة الفاضية.","فتح الباب فوجد قطة صغيرة تنظر له وكأنها صاحبة المكان 😂."],
+"كوميديا":["قرر أن يبدأ يومه بنشاط وضبط خمس منبهات.","قام بعد المنبه السادس وهو يسأل نفسه: ليه الحياة صعبة؟","قرر ينام بدري من بكرة… وكانت هذه أول كذبة في القصة 😂."],
+"خيال":["وجد بابًا صغيرًا خلف مكتبة قديمة، وعلى الباب نقش يضيء إذا اقترب.","دخل فوجد مدينة معلقة فوق السحاب، وكل بيت فيها يحفظ ذكرى شخص.","اختار بيتًا واحدًا، وعندما فتحه وجد ذكرى لم يعشها بعد."]
+};
+async function ensureEngagementSeed(){try{const x=await pool.query("SELECT COUNT(*)::int n FROM mld_jokes");if(!Number(x.rows[0]?.n)){for(const body of jokeSeeds)await pool.query("INSERT INTO mld_jokes(body) VALUES($1)",[body]);}}catch(e){console.error("Engagement seed:",e.message)}}
+async function engagementUser(req,res,next){const u=currentUser(req);if(!u)return res.status(401).json({error:"يجب تسجيل الدخول أولًا"});req.mldUser=u;next();}
+app.get("/api/jokes",async(req,res)=>{try{const q=await pool.query("SELECT id,body,author,likes,dislikes,created_at FROM mld_jokes ORDER BY created_at DESC LIMIT 100");res.json({items:q.rows});}catch(e){res.status(500).json({error:"تعذر تحميل النكت"})}});
+app.post("/api/jokes",writeLimiter,engagementUser,async(req,res)=>{const body=String(req.body?.body||"").trim().slice(0,500);if(body.length<5)return res.status(400).json({error:"اكتب نكتة أطول شوي"});try{const q=await pool.query("INSERT INTO mld_jokes(body,author) VALUES($1,$2) RETURNING id,body,author,likes,dislikes,created_at",[body,req.mldUser.username]);res.status(201).json(q.rows[0]);}catch(e){res.status(500).json({error:"تعذر نشر النكتة"})}});
+app.post("/api/jokes/generate",writeLimiter,async(req,res)=>{const body=jokeSeeds[Math.floor(Math.random()*jokeSeeds.length)];try{const q=await pool.query("INSERT INTO mld_jokes(body,author) VALUES($1,'ملاذ الذكي') RETURNING id,body,author,likes,dislikes,created_at",[body]);res.status(201).json(q.rows[0]);}catch(e){res.status(500).json({error:"تعذر توليد النكتة"})}});
+app.post("/api/jokes/:id/react",writeLimiter,engagementUser,async(req,res)=>{const type=req.body?.type==="dislike"?"dislike":"like";try{const old=await pool.query("SELECT reaction FROM mld_joke_reactions WHERE joke_id=$1 AND username=$2",[req.params.id,req.mldUser.username]);if(old.rowCount)await pool.query("UPDATE mld_joke_reactions SET reaction=$3 WHERE joke_id=$1 AND username=$2",[req.params.id,req.mldUser.username,type]);else await pool.query("INSERT INTO mld_joke_reactions(joke_id,username,reaction) VALUES($1,$2,$3)",[req.params.id,req.mldUser.username,type]);await pool.query("UPDATE mld_jokes SET likes=(SELECT COUNT(*) FROM mld_joke_reactions WHERE joke_id=$1 AND reaction='like'),dislikes=(SELECT COUNT(*) FROM mld_joke_reactions WHERE joke_id=$1 AND reaction='dislike') WHERE id=$1",[req.params.id]);const q=await pool.query("SELECT id,body,author,likes,dislikes,created_at FROM mld_jokes WHERE id=$1",[req.params.id]);if(!q.rowCount)return res.status(404).json({error:"النكتة غير موجودة"});res.json(q.rows[0]);}catch(e){res.status(500).json({error:"تعذر حفظ التفاعل"})}});
+app.post("/api/stories/generate",async(req,res)=>{const genre=Object.prototype.hasOwnProperty.call(storySeed,req.body?.genre)?req.body.genre:"مغامرة";const len=req.body?.length==="طويلة"?6:req.body?.length==="متوسطة"?4:3;const src=storySeed[genre],parts=[];for(let i=0;i<len;i++)parts.push(src[i%src.length]);const body=parts.join(" ");try{const q=await pool.query("INSERT INTO mld_stories(genre,body) VALUES($1,$2) RETURNING id,genre,body,created_at",[genre,body]);res.status(201).json(q.rows[0]);}catch(e){res.status(500).json({error:"تعذر توليد القصة"})}});
 app.get("/api/support",async(req,res)=>{try{const g=await getGuild();const wanted=String(process.env.OWNER_DISCORD_USERNAME||process.env.OWNER_USERNAME||"w4px").trim().toLowerCase();let member=null;const members=await getAllMembers(g);for(const m of members){const names=[m.user?.username,m.user?.globalName,m.displayName].filter(Boolean).map(x=>String(x).toLowerCase());if(names.includes(wanted)||names.some(x=>x.split("#")[0]===wanted)){member=m;break;}}const id=member?.user?.id||null;res.json({ok:!!id,username:wanted,url:id?"https://discord.com/users/"+id:null});}catch(e){res.json({ok:false,username:String(process.env.OWNER_DISCORD_USERNAME||process.env.OWNER_USERNAME||"w4px").trim().toLowerCase(),url:null})}});
 app.get("/api/games/sessions",async(req,res)=>{try{const q=await pool.query("SELECT id,code,game_id,game_name,owner_username,status,max_players,players,spectators,created_at,started_at FROM game_sessions WHERE status IN ('open','playing') ORDER BY created_at DESC LIMIT 100");res.json({sessions:q.rows});}catch(e){res.status(500).json({error:"تعذر تحميل جلسات الألعاب"});}});
 app.post("/api/games/sessions",writeLimiter,async(req,res)=>{try{const gameId=String(req.body?.gameId||"").trim().slice(0,60),gameName=String(req.body?.gameName||gameId).trim().slice(0,120),maxPlayers=Math.max(2,Math.min(10,Number(req.body?.maxPlayers)||4)),playerName=String(req.body?.playerName||"زائر").trim().slice(0,32)||"زائر";if(!gameId||!gameName)return res.status(400).json({error:"اختر لعبة أولًا"});let code="";for(let i=0;i<12;i++){code=Math.random().toString(36).slice(2,8).toUpperCase();const x=await pool.query("SELECT 1 FROM game_sessions WHERE code=$1",[code]);if(!x.rowCount)break}const q=await pool.query("INSERT INTO game_sessions(code,game_id,game_name,owner_username,max_players,players) VALUES($1,$2,$3,$4,$5,1) RETURNING *",[code,gameId,gameName,playerName,maxPlayers]);res.json({ok:true,session:q.rows[0]});}catch(e){console.error("Game session create:",e);res.status(500).json({error:"تعذر إنشاء جلسة اللعبة"});}});
@@ -1221,7 +1245,7 @@ const server = app.listen(port, async () => {
   server.headersTimeout = 70_000;
   server.requestTimeout = 30_000;
   console.log(`MLD listening on port ${port}`);
-  try { await initAppDatabase(); await ensureOwner(); await ensureChatDatabase(); console.log("App database ready"); }
+  try { await initAppDatabase(); await ensureOwner(); await ensureChatDatabase(); await ensureEngagementSeed(); console.log("App database ready"); }
   catch (error) { console.error("Database init failed:", error.message); }
 });
 
