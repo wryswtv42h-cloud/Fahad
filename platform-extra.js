@@ -4,7 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
-module.exports = function setupMLDExtra({ app, client, auth, ownerOnly, logPlatform, getGuild, getAllMembers }) {
+module.exports = function setupMLDExtra({ app, client, auth, ownerOnly, logPlatform, getGuild, getAllMembers, platform, savePlatform }) {
   const dir = path.join(__dirname, "data");
   const file = path.join(dir, "features.json");
   const defaultData = {
@@ -40,6 +40,7 @@ module.exports = function setupMLDExtra({ app, client, auth, ownerOnly, logPlatf
   const id=()=>crypto.randomUUID();
   const clean=(v,n)=>String(v==null?"":v).trim().slice(0,n);
   const staffOnly=(req,res,next)=>req.account?.role==="owner" ? next() : res.status(403).json({error:"هذا القسم للإدارة والأونر"});
+  require("./bot-manager")({ app, auth, logPlatform, platform, savePlatform });
 
   app.get("/api/platform/bots",(req,res)=>res.json({bots:data.bots.map(b=>Object.assign({},b,{settings:data.botSettings[b.id]||{}}))}));
 
@@ -97,7 +98,7 @@ module.exports = function setupMLDExtra({ app, client, auth, ownerOnly, logPlatf
   app.post("/api/platform/messages",auth,(req,res)=>{
     const to=clean(req.body?.to,24).toLowerCase(), message=clean(req.body?.message,1000);
     if(!to||!message)return res.status(400).json({error:"أكمل الرسالة"});
-    const target=data.accounts?.find(a=>a.username===to);
+    const target=platform.accounts?.find(a=>a.username===to);
     const m={id:id(),from:req.account.username,to,message,createdAt:new Date().toISOString()};
     data.privateMessages.unshift(m); save(); logPlatform("private_message",req.account.id,to); res.status(201).json({message:m,recipientExists:Boolean(target)});
   });
