@@ -345,7 +345,7 @@ module.exports = function setupBotManager({ app, auth, logPlatform, platform, sa
       const channel=await x.rt.client.channels.fetch(channelId);
       if(!channel || !channel.isTextBased()) return res.status(404).json({error:"القناة غير موجودة"});
       await channel.send(command);
-      logPlatform("managed_bot_command",req.account.id,x.b.slot+":"+command.slice(0,120));
+      logPlatform("managed_bot_command",req.account.id,x.b.botUserId+":"+command.slice(0,120));
       res.json({ok:true});
     } catch(e) { res.status(400).json({error:String(e.message || "تعذر تنفيذ الأمر")}); }
   });
