@@ -19,7 +19,7 @@ function closeMobileMenu(){if(!mobile)return;mobile.classList.remove("open");doc
 if(menuButton){menuButton.setAttribute("aria-expanded","false");menuButton.setAttribute("aria-label","فتح قائمة الموقع");menuButton.innerHTML="<span class=\"menu-bars\" aria-hidden=\"true\"><i></i><i></i><i></i></span>";menuButton.addEventListener("click",toggleMobileMenu);}
 $("#close").onclick=closeModal;modal.onclick=e=>{if(e.target===modal)closeModal()};document.onkeydown=e=>{if(e.key==="Escape")closeModal()};const yearEl=$("#year");if(yearEl)yearEl.textContent=new Date().getFullYear();
 const welcome=document.getElementById("mld-welcome");if(welcome){const hideWelcome=()=>{if(welcome.classList.contains("hide"))return;welcome.classList.add("hide");setTimeout(()=>welcome.remove(),220)};welcome.classList.remove("hide");welcome.addEventListener("click",hideWelcome);setTimeout(hideWelcome,1200);}
-refreshTimer=setInterval(()=>{if(!modal.classList.contains("hidden")||view==="message")return;refresh()},15000);
+refreshTimer=setInterval(()=>{if(!modal.classList.contains("hidden")||view==="message")return;refresh()},3000);
 
 // MLD Add-on: Games
 async function renderGames(){
@@ -29,15 +29,15 @@ async function renderGames(){
   content.className="games-hub";
   await mldMe();
   const games=[
-    {id:"uno",name:"UNO",icon:"🃏",desc:"لعبة الورق الجماعية السريعة.",max:6,ready:true},
-    {id:"monopoly",name:"مونوبولي / أونوك",icon:"🎲",desc:"طاولة تجارة وشراء وتنافس جماعي.",max:6,ready:true},
-    {id:"flightchess",name:"لودو / طاولة سباق",icon:"🎯",desc:"طاولة خفيفة للجلسات الجماعية.",max:4,ready:true},
-    {id:"hearts",name:"قلوب",icon:"♥️",desc:"أربع لاعبين وذكاء في الورق.",max:4,ready:true},
-    {id:"rummikub",name:"رومي",icon:"🀄",desc:"ترتيب وتجميع القطع مع الأصدقاء.",max:4,ready:true},
-    {id:"liarsbar",name:"لعبة خداع",icon:"♣️",desc:"بلوف وتحديات اجتماعية.",max:6,ready:true},
-    {id:"baloot",name:"بلوت",icon:"🃏",desc:"نظام بلوت سعودي كامل بجلسات خاصة ومشاهدين — نضيف محرك البلوت المخصص هنا.",max:4,ready:false},
-    {id:"jackaroo",name:"جاكارو",icon:"🔴",desc:"طاولة جاكارو جماعية مع بوتات.",max:4,ready:false},
-    {id:"ludo",name:"لودو",icon:"🎲",desc:"لودو 2–4 لاعبين مع بوتات.",max:4,ready:false}
+    {id:"uno",name:"UNO",icon:"",desc:"لعبة الورق الجماعية السريعة.",max:6,ready:true},
+    {id:"monopoly",name:"مونوبولي / أونوك",icon:"",desc:"طاولة تجارة وشراء وتنافس جماعي.",max:6,ready:true},
+    {id:"flightchess",name:"لودو / طاولة سباق",icon:"",desc:"طاولة خفيفة للجلسات الجماعية.",max:4,ready:true},
+    {id:"hearts",name:"قلوب",icon:"",desc:"أربع لاعبين وذكاء في الورق.",max:4,ready:true},
+    {id:"rummikub",name:"رومي",icon:"",desc:"ترتيب وتجميع القطع مع الأصدقاء.",max:4,ready:true},
+    {id:"liarsbar",name:"لعبة خداع",icon:"",desc:"بلوف وتحديات اجتماعية.",max:6,ready:true},
+    {id:"baloot",name:"بلوت",icon:"",desc:"نظام بلوت سعودي كامل بجلسات خاصة ومشاهدين — نضيف محرك البلوت المخصص هنا.",max:4,ready:false},
+    {id:"jackaroo",name:"جاكارو",icon:"",desc:"طاولة جاكارو جماعية مع بوتات.",max:4,ready:false},
+    {id:"ludo",name:"لودو",icon:"",desc:"لودو 2–4 لاعبين مع بوتات.",max:4,ready:false}
   ];
   let sessions=[];
   try{sessions=(await fetch("/api/games/sessions?"+Date.now()).then(r=>r.json())).sessions||[]}catch{}
@@ -45,7 +45,7 @@ async function renderGames(){
   content.innerHTML=`
     <section class="games-hero-card">
       <div><span class="pill">MLD GAMES</span><h2>مجلس الألعاب الجماعية</h2><p>الغرف، الأكواد، اللاعبين، المشاهدين والبوتات — كلها من مركز الألعاب.</p></div>
-      <div class="games-hero-badge">🎮 داخل MLD</div>
+      <div class="games-hero-badge">داخل MLD</div>
     </section>
     <section class="games-create-card">
       <div class="section-heading"><div><h3>إنشاء جلسة</h3><p class="muted">اختر اللعبة وحدد عدد المقاعد ثم أنشئ الجلسة.</p></div></div>
@@ -57,7 +57,7 @@ async function renderGames(){
   let selected=games.find(g=>g.ready)?.id||"uno";
   const renderSessions=()=>{
     const list=$("#games-session-list"); if(!list)return;
-    if(!sessions.length){list.innerHTML="<div class='games-empty'>🎮 ما فيه جلسات مفتوحة الآن — كن أول واحد ينشئ جلسة.</div>";return}
+    if(!sessions.length){list.innerHTML="<div class='games-empty'>ما فيه جلسات مفتوحة الآن — كن أول واحد ينشئ جلسة.</div>";return}
     list.innerHTML=sessions.map(s=>{const g=gameMap[s.game_id]||{icon:"🎮",name:s.game_name,max:s.max_players};const own=mldUser&&s.owner_username===mldUser.username;return `<article class="game-session-row"><span class="game-session-icon">${g.icon}</span><div class="game-session-main"><b>${esc(s.game_name)}</b><small>بواسطة @${esc(s.owner_username)} · ${num(s.players)}/${num(s.max_players)} لاعبين · ${num(s.spectators)} مشاهد</small></div><code>${esc(s.code)}</code><div class="game-session-actions"><button class="primary game-join" data-code="${esc(s.code)}">${own?"🎮 افتح":"انضم"}</button><button class="ghost game-watch" data-code="${esc(s.code)}">👁 مشاهدة</button></div></article>`}).join("");
     list.querySelectorAll(".game-join").forEach(btn=>btn.onclick=async()=>{const code=btn.dataset.code;const s=sessions.find(x=>x.code===code);if(s){if(!(mldUser&&s.owner_username===mldUser.username)){const r=await fetch("/api/games/sessions/"+encodeURIComponent(code)+"/join",{method:"POST"});if(!r.ok){const d=await r.json().catch(()=>({}));return alert(d.error||"تعذر الانضمام")} } openReadyGame("https://mld-gamenest-production.up.railway.app/",s?.game_id||"");}});
     list.querySelectorAll(".game-watch").forEach(btn=>btn.onclick=()=>openReadyGame("https://mld-gamenest-production.up.railway.app/"));
@@ -81,35 +81,32 @@ function mldNavButton(view,label,extra=""){
 function rebuildMobileMenu(){
   const menu=$("#mobile-menu"); if(!menu)return;
   const role=mldUser?.role||"";
-  const isAdmin=role==="admin" || role==="owner";
+  const isAdmin=role==="admin"||role==="owner";
   const isOwner=role==="owner";
-  const group=(icon,name,items,open=false)=>{
+  const group=(name,items,open=false)=>{
     return '<section class="mobile-menu-folder '+(open?"is-open":"")+'">'+
       '<button type="button" class="mobile-menu-folder-head" aria-expanded="'+(open?"true":"false")+'">'+
-      '<span class="folder-icon" aria-hidden="true">'+icon+'</span><span class="folder-name">'+name+'</span><span class="folder-count">'+items.length+'</span><span class="mobile-menu-chevron">⌄</span></button>'+
-      '<div class="mobile-menu-folder-body">'+
-      items.map(x=>'<button type="button" class="mobile-menu-item" data-view="'+x[0]+'"><span class="menu-item-icon">'+x[2]+'</span><span>'+x[1]+'</span><span class="menu-item-arrow">‹</span></button>').join("")+
-      '</div></section>';
+      '<span class="folder-icon" aria-hidden="true"></span><span class="folder-name">'+name+'</span><span class="folder-count">'+items.length+'</span><span class="mobile-menu-chevron">⌄</span></button>'+
+      '<div class="mobile-menu-folder-body"><div class="mobile-menu-folder-items">'+
+      items.map(x=>'<button type="button" class="mobile-menu-item" data-view="'+x[0]+'"><span class="menu-item-icon"></span><span>'+x[1]+'</span><span class="menu-item-arrow">‹</span></button>').join("")+
+      '</div></div></section>';
   };
   let html='';
-  html+='<button type="button" class="mobile-menu-home" data-view="home"><span class="folder-icon">⌂</span><span>الرئيسية</span><span class="menu-item-arrow">‹</span></button>';
-  html+=group("◈","المجتمع",[["members","الأعضاء","👥"],["top","TOP","🏆"],["roles","الرتب القيادية","🎖️"],["groups","القروبات","🫂"],["reviews","الآراء","⭐"]],true);
-  html+=group("◉","التواصل",[["chat","الشات العام","💬"],["private-chat","المحادثات الخاصة","💌"],["message","رسالة خاصة","✉️"],["anonymous","الفضفضة","🤫"],["tickets","التذاكر","🎫"]]);
-  html+=group("🎮","الألعاب",[["games","صالات الألعاب","🎲"],["jokes","النكت","😂"],["stories","القصص والصوت","📖"],["game-logs","لوق الألعاب","📋"]]);
-  html+=group("◎","الحساب",[["profile","بروفايلي","👤"],["account","حسابي","⚙️"],["apply","التقديم","📝"]]);
-  if(isAdmin) html+=group("◆","الإدارة",[["admin","لوحة الإدارة","🛡️"]]);
-  if(isOwner) html+=group("♛","الأونر",[["owner","مركز الأونر","👑"],["broadcast","برودكاست السيرفر","📢"]]);
-  if(!mldUser) html+='<button type="button" class="mobile-menu-auth" data-view="login"><span>🔐</span><span>تسجيل الدخول</span><span class="menu-item-arrow">‹</span></button>';
-  else html+='<button type="button" class="mobile-menu-auth mobile-menu-logout" data-view="logout"><span>🚪</span><span>تسجيل الخروج</span><span class="menu-item-arrow">‹</span></button>';
-  menu.innerHTML=html+'<a id="invite-mobile" class="invite mobile-menu-invite" target="_blank"><span>🔗</span> انضم للسيرفر</a>';
+  html+='<button type="button" class="mobile-menu-home" data-view="home"><span class="folder-icon"></span><span>الرئيسية</span><span class="menu-item-arrow">‹</span></button>';
+  html+=group("المجتمع",[["members","الأعضاء"],["top","TOP"],["roles","الرتب القيادية"],["groups","القروبات"],["reviews","الآراء"]],true);
+  html+=group("التواصل",[["chat","الشات العام"],["private-chat","المحادثات الخاصة"],["message","رسالة خاصة"],["anonymous","الفضفضة"],["tickets","التذاكر"]]);
+  html+=group("الألعاب",[["games","صالات الألعاب"],["jokes","النكت"],["stories","القصص والصوت"],["game-logs","لوق الألعاب"]]);
+  html+=group("الحساب",[["profile","بروفايلي"],["account","حسابي"],["apply","التقديم"]]);
+  if(isAdmin) html+=group("الإدارة",[["admin","لوحة الإدارة"]]);
+  if(isOwner) html+=group("الأونر",[["owner","مركز الأونر"],["broadcast","برودكاست السيرفر"]]);
+  html+=mldUser?'<button type="button" class="mobile-menu-auth mobile-menu-logout" data-view="logout"><span class="folder-icon"></span><span>تسجيل الخروج</span><span class="menu-item-arrow">‹</span></button>':'<button type="button" class="mobile-menu-auth" data-view="login"><span class="folder-icon"></span><span>تسجيل الدخول</span><span class="menu-item-arrow">‹</span></button>';
+  menu.innerHTML=html+'<a id="invite-mobile" class="invite mobile-menu-invite" target="_blank">انضم للسيرفر</a>';
   menu.querySelectorAll(".mobile-menu-folder-head").forEach(b=>b.onclick=(e)=>{
-    e.preventDefault(); e.stopPropagation();
-    const folder=b.closest(".mobile-menu-folder"); if(!folder)return;
-    const open=folder.classList.toggle("is-open");
-    b.setAttribute("aria-expanded",open?"true":"false");
+    e.preventDefault();e.stopPropagation();
+    const folder=b.closest(".mobile-menu-folder");if(!folder)return;
+    const open=folder.classList.toggle("is-open");b.setAttribute("aria-expanded",open?"true":"false");
   });
 }
-
 async function jokesView(){
  searchWrap.style.display="none";title.textContent="😂 النكت";subtitle.textContent="نكت خفيفة بلهجة سعودية ونكت من أعضاء المجتمع.";content.className="feature-grid";
  content.innerHTML="<article class='feature-card joke-spotlight'><div class='feature-icon'>😂</div><span class='eyebrow'>MLD SMART JOKES</span><blockquote id='joke-main' class='joke-main'>جاري تجهيز النكتة...</blockquote><div class='joke-actions'><button class='primary' id='joke-next'>🔄 غيرها</button><button class='games-secondary' id='joke-add'>✍️ أضف نكتتك</button></div></article><section class='feature-card'><h3>نكت المجتمع</h3><div id='joke-list' class='joke-list'></div></section>";
