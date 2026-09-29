@@ -599,7 +599,7 @@ app.post("/api/games/sessions/:code/end",writeLimiter,async(req,res)=>{
   }catch(e){res.status(500).json({error:"تعذر إنهاء الجلسة"})}
 });
 
-let siteStatsCache={data:null,at:0};let siteStatsCache={data:null,at:0};
+let siteStatsCache={data:null,at:0};siteStatsCache={data:null,at:0};
 app.get("/api/site/stats",async(req,res)=>{
   try{
     if(siteStatsCache.data&&Date.now()-siteStatsCache.at<1000)return res.json({...siteStatsCache.data,cached:true});
