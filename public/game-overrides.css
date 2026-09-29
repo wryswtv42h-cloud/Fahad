@@ -306,3 +306,25 @@ body.mld-game-fullscreen .game-fullscreen-fab{z-index:2147483647!important}
 .games-catalog-item.disabled{opacity:.45;cursor:not-allowed}
 @media(max-width:700px){.games-catalog-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.games-catalog-box{padding:16px;border-radius:22px}}
 @media(max-width:440px){.games-catalog-grid{grid-template-columns:1fr}}
+
+/* MLD GAME THEME RESTORE — keep the game room dark and readable */
+.mld-game-stage,.mld-game-frame-wrap{background:#07101d!important;color:#f7fbff!important}
+.mld-game-stage-head{background:linear-gradient(135deg,#0b1729,#17294a)!important;color:#f7fbff!important;border-bottom:1px solid #315b91!important}
+.mld-game-stage-head span{color:#62e8ff!important;opacity:.9!important}
+.mld-game-stage-actions button{background:linear-gradient(135deg,#172b49,#243d68)!important;color:#f7fbff!important;border:1px solid #41658f!important}
+.games-create-card,.games-sessions-card,.games-catalog-card,.games-hero-card{background:linear-gradient(145deg,#0c1728,#101f38)!important;color:#f7fbff!important;border-color:#315b91!important}
+.games-create-card h3,.games-sessions-card h3,.games-catalog-card h3,.games-hero-card h2,.games-create-card p,.games-sessions-card p,.games-catalog-card p{color:#f7fbff!important}
+.games-create-controls select,.games-create-controls input,.games-picker select{background:#07101d!important;color:#f7fbff!important;border-color:#41658f!important}
+.game-choice,.games-catalog-item{background:linear-gradient(145deg,#142640,#0b1729)!important;color:#f7fbff!important;border-color:#355b8c!important}
+.game-choice:hover,.games-catalog-item:hover{background:linear-gradient(145deg,#1b3557,#13294a)!important;border-color:#62e8ff!important}
+.game-choice.selected{border-color:#62e8ff!important;box-shadow:0 0 0 2px #62e8ff22!important}
+.games-primary{background:linear-gradient(135deg,#62e8ff,#bda7ff)!important;color:#06101b!important}
+.games-secondary,.ghost{background:#142640!important;color:#f7fbff!important;border:1px solid #41658f!important}
+.game-session-row{background:#0b1729!important;color:#f7fbff!important;border-color:#355b8c!important}
+.game-session-row code{background:#172b49!important;color:#bfefff!important;border-color:#41658f!important}
+.game-session-info b,.game-session-info small,.games-count,.games-status,.games-empty,.games-catalog-item b,.games-catalog-item small{color:#dbe9fa!important}
+.games-catalog-modal{background:#020711dd!important}
+.games-catalog-box,.games-name-box{background:#0b1729!important;color:#f7fbff!important;border-color:#41658f!important}
+.games-name-box input{background:#07101d!important;color:#f7fbff!important;border-color:#41658f!important}
+.mld-game-frame-wrap iframe{background:#07101d!important}
+@media(max-width:700px){.games-create-card,.games-sessions-card,.games-catalog-card,.games-hero-card{background:linear-gradient(145deg,#0b1729,#101f38)!important}}
