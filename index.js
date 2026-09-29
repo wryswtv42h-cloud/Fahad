@@ -56,13 +56,15 @@ app.use((err,req,res,next)=>{
 });
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  max: Number(process.env.DB_POOL_MAX || 20),
+  max: Number(process.env.DB_POOL_MAX || 8),
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
   statement_timeout: 15000,
   query_timeout: 20000,
   keepAlive: true
 });
+// Prevent transient PostgreSQL connection failures from becoming uncaught process errors under burst load.
+pool.on("error",(error)=>{ console.error("PostgreSQL pool error:", error.message); });
 const sessionSecret = process.env.SESSION_SECRET;
 if (!sessionSecret || (process.env.NODE_ENV === "production" && sessionSecret === "mld-session-secret")) {
   console.error("A strong SESSION_SECRET is required");
