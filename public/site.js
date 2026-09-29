@@ -2,7 +2,7 @@
 let mldUser=null;
 async function mldMe(){try{const r=await fetch('/api/auth/me',{cache:'no-store',credentials:'same-origin'});const d=await r.json();mldUser=d?.authenticated?d.user:null;return mldUser}catch{mldUser=null;return null}}
 
-const $=s=>document.querySelector(s),content=$("#content"),status=$("#status"),search=$("#search"),searchWrap=$("#search-wrap"),modal=$("#modal"),box=$("#modal-content"),title=$("#view-title"),subtitle=$("#subtitle"),mobile=$("#mobile-menu"),menuButton=$("#menu");let view="members",all=[],roles=[],timer,refreshTimer,selected=null;const fallback="/logo.svg",esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])),num=v=>new Intl.NumberFormat("ar-SA").format(Number(v)||0),avatar=m=>m?.avatar||fallback;
+const $=s=>document.querySelector(s),content=$("#content"),status=$("#status"),search=$("#search"),searchWrap=$("#search-wrap"),modal=$("#modal"),box=$("#modal-content"),title=$("#view-title"),subtitle=$("#subtitle"),mobile=$("#mobile-menu"),menuButton=$("#menu");let view="members",all=[],roles=[],timer,refreshTimer,selected=null;const mldTimers={};function mldClearTimer(name){if(mldTimers[name]){clearInterval(mldTimers[name]);clearTimeout(mldTimers[name]);mldTimers[name]=null}}function mldEvery(name,fn,ms){mldClearTimer(name);mldTimers[name]=setInterval(fn,ms);return mldTimers[name]}const fallback="/logo.svg",esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])),num=v=>new Intl.NumberFormat("ar-SA").format(Number(v)||0),avatar=m=>m?.avatar||fallback;
 function setStatus(x){status.textContent=x}function openModal(){modal.classList.remove("hidden");document.body.classList.add("modal-open")}function closeModal(){modal.classList.add("hidden");document.body.classList.remove("modal-open")}function bind(){document.querySelectorAll("[data-member]").forEach(x=>x.onclick=()=>openMember(x.dataset.member));document.querySelectorAll("[data-role]").forEach(x=>x.onclick=()=>openRole(x.dataset.role))}
 function card(m){return `<article class="card" data-member="${esc(m.id)}"><img src="${esc(avatar(m))}" onerror="this.src='${fallback}'"><div><h3>${esc(m.name)}</h3><p>@${esc(m.username||"")}</p><div class="roles">${(m.importantRoles||[]).map(r=>`<span class="role">${esc(r.name)}</span>`).join("")||`<span class="member-tag">عضو</span>`}</div></div></div><button class="member-fav" type="button" aria-label="إضافة للمفضلة" data-fav="${esc(m.id)}"></button><b>↗</b></article>`}function bindMemberFavorites(){document.querySelectorAll("[data-fav]").forEach(b=>{const id=b.dataset.fav;const key="mld-favorites";let fav=JSON.parse(localStorage.getItem(key)||"[]");const sync=()=>{fav=JSON.parse(localStorage.getItem(key)||"[]");b.textContent=fav.includes(id)?"":"";b.classList.toggle("active",fav.includes(id))};b.onclick=e=>{e.preventDefault();e.stopPropagation();fav=fav.includes(id)?fav.filter(x=>x!==id):[...fav,id];localStorage.setItem(key,JSON.stringify(fav));sync();window.mldToast?.(fav.includes(id)?"تمت الإضافة للمفضلة":"تمت الإزالة من المفضلة")};sync()})}
 function renderMembers(list){content.className="grid";const rows=(list||[]);content.innerHTML=rows.length?rows.map(card).join(""):`<div class="empty"><h3>لا توجد نتائج</h3><p>جرّب البحث باسم العضو.</p></div>`;bind();bindMemberFavorites()}
@@ -60,7 +60,7 @@ async function renderGames(){
  };
  document.querySelectorAll("[data-game-choice]").forEach(b=>b.onclick=()=>{selected=b.dataset.game;document.querySelectorAll("[data-game-choice]").forEach(x=>x.classList.toggle("selected",x.dataset.game===selected))});
  $("#game-create").onclick=async()=>{await mldMe();if(!mldUser)return authView();const g=map[selected],max=Math.min(g.max,Number($("#game-max").value)||g.max);try{const d=await gameApi("/api/games/sessions",{method:"POST",body:JSON.stringify({gameId:g.id,gameName:g.name,maxPlayers:max,...gameIdentityBody()})});$("#game-create-status").textContent="تم إنشاء الجلسة "+d.session.code;sessions=[d.session,...sessions];renderSessions();openNativeGameSession(d.session,"player")}catch(e){$("#game-create-status").textContent=e.message}};
- $("#games-refresh").onclick=async()=>{await load();renderSessions()};renderSessions();setStatus("صالات الألعاب جاهزة");clearInterval(window.mldGamesPoll);window.mldGamesPoll=setInterval(async()=>{if(!document.hidden && view==="games"){await load();renderSessions()}},1500);
+ $("#games-refresh").onclick=async()=>{await load();renderSessions()};renderSessions();setStatus("صالات الألعاب جاهزة");mldEvery("games",async()=>{if(!document.hidden && view==="games"){await load();renderSessions()}},1000);
 }
 async function ownerGameLogs(){
   await mldMe(); if(!mldUser||mldUser.role!=="owner")return authView();
@@ -247,7 +247,7 @@ Promise.race([mldMe(),new Promise(r=>setTimeout(r,700))]).catch(()=>null).then((
 
 
 /* MLD 2026 hardening: restored home route, real-time chat UI, game bridge. */
-async function homeView(){
+async function homeView(){mldClearTimer("homeReviews");mldClearTimer("homeStats");
   await mldMe();
   title.textContent="الرئيسية";
   subtitle.textContent="لوحة ملاذ الحية — وتقييمات المجتمع تتحدث تلقائيًا.";
