@@ -14,49 +14,40 @@
     function statusText(s){return s==="online"?"● يعمل":s==="starting"?"◌ جاري التشغيل":s==="error"?"⚠ خطأ":"○ متوقف";}
     function load(){
       Promise.all([api("/api/platform/bot-catalog"),api("/api/platform/discord/status")]).then(function(x){
-        var d=x[0], ds=x[1], linked=ds.linked;
-        var cards=d.slots.map(function(s){
-          var mine=d.bots.find(function(b){return b.slot===s.id;});
-          return "<article class='game-card bot-manager-card'><div class='game-icon'>🤖</div><h3>"+esc(s.name)+"</h3><p>"+esc(s.description)+"</p>"+
-            (mine ? "<span class='platform-chip "+(mine.status==="online"?"online":"")+"'>"+statusText(mine.status)+"</span><p class='small'>"+esc(mine.guildName||"السيرفر غير محدد")+" · "+esc(mine.botUsername||"لم يتم التعرف على البوت")+"</p><div class='bot-actions'><button class='primary' data-openbot='"+mine.id+"'>لوحة الأوامر</button><button class='platform-link' data-stopbot='"+mine.id+"'>"+(mine.status==="online"?"إيقاف":"تشغيل")+"</button><button class='platform-link danger-link' data-delbot='"+mine.id+"'>حذف الربط</button></div>"
-            : "<button class='primary' data-addslot='"+s.id+"'>إضافة هذا البوت</button>")+"</article>";
+        var d=x[0],ds=x[1],linked=ds.linked;
+        var cards=(d.bots||[]).map(function(b){
+          return "<article class='game-card bot-manager-card'><div class='game-icon'>🤖</div><h3>"+esc(b.name)+"</h3><p>"+esc(b.botUsername||"بوت Discord")+"</p><span class='platform-chip "+(b.status==="online"?"online":"")+"'>"+statusText(b.status)+"</span><p class='small'>"+esc(b.guildName||"السيرفر غير محدد")+"</p>"+(b.lastError?"<p class='small danger-link'>"+esc(b.lastError)+"</p>":"")+"<div class='bot-actions'><button class='primary' data-openbot='"+b.id+"'>لوحة التحكم</button><button class='platform-link' data-stopbot='"+b.id+"'>"+(b.status==="online"?"إيقاف":"تشغيل")+"</button><button class='platform-link danger-link' data-delbot='"+b.id+"'>حذف البوت</button></div></article>";
         }).join("");
-        var head="<div class='platform-head'><div><span class='eyebrow'>MLD BOT HOSTING</span><h2>البوتات</h2><p class='muted'>اربط Discord، اختر السيرفر، ثم ضع توكن البوت. التوكن لا يظهر بعد الحفظ.</p></div>"+
-          (linked?"<span class='platform-chip online'>Discord مربوط</span>":"<button class='primary' id='link-discord'>ربط حساب Discord</button>")+"</div>";
-        var note=!linked?"<div class='account-card bot-note'><b>الخطوة الأولى</b><p>اربط حساب Discord حتى تظهر السيرفرات التي تملك عليها صلاحية الإدارة.</p></div>":"<div class='account-card bot-note'><b>"+esc(ds.username||"Discord")+"</b><p>السيرفرات المتاحة: "+ds.guilds.length+" · يمكنك اختيار السيرفر عند إضافة كل بوت.</p></div>";
-        show("البوتات",head+note+"<div class='game-grid'>"+cards+"</div><div id='bot-workspace'></div>");
-        var link=$("#link-discord");
-        if(link)link.onclick=function(){api("/api/platform/discord/oauth/start").then(function(v){location.href=v.url}).catch(function(e){alert(e.message)})};
-        document.querySelectorAll("[data-addslot]").forEach(function(b){b.onclick=function(){addBot(b.dataset.addslot,ds)}});
-        document.querySelectorAll("[data-stopbot]").forEach(function(b){b.onclick=function(){
-          var mine=d.bots.find(function(z){return z.id===b.dataset.stopbot;}); var url="/api/platform/my-bots/"+b.dataset.stopbot+(mine&&mine.status==="online"?"/stop":"/start");
-          api(url,{method:"POST"}).then(load).catch(function(e){alert(e.message)});
-        }});
-        document.querySelectorAll("[data-delbot]").forEach(function(b){b.onclick=function(){if(confirm("حذف البوت من لوحة المنصة؟"))api("/api/platform/my-bots/"+b.dataset.delbot,{method:"DELETE"}).then(load).catch(function(e){alert(e.message)})}});
+        if(!cards)cards="<div class='empty'>ما عندك بوتات مضافة. اضغط «+ إضافة بوت» لبدء الاستضافة.</div>";
+        var head="<div class='platform-head'><div><span class='eyebrow'>MLD BOT HOSTING</span><h2>بوتاتي</h2><p class='muted'>أضف بوتات Discord الخاصة بك، اختر السيرفر، وأدخل التوكن. كل بوت مستقل عن الآخر.</p></div>"+(linked?"<span class='platform-chip online'>Discord مربوط</span>":"<button class='primary' id='link-discord'>ربط حساب Discord</button>")+"</div>";
+        var note=!linked?"<div class='account-card bot-note'><b>اربط Discord أولًا</b><p>نحتاج حساب Discord لمعرفة السيرفرات التي تملك صلاحية إدارتها.</p></div>":"<div class='account-card bot-note'><div><b>"+esc(ds.username||"Discord")+"</b><p class='muted'>السيرفرات المتاحة: "+ds.guilds.length+"</p></div><button class='primary' id='add-bot'>+ إضافة بوت</button></div>";
+        show("بوتاتي",head+note+"<div class='game-grid'>"+cards+"</div><div id='bot-workspace'></div>");
+        var link=$("#link-discord");if(link)link.onclick=function(){api("/api/platform/discord/oauth/start").then(function(v){location.href=v.url}).catch(function(e){alert(e.message)})};
+        var add=$("#add-bot");if(add)add.onclick=function(){addBot(ds)};
+        document.querySelectorAll("[data-stopbot]").forEach(function(b){b.onclick=function(){var mine=d.bots.find(function(z){return z.id===b.dataset.stopbot;});var url="/api/platform/my-bots/"+b.dataset.stopbot+(mine&&mine.status==="online"?"/stop":"/start");api(url,{method:"POST"}).then(load).catch(function(e){alert(e.message)})}});
+        document.querySelectorAll("[data-delbot]").forEach(function(b){b.onclick=function(){if(confirm("حذف البوت وإيقاف استضافته؟"))api("/api/platform/my-bots/"+b.dataset.delbot,{method:"DELETE"}).then(load).catch(function(e){alert(e.message)})}});
         document.querySelectorAll("[data-openbot]").forEach(function(b){b.onclick=function(){commandPanel(b.dataset.openbot)}});
       }).catch(function(e){alert(e.message)});
     }
-    function addBot(slot,ds){
+    function addBot(ds){
       if(!ds.linked){alert("اربط حساب Discord أولًا");return;}
       var options=ds.guilds.map(function(g){return "<option value='"+esc(g.id)+"'>"+esc(g.name)+"</option>"}).join("");
-      show("إضافة بوت","<div class='platform-head'><div><span class='eyebrow'>NEW BOT</span><h2>تشغيل البوت</h2><p class='muted'>اختر السيرفر ثم أدخل توكن البوت.</p></div><button class='platform-link' id='back-bots'>رجوع</button></div>"+
-        "<div class='account-card bot-form'><label>السيرفر</label><select id='bot-guild' class='full'>"+options+"</select><label>توكن البوت</label><input id='bot-token' class='full' type='password' autocomplete='new-password' placeholder='ألصق توكن البوت هنا'><small class='muted'>لن نعرض التوكن في الواجهة بعد الحفظ، ويُحفظ مشفرًا على الخادم.</small><button class='primary full-btn' id='save-bot'>حفظ وتشغيل البوت</button></div>");
+      show("إضافة بوت","<div class='platform-head'><div><span class='eyebrow'>NEW DISCORD BOT</span><h2>إضافة بوتك</h2><p class='muted'>اختر السيرفر، ثم ضع بيانات بوت Discord الخاص بك.</p></div><button class='platform-link' id='back-bots'>رجوع</button></div><div class='account-card bot-form'><label>اسم البوت داخل لوحة MLD (اختياري)</label><input id='bot-name' class='full' maxlength='80' placeholder='مثال: بوت الحماية'><label>السيرفر</label><select id='bot-guild' class='full'>"+options+"</select><label>Prefix الأوامر</label><input id='bot-prefix' class='full' maxlength='5' value='!' placeholder='!'><label>توكن البوت</label><input id='bot-token' class='full' type='password' autocomplete='new-password' placeholder='ألصق توكن البوت هنا'><small class='muted'>التوكن لا يظهر في الواجهة بعد الحفظ ويُحفظ مشفرًا. يجب أن يكون البوت مضافًا مسبقًا إلى السيرفر المحدد.</small><button class='primary full-btn' id='save-bot'>تحقق وتشغيل البوت</button></div>");
       $("#back-bots").onclick=bots;
       $("#save-bot").onclick=function(){
-        var btn=$("#save-bot");btn.disabled=true;btn.textContent="جاري تشغيل البوت...";
-        api("/api/platform/my-bots",{method:"POST",body:JSON.stringify({slot:slot,guildId:$("#bot-guild").value,token:$("#bot-token").value})}).then(function(v){alert(v.bot.status==="online"?"تم تشغيل البوت داخل السيرفر.":"تم حفظ البوت لكن يحتاج مراجعة الحالة.");commandPanel(v.bot.id)}).catch(function(e){alert(e.message);btn.disabled=false;btn.textContent="حفظ وتشغيل البوت"});
+        var btn=$("#save-bot");btn.disabled=true;btn.textContent="جاري التحقق والتشغيل...";
+        api("/api/platform/my-bots",{method:"POST",body:JSON.stringify({name:$("#bot-name").value,guildId:$("#bot-guild").value,prefix:$("#bot-prefix").value,token:$("#bot-token").value})}).then(function(v){alert("تمت إضافة البوت وتشغيله.");commandPanel(v.bot.id)}).catch(function(e){alert(e.message);btn.disabled=false;btn.textContent="تحقق وتشغيل البوت"});
       };
     }
     function commandPanel(id){
-      api("/api/platform/my-bots/"+id+"/channels").then(function(ch){
-        var opts=ch.channels.map(function(x){return "<option value='"+esc(x.id)+"'>#"+esc(x.name)+"</option>"}).join("");
-        show("لوحة أوامر البوت","<div class='platform-head'><div><span class='eyebrow'>BOT COMMAND CONSOLE</span><h2>لوحة الأوامر</h2><p class='muted'>الأوامر تُرسل من البوت نفسه إلى القناة التي تختارها.</p></div><button class='platform-link' id='back-bots'>رجوع للبوتات</button></div>"+
-          "<div class='account-card'><label>القناة</label><select id='bot-channel' class='full'>"+opts+"</select><div class='quick-commands'><button class='primary' data-cmd='!ping'>🏓 Ping</button><button class='primary' data-cmd='!help'>📖 Help</button><button class='primary' data-cmd='!server'>🌐 Server</button><button class='primary' data-cmd='!members'>👥 Members</button><button class='primary' data-cmd='!games'>🎮 Games</button></div><div class='bot-command-row'><input id='bot-command' class='full' placeholder='مثال: !ping أو !help'><button class='primary' id='send-command'>تنفيذ</button></div><button class='platform-link' id='test-bot'>اختبار اتصال البوت</button><div id='bot-test-result' class='muted'></div></div>");
+      Promise.all([api("/api/platform/my-bots/"+id+"/channels"),api("/api/platform/my-bots").then(function(d){return d.bots.find(function(b){return b.id===id})})]).then(function(x){
+        var ch=x[0],bot=x[1],opts=ch.channels.map(function(a){return "<option value='"+esc(a.id)+"'>#"+esc(a.name)+"</option>"}).join("");
+        show("لوحة تحكم البوت","<div class='platform-head'><div><span class='eyebrow'>BOT CONTROL PANEL</span><h2>"+esc(bot?bot.name:"البوت")+"</h2><p class='muted'>"+esc(bot?bot.botUsername:"")+" · "+esc(bot?bot.guildName:"")+"</p></div><button class='platform-link' id='back-bots'>رجوع للبوتات</button></div><div class='account-card'><div class='bot-actions'><button class='primary' id='test-bot'>اختبار الاتصال</button><button class='platform-link' id='restart-bot'>إعادة تشغيل</button><button class='platform-link danger-link' id='delete-bot'>حذف البوت</button></div><p id='bot-test-result' class='muted'></p><label>القناة</label><select id='bot-channel' class='full'>"+opts+"</select><label>الأمر</label><div class='bot-command-row'><input id='bot-command' class='full' placeholder='مثال: !ping أو أي أمر يدعمه بوتك'><button class='primary' id='send-command'>إرسال</button></div><p class='muted small'>هذه اللوحة ترسل الأمر في Discord؛ تنفيذ الأمر نفسه يعتمد على نظام الأوامر الموجود داخل بوتك.</p></div>");
         $("#back-bots").onclick=bots;
-        function send(command){api("/api/platform/my-bots/"+id+"/command",{method:"POST",body:JSON.stringify({channelId:$("#bot-channel").value,command:command})}).then(function(){alert("تم إرسال الأمر من البوت.")}).catch(function(e){alert(e.message)})}
-        document.querySelectorAll("[data-cmd]").forEach(function(b){b.onclick=function(){send(b.dataset.cmd)}});
-        $("#send-command").onclick=function(){send($("#bot-command").value)};
-        $("#test-bot").onclick=function(){api("/api/platform/my-bots/"+id+"/test",{method:"POST"}).then(function(v){$("#bot-test-result").textContent="متصل · "+v.bot.tag+" · Ping "+v.ping+"ms · "+v.guild.name}).catch(function(e){$("#bot-test-result").textContent=e.message})};
+        $("#test-bot").onclick=function(){api("/api/platform/my-bots/"+id+"/test",{method:"POST"}).then(function(v){$("#bot-test-result").textContent="🟢 متصل · "+v.bot.tag+" · Ping "+v.ping+"ms · "+v.guild.name}).catch(function(e){$("#bot-test-result").textContent="🔴 "+e.message})};
+        $("#restart-bot").onclick=function(){api("/api/platform/my-bots/"+id+"/stop",{method:"POST"}).then(function(){return api("/api/platform/my-bots/"+id+"/start",{method:"POST"})}).then(commandPanel).catch(function(e){alert(e.message)})};
+        $("#delete-bot").onclick=function(){if(confirm("حذف البوت نهائيًا؟"))api("/api/platform/my-bots/"+id,{method:"DELETE"}).then(bots).catch(function(e){alert(e.message)})};
+        $("#send-command").onclick=function(){var command=$("#bot-command").value.trim();if(!command)return alert("اكتب الأمر أولًا");api("/api/platform/my-bots/"+id+"/command",{method:"POST",body:JSON.stringify({channelId:$("#bot-channel").value,command:command})}).then(function(){alert("تم إرسال الأمر إلى Discord.")}).catch(function(e){alert(e.message)})};
       }).catch(function(e){alert(e.message)});
     }
     load();
