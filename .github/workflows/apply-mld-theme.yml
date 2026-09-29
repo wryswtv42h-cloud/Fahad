@@ -1,0 +1,32 @@
+name: Apply MLD visual theme
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  theme:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply theme
+        shell: bash
+        run: |
+          set -e
+          if ! grep -q 'mld-theme-2026.css' public/index.html; then
+            python3 - <<'PY'
+from pathlib import Path
+p=Path('public/index.html')
+s=p.read_text()
+needle='<link rel="stylesheet" href="/game-overrides.css?v=20260929-ready7">'
+s=s.replace(needle, needle+'\n<link rel="stylesheet" href="/mld-theme-2026.css?v=20260929-1">', 1)
+p.write_text(s)
+PY
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/index.html
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "Enable refreshed MLD color theme"
+          git push
