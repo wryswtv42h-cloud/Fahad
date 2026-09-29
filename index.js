@@ -599,7 +599,24 @@ app.post("/api/games/sessions/:code/end",writeLimiter,async(req,res)=>{
   }catch(e){res.status(500).json({error:"تعذر إنهاء الجلسة"})}
 });
 
-let siteStatsCache={data:null,at:0};app.get("/api/site/stats",async(req,res)=>{try{if(siteStatsCache.data&&Date.now()-siteStatsCache.at<1000)return res.json({...siteStatsCache.data,cached:true});const q=await pool.query("SELECT visits FROM site_stats WHERE id=1");const g=await getGuild();const members=await getAllMembers(g);const presenceCount=[...(g.presences?.cache?.values?.()||[])].filter(p=>p.status&&p.status!=="offline"&&!g.members.cache.get(p.userId)?.user.bot).length;const online=presenceCount||members.filter(m=>!m.user.bot&&m.presence?.status&&m.presence?.status!=="offline").length;const data={visits:Number(q.rows[0]?.visits||0),online,memberCount:Number(g.memberCount||members.length||0),updatedAt:new Date().toISOString()};siteStatsCache={data,at:Date.now()};res.set("Cache-Control","no-store");res.json({...data,cached:false});}catch(e){console.error("Site stats:",e);res.status(503).json({error:"stats_unavailable"});}});}catch(e){console.error("Site stats:",e);res.status(503).json({error:"stats_unavailable"});}});
+let siteStatsCache={data:null,at:0};let siteStatsCache={data:null,at:0};
+app.get("/api/site/stats",async(req,res)=>{
+  try{
+    if(siteStatsCache.data&&Date.now()-siteStatsCache.at<1000)return res.json({...siteStatsCache.data,cached:true});
+    const q=await pool.query("SELECT visits FROM site_stats WHERE id=1");
+    const g=await getGuild();
+    const members=await getAllMembers(g);
+    const presenceCount=[...(g.presences?.cache?.values?.()||[])].filter(p=>p.status&&p.status!=="offline"&&!g.members.cache.get(p.userId)?.user.bot).length;
+    const online=presenceCount||members.filter(m=>!m.user.bot&&m.presence?.status&&m.presence?.status!=="offline").length;
+    const data={visits:Number(q.rows[0]?.visits||0),online,memberCount:Number(g.memberCount||members.length||0),updatedAt:new Date().toISOString()};
+    siteStatsCache={data,at:Date.now()};
+    res.set("Cache-Control","no-store");
+    res.json({...data,cached:false});
+  }catch(e){
+    console.error("Site stats:",e);
+    res.status(503).json({error:"stats_unavailable"});
+  }
+});
 app.post("/api/site/visit",async(req,res)=>{try{await pool.query("UPDATE site_stats SET visits=visits+1,updated_at=NOW() WHERE id=1");res.json({ok:true});}catch(e){res.status(500).json({error:"stats"});}});
 app.get("/api/site/settings",async(req,res)=>{try{const q=await pool.query("SELECT key,value FROM site_settings");res.json({settings:Object.fromEntries(q.rows.map(x=>[x.key,x.value]))});}catch(e){res.status(500).json({settings:{}});}});
 app.post("/api/owner/settings",requireOwner,async(req,res)=>{try{const allowed=["siteName","heroTitle","heroSubtitle"];for(const key of allowed){const value=String(req.body?.[key]??"").trim();if(value.length>500)return res.status(400).json({error:"إعداد طويل جدًا"});await pool.query("INSERT INTO site_settings(key,value) VALUES($1,$2) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value",[key,value]);}await audit(req.session.user,"site_settings_update","تعديل إعدادات الموقع");res.json({ok:true});}catch(e){console.error("Site settings:",e);res.status(500).json({error:"تعذر حفظ الإعدادات"});}});
