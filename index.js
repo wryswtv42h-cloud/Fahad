@@ -1,337 +1,431 @@
 "use strict";
 require("dotenv").config();
-const path=require("path");
-const express=require("express");
-const session=require("express-session");
-const pgSession=require("connect-pg-simple")(session);
-const bcrypt=require("bcryptjs");
-const helmet=require("helmet");
-const compression=require("compression");
-const {Client,GatewayIntentBits,PermissionsBitField,ActivityType,ChannelType}=require("discord.js");
-const {joinVoiceChannel,createAudioPlayer,createAudioResource,AudioPlayerStatus,NoSubscriberBehavior,StreamType}=require("@discordjs/voice");
-const tts=require("google-tts-api");
-const https=require("https");
-const crypto=require("crypto");
-const {Pool}=require("pg");
-const games=require("./game-engines");
 
-const app=express();
-const port=Number(process.env.PORT||3000);
-const pool=new Pool({connectionString:process.env.DATABASE_URL,max:10,idleTimeoutMillis:30000,connectionTimeoutMillis:8000,keepAlive:true});
-pool.on("error",e=>console.error("postgres",e.message));
-const token=process.env.DISCORD_BOT_TOKEN,guildId=process.env.DISCORD_GUILD_ID;
-if(!token||!guildId){console.error("Missing Discord configuration");process.exit(1)}
-const client=new Client({intents:[GatewayIntentBits.Guilds,GatewayIntentBits.GuildMembers,GatewayIntentBits.GuildPresences,GatewayIntentBits.GuildMessages,GatewayIntentBits.MessageContent]});
-app.set("trust proxy",1);app.disable("x-powered-by");
-app.use(helmet({contentSecurityPolicy:false,crossOriginEmbedderPolicy:false}));
-app.use(compression());app.use(express.json({limit:"256kb"}));
-app.use(session({name:"mld.sid",secret:process.env.SESSION_SECRET,resave:false,saveUninitialized:false,store:new pgSession({pool,tableName:"user_sessions",createTableIfMissing:true}),cookie:{httpOnly:true,sameSite:"lax",secure:process.env.NODE_ENV==="production",maxAge:2592000000}}));
-app.use(express.static(path.join(__dirname,"public"),{etag:true,maxAge:"5m"}));
-app.get("/health",async(req,res)=>{try{await pool.query("SELECT 1");res.status(200).json({ok:true,service:"mld"})}catch(e){res.status(503).json({ok:false})}});
+const path = require("path");
+const express = require("express");
+const cors = require("cors");
+const { Client, GatewayIntentBits, EmbedBuilder } = require("discord.js");
 
-const BOT_MASTER_KEY=crypto.createHash("sha256").update(String(process.env.BOT_TOKEN_KEY||process.env.SESSION_SECRET||"change-me")).digest();
-function encryptSecret(value){const iv=crypto.randomBytes(12);const cipher=crypto.createCipheriv("aes-256-gcm",BOT_MASTER_KEY,iv);const enc=Buffer.concat([cipher.update(String(value),"utf8"),cipher.final()]);return [iv.toString("base64"),cipher.getAuthTag().toString("base64"),enc.toString("base64")].join(".")}
-function decryptSecret(value){const [iv,tag,data]=String(value||"").split(".");if(!iv||!tag||!data)throw Error("invalid_secret");const decipher=crypto.createDecipheriv("aes-256-gcm",BOT_MASTER_KEY,Buffer.from(iv,"base64"));decipher.setAuthTag(Buffer.from(tag,"base64"));return Buffer.concat([decipher.update(Buffer.from(data,"base64")),decipher.final()]).toString("utf8")}
-const managedBots=new Map();
-const roleIds=new Set(["1530712642384040027","1521187079336362024","1531109479264026706","1548732297669255259","1548732341185155103","1548732606508703744"]);
-let guildCache=null,memberCache=null,memberAt=0;
-async function guild(){if(guildCache)return guildCache;guildCache=await client.guilds.fetch(guildId);return guildCache}
-async function members(){if(memberCache&&Date.now()-memberAt<30000)return memberCache;const g=await guild();memberCache=[...(await g.members.fetch()).values()];memberAt=Date.now();return memberCache}
-function me(req){return req.session.user||null}
-function auth(req,res,next){if(!me(req))return res.status(401).json({error:"تسجيل الدخول مطلوب"});next()}
-function owner(req,res,next){const u=me(req);if(!u||!["owner","admin"].includes(u.role))return res.status(403).json({error:"ليس لديك صلاحية"});next()}
-function memberJson(m){const rs=m.roles.cache.filter(r=>r.id!==m.guild.id).sort((a,b)=>b.position-a.position).map(r=>({id:r.id,name:r.name,color:r.hexColor,position:r.position,mentionable:r.mentionable}));const lead=rs.filter(r=>roleIds.has(r.id));return{id:m.id,name:m.displayName,username:m.user.username,globalName:m.user.globalName,bot:m.user.bot,avatar:(m.user.avatarURL({extension:"png",size:256,forceStatic:true})||m.user.displayAvatarURL({extension:"png",size:256,forceStatic:true})),joinedAt:m.joinedAt,roles:rs,importantRoles:lead,rank:lead[0]?.name||rs[0]?.name||"عضو"}}
-async function init(){await pool.query(`
-CREATE TABLE IF NOT EXISTS app_users(id SERIAL PRIMARY KEY,username VARCHAR(32) UNIQUE NOT NULL,password_hash TEXT NOT NULL,discord_username VARCHAR(100) NOT NULL,discord_user_id VARCHAR(32),role VARCHAR(20) NOT NULL DEFAULT 'user',banned BOOLEAN NOT NULL DEFAULT false,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),last_login_at TIMESTAMPTZ);
-CREATE TABLE IF NOT EXISTS site_stats(id INTEGER PRIMARY KEY DEFAULT 1,visits BIGINT NOT NULL DEFAULT 0,updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
-CREATE TABLE IF NOT EXISTS site_settings(key VARCHAR(80) PRIMARY KEY,value TEXT NOT NULL DEFAULT '');
-CREATE TABLE IF NOT EXISTS game_sessions(id BIGSERIAL PRIMARY KEY,code VARCHAR(8) UNIQUE NOT NULL,game_id VARCHAR(60) NOT NULL,game_name VARCHAR(120) NOT NULL,owner_username VARCHAR(32) NOT NULL,status VARCHAR(20) NOT NULL DEFAULT 'open',max_players INTEGER NOT NULL DEFAULT 4,players INTEGER NOT NULL DEFAULT 0,spectators INTEGER NOT NULL DEFAULT 0,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),started_at TIMESTAMPTZ,ended_at TIMESTAMPTZ,players_json JSONB NOT NULL DEFAULT '[]'::jsonb,spectators_json JSONB NOT NULL DEFAULT '[]'::jsonb,state JSONB);
-CREATE TABLE IF NOT EXISTS public_chat(id BIGSERIAL PRIMARY KEY,username VARCHAR(32) NOT NULL,discord_username VARCHAR(100),body VARCHAR(2000) NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
-CREATE TABLE IF NOT EXISTS community_groups(id BIGSERIAL PRIMARY KEY,name VARCHAR(80) NOT NULL,description VARCHAR(1000) NOT NULL DEFAULT '',owner_username VARCHAR(32) NOT NULL,status VARCHAR(20) NOT NULL DEFAULT 'open',created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
-CREATE TABLE IF NOT EXISTS group_members(group_id BIGINT NOT NULL REFERENCES community_groups(id) ON DELETE CASCADE,username VARCHAR(32) NOT NULL,joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),PRIMARY KEY(group_id,username));
-CREATE TABLE IF NOT EXISTS group_join_requests(id BIGSERIAL PRIMARY KEY,group_id BIGINT NOT NULL REFERENCES community_groups(id) ON DELETE CASCADE,username VARCHAR(32) NOT NULL,status VARCHAR(20) NOT NULL DEFAULT 'pending',created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),UNIQUE(group_id,username,status));
-CREATE TABLE IF NOT EXISTS ratings(id BIGSERIAL PRIMARY KEY,username VARCHAR(32) NOT NULL,value INTEGER NOT NULL CHECK(value BETWEEN 1 AND 5),body VARCHAR(1000) NOT NULL DEFAULT '',created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
-CREATE TABLE IF NOT EXISTS jokes(id BIGSERIAL PRIMARY KEY,username VARCHAR(32) NOT NULL,body VARCHAR(500) NOT NULL,likes INTEGER NOT NULL DEFAULT 0,dislikes INTEGER NOT NULL DEFAULT 0,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
-CREATE TABLE IF NOT EXISTS joke_reactions(joke_id BIGINT NOT NULL REFERENCES jokes(id) ON DELETE CASCADE,username VARCHAR(32) NOT NULL,type VARCHAR(10) NOT NULL CHECK(type IN ('like','dislike')),PRIMARY KEY(joke_id,username));
-CREATE TABLE IF NOT EXISTS stories(id BIGSERIAL PRIMARY KEY,username VARCHAR(32),genre VARCHAR(40) NOT NULL,length VARCHAR(20) NOT NULL,body TEXT NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
-CREATE TABLE IF NOT EXISTS tickets(id BIGSERIAL PRIMARY KEY,username VARCHAR(32) NOT NULL,subject VARCHAR(160) NOT NULL,status VARCHAR(20) NOT NULL DEFAULT 'open',created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
-CREATE TABLE IF NOT EXISTS ticket_messages(id BIGSERIAL PRIMARY KEY,ticket_id BIGINT NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,username VARCHAR(32) NOT NULL,body VARCHAR(4000) NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
-CREATE TABLE IF NOT EXISTS applications(id BIGSERIAL PRIMARY KEY,username VARCHAR(32),discord_username VARCHAR(100),type VARCHAR(40) NOT NULL DEFAULT 'staff',body VARCHAR(4000) NOT NULL,status VARCHAR(20) NOT NULL DEFAULT 'pending',decision_note VARCHAR(1000),created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
-CREATE TABLE IF NOT EXISTS private_messages(id BIGSERIAL PRIMARY KEY,sender_username VARCHAR(32) NOT NULL,recipient_username VARCHAR(32) NOT NULL,body VARCHAR(4000) NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),read_at TIMESTAMPTZ);
-CREATE TABLE IF NOT EXISTS anonymous_messages(id BIGSERIAL PRIMARY KEY,recipient_username VARCHAR(32) NOT NULL,body VARCHAR(4000) NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),title VARCHAR(160) NOT NULL DEFAULT '',reveal_sender BOOLEAN NOT NULL DEFAULT false,sender_username VARCHAR(32));
-ALTER TABLE anonymous_messages ADD COLUMN IF NOT EXISTS title VARCHAR(160) NOT NULL DEFAULT '';
-ALTER TABLE anonymous_messages ADD COLUMN IF NOT EXISTS reveal_sender BOOLEAN NOT NULL DEFAULT false;
-ALTER TABLE anonymous_messages ADD COLUMN IF NOT EXISTS sender_username VARCHAR(32);
-CREATE TABLE IF NOT EXISTS bot_instances(id BIGSERIAL PRIMARY KEY,name VARCHAR(100) NOT NULL,client_id VARCHAR(32),token_cipher TEXT NOT NULL,owner_username VARCHAR(32) NOT NULL,linked_guild_id VARCHAR(32),status VARCHAR(20) NOT NULL DEFAULT 'offline',prefix VARCHAR(8) NOT NULL DEFAULT '!',presence_mode VARCHAR(20) NOT NULL DEFAULT 'watching',presence_text VARCHAR(190) NOT NULL DEFAULT 'ملاذ | الموقع',website_url VARCHAR(500) NOT NULL DEFAULT '',hide_website BOOLEAN NOT NULL DEFAULT false,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
-CREATE TABLE IF NOT EXISTS bot_guilds(id BIGSERIAL PRIMARY KEY,bot_id BIGINT NOT NULL REFERENCES bot_instances(id) ON DELETE CASCADE,guild_id VARCHAR(32) NOT NULL,guild_name VARCHAR(150) NOT NULL DEFAULT '',enabled BOOLEAN NOT NULL DEFAULT true,subscription_status VARCHAR(20) NOT NULL DEFAULT 'inactive',subscription_expires_at TIMESTAMPTZ,settings JSONB NOT NULL DEFAULT '{}'::jsonb,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),UNIQUE(bot_id,guild_id));
-CREATE TABLE IF NOT EXISTS bot_logs(id BIGSERIAL PRIMARY KEY,bot_id BIGINT REFERENCES bot_instances(id) ON DELETE SET NULL,guild_id VARCHAR(32),event_type VARCHAR(80) NOT NULL,username VARCHAR(100),details JSONB NOT NULL DEFAULT '{}'::jsonb,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
-CREATE TABLE IF NOT EXISTS bot_data(id BIGSERIAL PRIMARY KEY,bot_id BIGINT NOT NULL REFERENCES bot_instances(id) ON DELETE CASCADE,guild_id VARCHAR(32) NOT NULL,username VARCHAR(100) NOT NULL,data_type VARCHAR(60) NOT NULL,data JSONB NOT NULL DEFAULT '{}'::jsonb,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),UNIQUE(bot_id,guild_id,username,data_type));
-CREATE TABLE IF NOT EXISTS bot_commands(id BIGSERIAL PRIMARY KEY,bot_id BIGINT NOT NULL REFERENCES bot_instances(id) ON DELETE CASCADE,guild_id VARCHAR(32) NOT NULL,command VARCHAR(80) NOT NULL,enabled BOOLEAN NOT NULL DEFAULT true,aliases JSONB NOT NULL DEFAULT '[]'::jsonb,allowed_roles JSONB NOT NULL DEFAULT '[]'::jsonb,blocked_roles JSONB NOT NULL DEFAULT '[]'::jsonb,channels JSONB NOT NULL DEFAULT '[]'::jsonb,settings JSONB NOT NULL DEFAULT '{}'::jsonb,UNIQUE(bot_id,guild_id,command));
-CREATE TABLE IF NOT EXISTS bot_access(id BIGSERIAL PRIMARY KEY,bot_id BIGINT NOT NULL REFERENCES bot_instances(id) ON DELETE CASCADE,username VARCHAR(32) NOT NULL,permissions JSONB NOT NULL DEFAULT '[]'::jsonb,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),UNIQUE(bot_id,username));CREATE TABLE IF NOT EXISTS bot_command_templates(id BIGSERIAL PRIMARY KEY,bot_id BIGINT NOT NULL REFERENCES bot_instances(id) ON DELETE CASCADE,guild_id VARCHAR(32) NOT NULL,name VARCHAR(100) NOT NULL,command VARCHAR(80) NOT NULL,description VARCHAR(300) NOT NULL DEFAULT '',response_template TEXT NOT NULL DEFAULT '',enabled BOOLEAN NOT NULL DEFAULT true,settings JSONB NOT NULL DEFAULT '{}'::jsonb,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());CREATE TABLE IF NOT EXISTS bot_plugins(id BIGSERIAL PRIMARY KEY,bot_id BIGINT NOT NULL REFERENCES bot_instances(id) ON DELETE CASCADE,guild_id VARCHAR(32) NOT NULL,plugin_key VARCHAR(80) NOT NULL,enabled BOOLEAN NOT NULL DEFAULT true,config JSONB NOT NULL DEFAULT '{}'::jsonb,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),UNIQUE(bot_id,guild_id,plugin_key));CREATE TABLE IF NOT EXISTS bot_voice_settings(id BIGSERIAL PRIMARY KEY,bot_id BIGINT NOT NULL REFERENCES bot_instances(id) ON DELETE CASCADE,guild_id VARCHAR(32) NOT NULL,channel_id VARCHAR(32) NOT NULL,phrase TEXT NOT NULL DEFAULT 'مرحبًا بك في ملاذ',enabled BOOLEAN NOT NULL DEFAULT true,language VARCHAR(10) NOT NULL DEFAULT 'ar',created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),UNIQUE(bot_id,guild_id));CREATE TABLE IF NOT EXISTS bot_subscriptions(id BIGSERIAL PRIMARY KEY,bot_id BIGINT NOT NULL REFERENCES bot_instances(id) ON DELETE CASCADE,guild_id VARCHAR(32) NOT NULL,plan VARCHAR(50) NOT NULL DEFAULT 'free',status VARCHAR(20) NOT NULL DEFAULT 'inactive',starts_at TIMESTAMPTZ,ends_at TIMESTAMPTZ,granted_by VARCHAR(32),created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
-ALTER TABLE bot_instances ADD COLUMN IF NOT EXISTS linked_guild_id VARCHAR(32);
-CREATE UNIQUE INDEX IF NOT EXISTS bot_instances_client_id_uq ON bot_instances(client_id) WHERE client_id IS NOT NULL;
-ALTER TABLE app_users ADD COLUMN IF NOT EXISTS bio VARCHAR(500) NOT NULL DEFAULT '';
-ALTER TABLE app_users ADD COLUMN IF NOT EXISTS avatar_url TEXT NOT NULL DEFAULT '';
-ALTER TABLE app_users ADD COLUMN IF NOT EXISTS points INTEGER NOT NULL DEFAULT 0;
-INSERT INTO site_stats(id,visits) VALUES(1,0) ON CONFLICT DO NOTHING;
-`)}
-async function ensureOwner(){
- const username=String(process.env.OWNER_USERNAME||"admin").trim().toLowerCase();
- const password=String(process.env.OWNER_PASSWORD||"");
- if(!password)return;
- const q=await pool.query("SELECT id FROM app_users WHERE username=$1",[username]);
- if(!q.rowCount)await pool.query("INSERT INTO app_users(username,password_hash,discord_username,role) VALUES($1,$2,$3,'owner')",[username,await bcrypt.hash(password,12),username]);
- else await pool.query("UPDATE app_users SET role='owner' WHERE username=$1",[username]);
+const token = process.env.DISCORD_BOT_TOKEN;
+const guildId = process.env.DISCORD_GUILD_ID;
+const port = Number(process.env.PORT || 3000);
+
+if (!token || !guildId) {
+  console.error("Missing DISCORD_BOT_TOKEN or DISCORD_GUILD_ID");
+  process.exit(1);
 }
-function code(){return Math.random().toString(36).slice(2,8).toUpperCase()}
-function gameUser(req,body){const u=me(req);return{username:String(u?.username||body?.username||"زائر"),discordUsername:String(u?.discordUsername||body?.discordUsername||"")}}
-function pub(s){return{id:s.id,code:s.code,gameId:s.game_id,gameName:s.game_name,ownerUsername:s.owner_username,status:s.status,maxPlayers:s.max_players,players:Array.isArray(s.players_json)?s.players_json:[],spectators:Array.isArray(s.spectators_json)?s.spectators_json:[],createdAt:s.created_at,startedAt:s.started_at,endedAt:s.ended_at}}
-app.get("/health",(req,res)=>res.json({ok:true,service:"mld",botReady:client.isReady()}));
-app.get("/ready",(req,res)=>res.status(client.isReady()?200:503).json({ok:client.isReady()}));app.get("/api/public/server",async(req,res)=>{try{const g=await guild();res.json({id:g.id,name:g.name,icon:g.iconURL({extension:"png",size:256}),memberCount:g.memberCount,ownerName:g.ownerId||"",invite:process.env.DISCORD_INVITE_URL||""})}catch(e){res.status(503).json({error:"Discord غير متاح"})}});
-app.get("/api/members",async(req,res)=>{try{res.json({members:(await members()).map(memberJson)})}catch(e){res.status(503).json({error:"تعذر تحميل الأعضاء"})}});
-app.get("/api/roles",async(req,res)=>{try{const g=await guild();res.json({roles:[...g.roles.cache.values()].filter(r=>r.id!==g.id).sort((a,b)=>b.position-a.position).map(r=>({id:r.id,name:r.name,color:r.hexColor,position:r.position,membersCount:r.members.size,mentionable:r.mentionable}))})}catch(e){res.status(503).json({error:"تعذر تحميل الرتب"})}});
-app.get("/api/public/roles",async(req,res)=>{try{const g=await guild();res.json({roles:[...g.roles.cache.values()].filter(r=>r.id!==g.id).sort((a,b)=>b.position-a.position).map(r=>({id:r.id,name:r.name,color:r.hexColor,position:r.position,membersCount:r.members.size,mentionable:r.mentionable}))})}catch(e){res.status(503).json({error:"تعذر تحميل الرتب"})}});app.get("/api/top",async(req,res)=>{try{const a=(await members()).filter(m=>!m.user.bot).sort((x,y)=>{const xr=x.roles.cache.filter(r=>roleIds.has(r.id)).sort((a,b)=>b.position-a.position).first()?.position||0;const yr=y.roles.cache.filter(r=>roleIds.has(r.id)).sort((a,b)=>b.position-a.position).first()?.position||0;return yr-xr}).map(memberJson);res.json({members:a})}catch(e){res.status(503).json({error:"تعذر تحميل TOP"})}});
-app.get("/api/site/stats",async(req,res)=>{try{const s=await pool.query("SELECT visits FROM site_stats WHERE id=1");const g=await guild();const ms=await members();const online=ms.filter(m=>!m.user.bot&&m.presence&&m.presence.status&&m.presence.status!=="offline").length;res.set("Cache-Control","no-store");res.json({visits:Number(s.rows[0]?.visits||0),memberCount:g.memberCount||ms.length,online,updatedAt:new Date().toISOString()})}catch(e){res.status(503).json({error:"stats_unavailable"})}});
-app.post("/api/site/visit",async(req,res)=>{try{await pool.query("UPDATE site_stats SET visits=visits+1,updated_at=NOW() WHERE id=1");res.json({ok:true})}catch(e){res.status(500).json({error:"stats"})}});
-app.get("/api/auth/me",(req,res)=>{const u=me(req);res.json({authenticated:Boolean(u),user:u})});
-app.post("/api/auth/register",async(req,res)=>{
- try{
-  const username=String(req.body?.username||"").trim().toLowerCase();
-  const password=String(req.body?.password||"");
-  const discordUsername=String(req.body?.discordUsername||"").trim();
-  if(!/^[a-zA-Z0-9_\-\u0600-\u06ff]{3,24}$/.test(username))return res.status(400).json({error:"اسم المستخدم يجب أن يكون بين 3 و24 حرفًا"});
-  if(password.length<6)return res.status(400).json({error:"كلمة المرور يجب أن تكون 6 أحرف على الأقل"});
-  if(!discordUsername)return res.status(400).json({error:"اكتب اسم Discord"});
-  if((await pool.query("SELECT 1 FROM app_users WHERE username=$1",[username])).rowCount)return res.status(409).json({error:"اسم المستخدم مستخدم مسبقًا"});
-  let dm=null;
-  try{dm=(await members()).find(m=>m.user.username.toLowerCase()===discordUsername.toLowerCase()||m.displayName.toLowerCase()===discordUsername.toLowerCase()||String(m.user.globalName||"").toLowerCase()===discordUsername.toLowerCase())}catch{}
-  if(!dm)return res.status(400).json({error:"لم يتم العثور على اسم Discord داخل السيرفر"});
-  const hash=await bcrypt.hash(password,12);
-  const q=await pool.query("INSERT INTO app_users(username,password_hash,discord_username,discord_user_id,avatar_url) VALUES($1,$2,$3,$4,$5) RETURNING id,username,discord_username,discord_user_id,role,banned,created_at,points,bio,avatar_url",[username,hash,dm.user.username,dm.id,d(m.user.avatarURL({extension:"png",size:256,forceStatic:true})||m.user.displayAvatarURL({extension:"png",size:256,forceStatic:true}))]);
-  const r=q.rows[0];req.session.user={username:r.username,discordUsername:r.discord_username,discordUserId:r.discord_user_id,role:r.role};
-  res.status(201).json({ok:true,user:{...req.session.user,points:r.points,bio:r.bio,avatar:r.avatar_url}});
- }catch(e){console.error("register",e);res.status(500).json({error:"تعذر إنشاء الحساب"})}
+
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildVoiceStates
+  ]
 });
-app.post("/api/auth/login",async(req,res)=>{try{const username=String(req.body?.username||"").trim().toLowerCase(),password=String(req.body?.password||"");const q=await pool.query("SELECT * FROM app_users WHERE username=$1",[username]);if(!q.rowCount)return res.status(401).json({error:"بيانات الدخول غير صحيحة"});const r=q.rows[0];if(r.banned)return res.status(403).json({error:"الحساب محظور"});if(!await bcrypt.compare(password,r.password_hash))return res.status(401).json({error:"بيانات الدخول غير صحيحة"});req.session.user={username:r.username,discordUsername:r.discord_username,discordUserId:r.discord_user_id,role:r.role,points:r.points||0,bio:r.bio||"",avatar:r.avatar_url||""};await pool.query("UPDATE app_users SET last_login_at=NOW() WHERE id=$1",[r.id]);res.json({ok:true,user:req.session.user})}catch(e){res.status(500).json({error:"تعذر تسجيل الدخول"})}});
-app.post("/api/auth/logout",(req,res)=>req.session.destroy(()=>res.json({ok:true})));
-app.get("/api/chat/messages",async(req,res)=>{const q=await pool.query("SELECT id,username,discord_username,body,created_at FROM public_chat ORDER BY id DESC LIMIT 100");res.json({messages:q.rows.reverse()})});
-app.post("/api/chat/messages",auth,async(req,res)=>{const body=String(req.body?.body||"").trim();if(!body||body.length>2000)return res.status(400).json({error:"رسالة غير صالحة"});const u=me(req);const q=await pool.query("INSERT INTO public_chat(username,discord_username,body) VALUES($1,$2,$3) RETURNING *",[u.username,u.discordUsername,body]);res.json({ok:true,message:q.rows[0]})});
-const GAME_TURN_TIMEOUT_MS=Number(process.env.GAME_TURN_TIMEOUT_MS||30000);
-async function processGameTimeouts(){
-  try{
-    const q=await pool.query("SELECT * FROM game_sessions WHERE status='playing' AND state IS NOT NULL ORDER BY id LIMIT 100");
-    for(const row of q.rows){
-      const db=await pool.connect();
-      try{
-        await db.query("BEGIN");
-        const locked=await db.query("SELECT * FROM game_sessions WHERE id=$1 AND status='playing' FOR UPDATE",[row.id]);
-        if(!locked.rowCount){await db.query("ROLLBACK");continue}
-        const session=locked.rows[0],players=Array.isArray(session.players_json)?session.players_json:[],state=JSON.parse(JSON.stringify(session.state||{}));
-        const started=Number(state.turnStartedAt||0);
-        const timeout=Number(state.turnTimeoutMs||GAME_TURN_TIMEOUT_MS);
-        if(!started || Date.now()-started<timeout){await db.query("COMMIT");continue}
-        const game=String(session.game_id||"").toUpperCase();
-        let actorIndex=game==="QAWSAR"?Number(state.qawsarTurn):Number(state.turnIndex);
-        if(game==="CODENAMES"){
-          const team=state.team==="blue"?"blue":"red";
-          const wanted=team+"_"+(state.clue?"agent":"spymaster");
-          actorIndex=players.findIndex(x=>state.playerRoles?.[(x?.guestId?"g:":"u:")+String(x?.username||"").toLowerCase()]===wanted);
-          if(actorIndex<0){await db.query("COMMIT");continue}
-        }
-        const actor=players[actorIndex];
-        if(!actor){await db.query("COMMIT");continue}
-        let next=state;
-        if(game==="CODENAMES"&&!actor.bot){
-          next.team=state.team==="red"?"blue":"red";
-          next.clue=null;
-          next.guesses=0;
-        }else if(actor.bot){
-          if(game==="CODENAMES")next.turnIndex=actorIndex;
-          next=games.bot(game,next,players);
-        }else{
-          await db.query("COMMIT");
-          continue;
-        }
-        next.turnStartedAt=Date.now();
-        next.turnTimeoutMs=timeout;
-        const status=next.phase==="finished"?"ended":"playing";
-        await db.query("UPDATE game_sessions SET state=$2::jsonb,status=$3,ended_at=CASE WHEN $3='ended' THEN NOW() ELSE ended_at END WHERE id=$1",[session.id,JSON.stringify(next),status]);
-        await db.query("COMMIT");
-      }catch(e){
-        await db.query("ROLLBACK").catch(()=>{});
-        console.error("game timeout",row.id,e.message);
-      }finally{db.release()}
+
+const app = express();
+app.disable("x-powered-by");
+app.use(cors());
+app.use(express.json({ limit: "20kb" }));
+app.use(express.static(path.join(__dirname, "public")));
+
+const leadershipRoleIds = [
+  "1530712642384040027", // Owner
+  "1521187079336362024", // Co-Owner
+  "1531109479264026706", // Founder
+  "1548732297669255259", // Senior Staff
+  "1548732341185155103", // Staff
+  "1548732606508703744"  // Junior Staff
+];
+
+const leadershipRoleSet = new Set(leadershipRoleIds);
+const importantPermissionNames = new Set([
+  "Administrator",
+  "ManageGuild",
+  "ManageRoles",
+  "ManageChannels",
+  "ManageMessages",
+  "ManageWebhooks",
+  "ManageNicknames",
+  "BanMembers",
+  "KickMembers",
+  "ModerateMembers",
+  "MentionEveryone",
+  "ViewAuditLog",
+  "ManageEvents",
+  "ManageThreads",
+  "ManageEmojisAndStickers"
+]);
+
+const activity = new Map();
+const voiceSessions = new Map();
+const sendHits = new Map();
+
+let guildCache = null;
+let guildCacheAt = 0;
+let guildFetchPromise = null;
+let memberSnapshot = null;
+let memberSnapshotAt = 0;
+let memberFetchPromise = null;
+
+const MEMBER_CACHE_TTL = 45_000;
+const GUILD_CACHE_TTL = 15_000;
+
+function getActivity(id) {
+  if (!activity.has(id)) {
+    activity.set(id, {
+      messages: 0,
+      mentionsReceived: 0,
+      mentionsSent: 0,
+      voiceMinutes: 0,
+      voiceJoins: 0,
+      chatRounds: 0
+    });
+  }
+
+  return activity.get(id);
+}
+
+async function getGuild() {
+  if (guildCache && Date.now() - guildCacheAt < GUILD_CACHE_TTL) {
+    return guildCache;
+  }
+
+  if (guildFetchPromise) return guildFetchPromise;
+
+  guildFetchPromise = client.guilds.fetch(guildId)
+    .then((guild) => {
+      guildCache = guild;
+      guildCacheAt = Date.now();
+      return guild;
+    })
+    .finally(() => {
+      guildFetchPromise = null;
+    });
+
+  return guildFetchPromise;
+}
+
+function invalidateMemberSnapshot() {
+  memberSnapshotAt = 0;
+}
+
+async function getAllMembers(guild) {
+  const fresh = memberSnapshot && Date.now() - memberSnapshotAt < MEMBER_CACHE_TTL;
+  if (fresh) return memberSnapshot;
+  if (memberFetchPromise) return memberFetchPromise;
+
+  memberFetchPromise = guild.members.fetch()
+    .then((collection) => {
+      // لا نستبعد البوتات: هذه القائمة تمثل كل أعضاء السيرفر فعلًا.
+      memberSnapshot = [...collection.values()];
+      memberSnapshotAt = Date.now();
+      return memberSnapshot;
+    })
+    .catch((error) => {
+      // عند حدوث Rate Limit أو فشل مؤقت، نستخدم آخر لقطة صحيحة بدل قائمة فارغة.
+      if (memberSnapshot?.length) return memberSnapshot;
+      throw error;
+    })
+    .finally(() => {
+      memberFetchPromise = null;
+    });
+
+  return memberFetchPromise;
+}
+
+function importantPermissions(permissionCollection) {
+  return permissionCollection.toArray()
+    .filter((permission) => importantPermissionNames.has(permission));
+}
+
+function roleJson(role, membersCount = role.members?.size || 0) {
+  return {
+    id: role.id,
+    name: role.name,
+    color: role.hexColor,
+    position: role.position,
+    permissions: importantPermissions(role.permissions),
+    membersCount,
+    mentionable: role.mentionable
+  };
+}
+
+function memberJson(member) {
+  const roles = member.roles.cache
+    .filter((role) => role.id !== member.guild.id)
+    .sort((a, b) => b.position - a.position)
+    .map((role) => roleJson(role));
+
+  const leadershipRoles = roles.filter((role) => leadershipRoleSet.has(role.id));
+
+  return {
+    id: member.id,
+    name: member.displayName,
+    username: member.user.username,
+    globalName: member.user.globalName,
+    bot: member.user.bot,
+    avatar: member.user.displayAvatarURL({ extension: "png", size: 256 }),
+    joinedAt: member.joinedAt,
+    roles,
+    importantRoles: leadershipRoles,
+    rank: leadershipRoles[0]?.name || roles[0]?.name || "عضو",
+    stats: getActivity(member.id)
+  };
+}
+
+function sortedMemberJson(members) {
+  return [...members]
+    .sort((a, b) => {
+      const aRole = a.roles.cache
+        .filter((role) => leadershipRoleSet.has(role.id))
+        .sort((x, y) => y.position - x.position)
+        .first();
+      const bRole = b.roles.cache
+        .filter((role) => leadershipRoleSet.has(role.id))
+        .sort((x, y) => y.position - x.position)
+        .first();
+      return (bRole?.position || 0) - (aRole?.position || 0);
+    })
+    .map(memberJson);
+}
+
+app.get("/health", (req, res) => {
+  res.json({
+    ok: true,
+    botReady: client.isReady(),
+    membersCached: Boolean(memberSnapshot),
+    membersCachedCount: memberSnapshot?.length || 0,
+    membersUpdatedAt: memberSnapshotAt || null
+  });
+});
+
+app.get("/api/public/server", async (req, res) => {
+  try {
+    const guild = await getGuild();
+    res.json({
+      id: guild.id,
+      name: guild.name,
+      icon: guild.iconURL({ extension: "png", size: 256 }),
+      memberCount: guild.memberCount,
+      ownerName: process.env.SERVER_FOUNDER_NAME || "فهد المطيري",
+      invite: process.env.DISCORD_INVITE_URL || ""
+    });
+  } catch (error) {
+    console.error("Server endpoint:", error);
+    res.status(503).json({ error: "Discord server unavailable" });
+  }
+});
+
+app.get("/api/public/members", async (req, res) => {
+  try {
+    const guild = await getGuild();
+    const allMembers = await getAllMembers(guild);
+    const query = String(req.query.q || "").trim().toLocaleLowerCase("ar");
+    const cleanQuery = query.replace(/^@/, "");
+
+    const filtered = cleanQuery
+      ? allMembers.filter((member) => {
+          const searchable = [
+            member.displayName,
+            member.user.username,
+            member.user.globalName,
+            member.user.tag,
+            member.id
+          ]
+            .filter(Boolean)
+            .join(" ")
+            .toLocaleLowerCase("ar");
+          return searchable.includes(cleanQuery);
+        })
+      : allMembers;
+
+    res.json({
+      members: sortedMemberJson(filtered),
+      total: filtered.length,
+      totalServerMembers: allMembers.length,
+      updatedAt: memberSnapshotAt,
+      cached: Boolean(memberSnapshot)
+    });
+  } catch (error) {
+    console.error("Members endpoint:", error);
+    res.status(503).json({ error: "Members are temporarily unavailable" });
+  }
+});
+
+app.get("/api/public/roles", async (req, res) => {
+  try {
+    const guild = await getGuild();
+    const allMembers = await getAllMembers(guild);
+
+    const roles = leadershipRoleIds
+      .map((id) => guild.roles.cache.get(id))
+      .filter(Boolean)
+      .map((role) => {
+        const count = allMembers.reduce(
+          (total, member) => total + (member.roles.cache.has(role.id) ? 1 : 0),
+          0
+        );
+        return roleJson(role, count);
+      });
+
+    res.json({ roles, updatedAt: memberSnapshotAt });
+  } catch (error) {
+    console.error("Roles endpoint:", error);
+    res.status(503).json({ error: "Roles are temporarily unavailable" });
+  }
+});
+
+app.get("/api/public/roles/:id/members", async (req, res) => {
+  try {
+    const guild = await getGuild();
+    const role = guild.roles.cache.get(req.params.id);
+
+    if (!role || !leadershipRoleSet.has(role.id)) {
+      return res.status(404).json({ error: "Role not found" });
     }
-  }catch(e){console.error("game timeout scan",e.message)}
-}
-setInterval(processGameTimeouts,1000);
-app.get("/api/games/sessions",async(req,res)=>{const q=await pool.query("SELECT * FROM game_sessions WHERE status IN ('open','playing') ORDER BY id DESC LIMIT 100");res.json({sessions:q.rows.map(pub)})});
-app.post("/api/games/sessions",auth,async(req,res)=>{try{const id=String(req.body?.gameId||"").toUpperCase(),name=String(req.body?.gameName||id),max=Math.max(2,Math.min(8,Number(req.body?.maxPlayers)||4)),u=me(req),players=[gameUser(req,req.body||{})];let c=code();for(let i=0;i<5;i++){if(!(await pool.query("SELECT 1 FROM game_sessions WHERE code=$1",[c])).rowCount)break;c=code()}const q=await pool.query("INSERT INTO game_sessions(code,game_id,game_name,owner_username,max_players,players,players_json) VALUES($1,$2,$3,$4,$5,1,$6::jsonb) RETURNING *",[c,id,name,u.username,max,JSON.stringify(players)]);res.json({ok:true,session:pub(q.rows[0]),message:"تم إنشاء الجلسة "+c})}catch(e){res.status(500).json({error:"تعذر إنشاء الجلسة"})}});
-app.post("/api/games/sessions/:code/join",auth,async(req,res)=>{const db=await pool.connect();try{await db.query("BEGIN");const q=await db.query("SELECT * FROM game_sessions WHERE code=$1 AND status='open' FOR UPDATE",[String(req.params.code).toUpperCase()]);if(!q.rowCount)throw Error("الجلسة غير موجودة أو بدأت");const s=q.rows[0],p=Array.isArray(s.players_json)?s.players_json:[],u=gameUser(req,req.body||{});if(p.some(x=>x.username===u.username)){await db.query("COMMIT");return res.json({ok:true,session:pub(s)})}if(p.length>=s.max_players)throw Error("الجلسة مكتملة");p.push(u);const x=await db.query("UPDATE game_sessions SET players=$2,players_json=$3::jsonb WHERE code=$1 RETURNING *",[s.code,p.length,JSON.stringify(p)]);await db.query("COMMIT");res.json({ok:true,session:pub(x.rows[0])})}catch(e){await db.query("ROLLBACK");res.status(400).json({error:e.message})}finally{db.release()}});
-app.post("/api/games/sessions/:code/spectate",async(req,res)=>{try{const q=await pool.query("SELECT * FROM game_sessions WHERE code=$1 AND status='playing'",[String(req.params.code).toUpperCase()]);if(!q.rowCount)return res.status(404).json({error:"الجلسة غير متاحة"});const s=q.rows[0],a=Array.isArray(s.spectators_json)?s.spectators_json:[],u=gameUser(req,req.body||{});if(!a.some(x=>x.username===u.username))a.push(u);const x=await pool.query("UPDATE game_sessions SET spectators=$2,spectators_json=$3::jsonb WHERE code=$1 RETURNING *",[s.code,a.length,JSON.stringify(a)]);res.json({ok:true,session:pub(x.rows[0])})}catch(e){res.status(500).json({error:"تعذر تسجيل المشاهدة"})}});
-app.post("/api/games/sessions/:code/start",auth,async(req,res)=>{try{const q=await pool.query("SELECT * FROM game_sessions WHERE code=$1 AND status='open'",[String(req.params.code).toUpperCase()]);if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة"});const s=q.rows[0],u=me(req);if(u.username!==s.owner_username)return res.status(403).json({error:"صاحب الجلسة فقط"});const p=Array.isArray(s.players_json)?s.players_json:[],engine=s.game_id.toUpperCase();const supported=new Set(["UNO","BALOOT","JAKAROO","LUDO","QAWSAR","SPYFALL","CODENAMES","TRIVIA","EMOJI_GUESS","TABOO","WORD_BOMB","CATEGORIES","FASTEST","RIDDLE_RUSH","PICTIONARY","DRAW_GUESS","CHARADES","MIMIC","SECRET_WORD","WHOAMI","WOULD_YOU_RATHER","HOT_SEAT","GUESS_PLAYER","LIAR","TRUTH_LIE","DAQSH","CHESS","LIAR_BAR"]);if(!supported.has(engine)||!games[engine])return res.status(400).json({error:"اللعبة غير مدعومة"});if(p.length<2)return res.status(400).json({error:"لازم لاعبين على الأقل قبل بدء الجولة"});const state=games.create(engine,p);state.turnStartedAt=Date.now();state.turnTimeoutMs=GAME_TURN_TIMEOUT_MS;const x=await pool.query("UPDATE game_sessions SET status='playing',started_at=NOW(),state=$2::jsonb WHERE code=$1 RETURNING *",[s.code,JSON.stringify(state)]);res.json({ok:true,session:pub(x.rows[0])})}catch(e){res.status(400).json({error:e.message||"تعذر بدء اللعبة"})}});
-app.get("/api/games/sessions/:code/state",async(req,res)=>{try{const q=await pool.query("SELECT * FROM game_sessions WHERE code=$1 AND status IN ('open','playing')",[String(req.params.code).toUpperCase()]);if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة"});const s=q.rows[0];res.set("Cache-Control","no-store");res.json({ok:true,session:pub(s),state:s.state?games.pub(s.state,Array.isArray(s.players_json)?s.players_json:[],gameUser(req,req.query||{})):null})}catch(e){res.status(500).json({error:"تعذر تحميل حالة اللعبة"})}});
-app.post("/api/games/sessions/:code/action",auth,async(req,res)=>{const db=await pool.connect();try{await db.query("BEGIN");const q=await db.query("SELECT * FROM game_sessions WHERE code=$1 AND status='playing' FOR UPDATE",[String(req.params.code).toUpperCase()]);if(!q.rowCount)throw Error("الجلسة غير موجودة");const s=q.rows[0],p=Array.isArray(s.players_json)?s.players_json:[],u=gameUser(req,req.body||{}),state=JSON.parse(JSON.stringify(s.state));const next=games.apply(String(s.game_id||"").toUpperCase(),state,p,u,req.body.action,req.body.data||{});next.turnStartedAt=Date.now();next.turnTimeoutMs=Number(next.turnTimeoutMs||GAME_TURN_TIMEOUT_MS);const status=next.phase==="finished"?"ended":"playing";const x=await db.query("UPDATE game_sessions SET state=$2::jsonb,status=$3,ended_at=CASE WHEN $3='ended' THEN NOW() ELSE ended_at END WHERE code=$1 RETURNING *",[s.code,JSON.stringify(next),status]);await db.query("COMMIT");res.json({ok:true,finished:status==="ended",session:pub(x.rows[0]),state:games.pub(next,p,u)})}catch(e){await db.query("ROLLBACK");res.status(400).json({error:e.message||"الحركة غير صالحة"})}finally{db.release()}});
-app.post("/api/games/sessions/:code/end",auth,async(req,res)=>{const q=await pool.query("SELECT * FROM game_sessions WHERE code=$1",[String(req.params.code).toUpperCase()]);if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة"});if(q.rows[0].owner_username!==me(req).username)return res.status(403).json({error:"صاحب الجلسة فقط"});const x=await pool.query("UPDATE game_sessions SET status='ended',ended_at=NOW() WHERE code=$1 RETURNING *",[q.rows[0].code]);res.json({ok:true,session:pub(x.rows[0])})});
 
+    const roleMembers = (await getAllMembers(guild))
+      .filter((member) => member.roles.cache.has(role.id));
 
-// ===== Managed Bots =====
-function botAdminMember(g,m,bm){if(!m||!g)return false;if(g.ownerId===m.id)return true;if(!m.permissions?.has(PermissionsBitField.Flags.Administrator))return false;if(!bm)return true;return m.roles.highest.position>bm.roles.highest.position}
-function botGuildInfo(g,m,bm){return{id:g.id,name:g.name,icon:g.iconURL({extension:"png",size:128}),memberCount:g.memberCount||0,userRole:m?.roles?.highest?.name||"—",userRolePosition:m?.roles?.highest?.position||0,botRole:bm?.roles?.highest?.name||"—",botRolePosition:bm?.roles?.highest?.position||0,isOwner:g.ownerId===m?.id,administrator:Boolean(m?.permissions?.has(PermissionsBitField.Flags.Administrator))}}
-async function inspectBotTokenForUser(token,userId){const test=new Client({intents:[GatewayIntentBits.Guilds,GatewayIntentBits.GuildMembers]});try{await test.login(token);const out=[];for(const g0 of test.guilds.cache.values()){const g=await test.guilds.fetch(g0.id).catch(()=>null);if(!g)continue;const m=await g.members.fetch(userId).catch(()=>null);const bm=g.members.me||await g.members.fetch(test.user.id).catch(()=>null);if(!m||!botAdminMember(g,m,bm))continue;out.push(botGuildInfo(g,m,bm))}return{clientId:test.user.id,username:test.user.username,guilds:out}}finally{await test.destroy().catch(()=>{})}}
-async function botOwner(req){return me(req)}
-async function botAudit(botId,guildId,eventType,username,details={}){await pool.query("INSERT INTO bot_logs(bot_id,guild_id,event_type,username,details) VALUES($1,$2,$3,$4,$5::jsonb)",[botId,guildId||null,eventType,String(username||"").slice(0,100),JSON.stringify(details||{})]).catch(e=>console.error("bot audit",e.message))}
-app.post("/api/bots/inspect",auth,async(req,res)=>{try{const tok=String(req.body?.token||"").trim();if(!tok)return res.status(400).json({error:"توكن البوت مطلوب"});const u=await botOwner(req);if(!u?.discordUserId)return res.status(400).json({error:"اربط حساب Discord بحساب المنصة أولاً"});const info=await inspectBotTokenForUser(tok,u.discordUserId);if(!info.guilds.length)return res.status(403).json({error:"ما لقيت أي سيرفر لهذا البوت أنت فيه Administrator أو مالك، والبوت لازم يكون داخل السيرفر أولاً."});const existing=await pool.query("SELECT client_id,linked_guild_id FROM bot_instances WHERE client_id=$1",[info.clientId]);if(existing.rowCount)return res.status(409).json({error:"هذا البوت مربوط بالمنصة مسبقًا بسيرفر واحد: "+(existing.rows[0].linked_guild_id||"غير معروف")});res.json({ok:true,clientId:info.clientId,username:info.username,guilds:info.guilds})}catch(e){console.error("bot inspect",e);res.status(400).json({error:"تعذر التحقق من التوكن. تأكد أنه Bot Token صحيح وأن البوت داخل السيرفر."})}});
-app.get("/api/bots",auth,async(req,res)=>{try{const u=await botOwner(req),q=await pool.query("SELECT id,name,client_id,linked_guild_id,status,prefix,presence_mode,presence_text,website_url,hide_website,created_at,updated_at FROM bot_instances WHERE owner_username=$1 ORDER BY id DESC",[u.username]);const visible=[];for(const b of q.rows){const g=await client.guilds.fetch(b.linked_guild_id).catch(()=>null);const m=g&&u.discordUserId?await g.members.fetch(u.discordUserId).catch(()=>null):null;const bm=g?await g.members.fetch(b.client_id).catch(()=>null):null;if(g&&botAdminMember(g,m,bm))visible.push({...b,guild_name:g.name})}res.json({bots:visible})}catch(e){res.status(500).json({error:"تعذر تحميل البوتات"})}});
-app.post("/api/bots",auth,async(req,res)=>{try{const u=await botOwner(req),tok=String(req.body?.token||"").trim(),name=String(req.body?.name||"").trim().slice(0,100),selectedGuildId=String(req.body?.guildId||"").trim();if(!tok||!name||!selectedGuildId)return res.status(400).json({error:"اسم البوت والتوكن والسيرفر مطلوبين"});if(!u?.discordUserId)return res.status(400).json({error:"اربط حساب Discord بحساب المنصة أولاً"});const info=await inspectBotTokenForUser(tok,u.discordUserId),chosen=info.guilds.find(x=>x.id===selectedGuildId);if(!chosen)return res.status(403).json({error:"ما عندك Administrator أو البوت غير موجود في هذا السيرفر"});const exists=await pool.query("SELECT 1 FROM bot_instances WHERE client_id=$1",[info.clientId]);if(exists.rowCount)return res.status(409).json({error:"هذا البوت مستخدم مسبقًا في المنصة. كل بوت يُربط بسيرفر واحد فقط."});const q=await pool.query("INSERT INTO bot_instances(name,client_id,token_cipher,owner_username,linked_guild_id,website_url,presence_text) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id,name,client_id,linked_guild_id,status,prefix,presence_mode,presence_text,website_url,hide_website,created_at",[name,info.clientId,encryptSecret(tok),u.username,selectedGuildId,process.env.PUBLIC_SITE_URL||"",name+" | "+(process.env.PUBLIC_SITE_URL||"الموقع")]);await pool.query("INSERT INTO bot_guilds(bot_id,guild_id,guild_name,enabled) VALUES($1,$2,$3,true)",[q.rows[0].id,selectedGuildId,chosen.name]);await pool.query("INSERT INTO bot_logs(bot_id,guild_id,event_type,username,details) VALUES($1,$2,'bot_created',$3,$4)",[q.rows[0].id,selectedGuildId,u.username,JSON.stringify({name,clientId:info.clientId,guildName:chosen.name})]);res.status(201).json({ok:true,bot:q.rows[0],guild:chosen})}catch(e){console.error("bot create",e);res.status(400).json({error:"تعذر ربط البوت: "+(e.message||"توكن غير صالح")})}});
-app.get("/api/bots/:id",auth,async(req,res)=>{const q=await pool.query("SELECT id,name,client_id,linked_guild_id,status,prefix,presence_mode,presence_text,website_url,hide_website,created_at,updated_at FROM bot_instances WHERE id=$1 AND owner_username=$2",[Number(req.params.id),me(req).username]);if(!q.rowCount)return res.status(404).json({error:"البوت غير موجود"});const bg=await pool.query("SELECT * FROM bot_guilds WHERE bot_id=$1 ORDER BY guild_id",[Number(req.params.id)]),cmd=await pool.query("SELECT * FROM bot_commands WHERE bot_id=$1 ORDER BY guild_id,command",[Number(req.params.id)]);res.json({bot:q.rows[0],guilds:bg.rows,commands:cmd.rows})});
-app.patch("/api/bots/:id",auth,async(req,res)=>{const id=Number(req.params.id),q=await pool.query("SELECT * FROM bot_instances WHERE id=$1 AND owner_username=$2",[id,me(req).username]);if(!q.rowCount)return res.status(404).json({error:"البوت غير موجود"});const r=q.rows[0],prefix=String(req.body?.prefix??r.prefix).slice(0,8),mode=String(req.body?.presenceMode??r.presence_mode).slice(0,20),pt=String(req.body?.presenceText??r.presence_text).slice(0,190),hide=Boolean(req.body?.hideWebsite);if(hide){const sub=await pool.query("SELECT 1 FROM bot_subscriptions WHERE bot_id=$1 AND guild_id=$2 AND status='active' AND (ends_at IS NULL OR ends_at>NOW()) LIMIT 1",[id,r.linked_guild_id]);if(!sub.rowCount)return res.status(402).json({error:"إخفاء رابط الموقع مقفل حتى يمنح المالك اشتراكًا لهذا البوت"})}await pool.query("UPDATE bot_instances SET prefix=$2,presence_mode=$3,presence_text=$4,hide_website=$5,updated_at=NOW() WHERE id=$1",[id,prefix,mode,pt,hide]);const b=managedBots.get(id);if(b?.user)b.user.setPresence({activities:[{name:pt,type:mode==="playing"?ActivityType.Playing:ActivityType.Watching,url:hide?"":r.website_url}],status:"online"});await pool.query("INSERT INTO bot_logs(bot_id,guild_id,event_type,username,details) VALUES($1,$2,'settings_updated',$3,$4)",[id,r.linked_guild_id,me(req).username,JSON.stringify({prefix,mode,hide})]);res.json({ok:true})});
-app.patch("/api/bots/:id/guilds/:guildId",auth,async(req,res)=>{const id=Number(req.params.id),gid=String(req.params.guildId),q=await pool.query("SELECT * FROM bot_instances WHERE id=$1 AND owner_username=$2",[id,me(req).username]);if(!q.rowCount)return res.status(404).json({error:"البوت غير موجود"});if(q.rows[0].linked_guild_id!==gid)return res.status(409).json({error:"هذا البوت مربوط بسيرفر واحد فقط ولا يمكن نقله من هذه الشاشة"});const enabled=req.body?.enabled!==false,status=String(req.body?.subscriptionStatus||"inactive"),expires=req.body?.expiresAt||null;await pool.query("INSERT INTO bot_guilds(bot_id,guild_id,guild_name,enabled,subscription_status,subscription_expires_at) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(bot_id,guild_id) DO UPDATE SET guild_name=$3,enabled=$4,subscription_status=$5,subscription_expires_at=$6,updated_at=NOW()",[id,gid,(await client.guilds.fetch(gid)).name,enabled,status,expires]);await pool.query("INSERT INTO bot_logs(bot_id,guild_id,event_type,username,details) VALUES($1,$2,'guild_settings_updated',$3,$4)",[id,gid,me(req).username,JSON.stringify({enabled,status,expires})]);res.json({ok:true,dataRetained:true,singleGuild:true})});
-app.get("/api/bots/:id/logs",auth,async(req,res)=>{const q=await pool.query("SELECT * FROM bot_logs WHERE bot_id=$1 ORDER BY id DESC LIMIT 300",[Number(req.params.id)]);res.json({items:q.rows})});
-app.get("/api/bots/:id/data",auth,async(req,res)=>{const q=await pool.query("SELECT * FROM bot_data WHERE bot_id=$1 ORDER BY id DESC LIMIT 500",[Number(req.params.id)]);res.json({items:q.rows,dataPermanent:true})});
-app.get("/api/bots/:id/subscriptions",owner,async(req,res)=>{const q=await pool.query("SELECT * FROM bot_subscriptions WHERE bot_id=$1 ORDER BY id DESC",[Number(req.params.id)]);res.json({items:q.rows,dataRetained:true})});
-app.post("/api/bots/:id/subscriptions",owner,async(req,res)=>{const id=Number(req.params.id),gid=String(req.body?.guildId||"");const b=await pool.query("SELECT linked_guild_id FROM bot_instances WHERE id=$1",[id]);if(!b.rowCount)return res.status(404).json({error:"البوت غير موجود"});if(!gid)return res.status(400).json({error:"guildId مطلوب"});if(gid!==b.rows[0].linked_guild_id)return res.status(409).json({error:"الاشتراك يجب أن يكون للسيرفر المربوط بهذا البوت فقط"});const q=await pool.query("INSERT INTO bot_subscriptions(bot_id,guild_id,plan,status,starts_at,ends_at,granted_by) VALUES($1,$2,$3,'active',NOW(),$4,$5) RETURNING *",[id,gid,String(req.body?.plan||"pro"),req.body?.endsAt||null,me(req).username]);await pool.query("INSERT INTO bot_guilds(bot_id,guild_id,subscription_status,subscription_expires_at) VALUES($1,$2,'active',$3) ON CONFLICT(bot_id,guild_id) DO UPDATE SET subscription_status='active',subscription_expires_at=$3,updated_at=NOW()",[id,gid,req.body?.endsAt||null]);res.json({ok:true,subscription:q.rows[0],dataRetained:true})});
-app.delete("/api/bots/:id/subscriptions/:sid",owner,async(req,res)=>res.status(405).json({error:"لا نحذف الاشتراكات أو بيانات البوت؛ يتم إيقافها فقط"}));
-const voiceState=(oldState,newState)=>{for(const [id,b] of managedBots){if(!newState?.guild||newState.guild.id!==b._mldGuildId||newState.member?.user?.bot)continue;(async()=>{try{const q=await pool.query("SELECT * FROM bot_voice_settings WHERE bot_id=$1 AND guild_id=$2 AND enabled=true",[id,newState.guild.id]);const s=q.rows[0];if(s&&newState.channelId===s.channel_id)await speakVoice(b,s.guild_id,s.channel_id,s.phrase,s.language)}catch(e){console.error("voice greeting",id,e.message)}})()}};
-async function loadManagedBots(){const q=await pool.query("SELECT * FROM bot_instances ORDER BY id");for(const r of q.rows){try{const b=new Client({intents:[GatewayIntentBits.Guilds,GatewayIntentBits.GuildMessages,GatewayIntentBits.MessageContent,GatewayIntentBits.GuildMembers]});await b.login(decryptSecret(r.token_cipher));b._mldGuildId=r.linked_guild_id;b.on("voiceStateUpdate",voiceState);b.once("ready",async()=>{await pool.query("UPDATE bot_instances SET status='online',updated_at=NOW() WHERE id=$1",[r.id]);b.user.setPresence({activities:[{name:r.presence_text,type:r.presence_mode==="playing"?ActivityType.Playing:ActivityType.Watching,url:r.hide_website?"":r.website_url}],status:"online"})});b.on("messageCreate",async m=>{
- if(m.author.bot||!m.guild||m.guild.id!==r.linked_guild_id)return;
- const cfg=(await pool.query("SELECT * FROM bot_guilds WHERE bot_id=$1 AND guild_id=$2",[r.id,m.guild.id])).rows[0];
- if(cfg&&!cfg.enabled)return;
- const bm=m.guild.members.me;if(!bm)return;
- const actor=m.member;if(!actor)return;
- const p=r.prefix||"!";
- if(!m.content.startsWith(p))return;
- const parts=m.content.slice(p.length).trim().split(/\s+/),raw=parts.shift();if(!raw)return;
- const aliases={رصيد:"balance",فلوس:"balance",يومي:"daily",ستريك:"streak",تحويل:"pay",بنك:"bank",العاب:"game",ألعاب:"game",قيفاوي:"giveaway",زاجل:"zajel",تذكرة:"ticket",تقديم:"apply",برودكاست:"broadcast",حماية:"protect"};
- const action=(aliases[raw.toLowerCase()]||raw.toLowerCase()),args=parts;
- const adminOnly=new Set(["protect","broadcast","giveaway","ticket","apply","setprefix","setpresence","module","helpadmin"]);
- const isAdmin=actor.permissions.has(PermissionsBitField.Flags.Administrator)||actor.id===m.guild.ownerId;
- if(adminOnly.has(action)&&!isAdmin)return m.reply("⛔ هذا الأمر للإدارة فقط.");
- const premium=new Set(["broadcast","giveaway","music"]);
- const sub=cfg?.subscription_status==="active"&&(!cfg.subscription_expires_at||new Date(cfg.subscription_expires_at)>new Date());
- if(premium.has(action)&&!sub)return m.reply("⭐ هذا الأمر يتطلب اشتراكًا مفعّلًا.");
- const audit=async(type,details={})=>botAudit(r.id,m.guild.id,type,m.author.username,details);
- const read=async(type,user=m.author.id)=>{const q=await pool.query("SELECT data FROM bot_data WHERE bot_id=$1 AND guild_id=$2 AND username=$3 AND data_type=$4",[r.id,m.guild.id,String(user),type]);return q.rows[0]?.data||{}};
- const write=async(type,data,user=m.author.id)=>{await pool.query("INSERT INTO bot_data(bot_id,guild_id,username,data_type,data) VALUES($1,$2,$3,$4,$5::jsonb) ON CONFLICT(bot_id,guild_id,username,data_type) DO UPDATE SET data=$5::jsonb,updated_at=NOW()",[r.id,m.guild.id,String(user),type,JSON.stringify(data)])};
- const enabled=async(key)=>{const q=await pool.query("SELECT enabled FROM bot_plugins WHERE bot_id=$1 AND guild_id=$2 AND plugin_key=$3",[r.id,m.guild.id,key]);return !q.rowCount||q.rows[0].enabled!==false};
- if(!(await enabled(action))&&action!=="help")return m.reply("⛔ هذه الإضافة متوقفة من لوحة البوت.");
- if(action==="help")return m.reply(r.name+" — Help\n"+p+"help\n"+p+"ping\n"+p+"game list|dice|coin|guess\n"+p+"balance | "+p+"daily | "+p+"pay @عضو مبلغ\n"+p+"shop | "+p+"buy اسم الكمية | "+p+"sell اسم الكمية | "+p+"rob @عضو\n"+p+"streak\n"+p+"ticket | "+p+"apply | "+p+"zajel @عضو رسالة\n"+p+"broadcast #روم الرسالة | "+p+"giveaway مدة فائزين الجائزة\n"+p+"protect");
- if(action==="ping"){await audit("command",{command:action});return m.reply("🏓 "+b.ws.ping+"ms");}
- if(action==="game"){const sc=(args.shift()||"list").toLowerCase();if(sc==="list")return m.reply("🎮 ألعاب البوت: dice • coin • guess");if(sc==="dice"){const n=Math.floor(Math.random()*6)+1;return m.reply("🎲 النتيجة: "+n)}if(sc==="coin")return m.reply("🪙 "+(Math.random()<.5?"وجه":"كتابة"));if(sc==="guess"){const n=Math.floor(Math.random()*10)+1,g=Number(args[0]);if(!Number.isInteger(g)||g<1||g>10)return m.reply("استخدم: "+p+"game guess 1-10");return m.reply(g===n?"🎯 صح!":"❌ الرقم كان "+n)}return m.reply("استخدم: "+p+"game list");}
- if(["balance","bank","daily","pay","shop","buy","sell","rob"].includes(action)){
-   const d=await read("bank");
-   if(action==="balance"||action==="bank")return m.reply("🏦 رصيدك: "+Number(d.balance||0).toLocaleString("en-US"));
-   if(action==="daily"){const now=Date.now();if(now-Number(d.dailyAt||0)<86400000)return m.reply("⏳ أخذت اليومية بالفعل.");const streak=Number(d.streak||0)+1,amount=100+Math.min(streak,30)*10;await write("bank",{...d,balance:Number(d.balance||0)+amount,dailyAt:now,streak});return m.reply("🎁 +"+amount+" عملة | 🔥 ستريك "+streak);}
-   if(action==="pay"){const target=m.mentions.users.first(),amount=Math.floor(Number(args[0]||args[1]));if(!target||target.bot||!Number.isFinite(amount)||amount<1)return m.reply("استخدم: "+p+"pay @عضو 100");if(target.id===m.author.id)return m.reply("❌ لا يمكنك التحويل لنفسك.");if(Number(d.balance||0)<amount)return m.reply("❌ رصيدك لا يكفي.");const td=await read("bank",target.id);await write("bank",{...d,balance:Number(d.balance||0)-amount});await write("bank",{...td,balance:Number(td.balance||0)+amount},target.id);return m.reply("💸 تم التحويل إلى "+target.username);}
-   const shop={خشب:50,حديد:100,ذهب:250,جوهرة:500};if(action==="shop")return m.reply("🛒 "+Object.entries(shop).map(([k,v])=>k+"="+v).join(" • "));
-   const item=args[0],qty=Math.max(1,Math.floor(Number(args[1]||1)));if(!shop[item])return m.reply("❌ المورد غير موجود. استخدم "+p+"shop");
-   if(action==="buy"){const cost=shop[item]*qty;if(Number(d.balance||0)<cost)return m.reply("❌ رصيدك لا يكفي.");const inv={...(d.inventory||{})};inv[item]=(inv[item]||0)+qty;await write("bank",{...d,balance:Number(d.balance||0)-cost,inventory:inv});return m.reply("🛍️ تم الشراء.");}
-   if(action==="sell"){const inv={...(d.inventory||{})};if(Number(inv[item]||0)<qty)return m.reply("❌ الكمية غير متوفرة.");inv[item]-=qty;await write("bank",{...d,balance:Number(d.balance||0)+Math.floor(shop[item]*.8*qty),inventory:inv});return m.reply("💰 تم البيع.");}
-   if(action==="rob"){const target=m.mentions.users.first();if(!target||target.bot||target.id===m.author.id)return m.reply("استخدم: "+p+"rob @عضو");const td=await read("bank",target.id);if(Number(td.balance||0)<1)return m.reply("❌ الهدف بدون رصيد.");if(Math.random()>=.35)return m.reply("🚨 فشلت محاولة النهب.");const amount=Math.max(1,Math.floor(Number(td.balance)*.15));await write("bank",{...d,balance:Number(d.balance||0)+amount});await write("bank",{...td,balance:Number(td.balance||0)-amount},target.id);return m.reply("💰 حصلت على "+amount+" عملة.");}
- }
- if(action==="streak"){const d=await read("bank");return m.reply("🔥 ستريكك: "+Number(d.streak||0));}
- if(action==="ticket"){const subject=args.join(" ").slice(0,80)||"تذكرة دعم";const safe=m.author.username.toLowerCase().replace(/[^a-z0-9-_]/g,"").slice(0,18)||"user";const ch=await m.guild.channels.create({name:"ticket-"+safe+"-"+Date.now().toString().slice(-4),type:ChannelType.GuildText,reason:"MLD ticket"}).catch(()=>null);if(!ch)return m.reply("❌ تعذر إنشاء التذكرة.");await ch.send("🎫 <@"+m.author.id+"> تم فتح تذكرتك. الموضوع: "+subject);await audit("ticket_created",{channelId:ch.id,subject});return m.reply("🎫 تم فتح التذكرة: "+ch);}
- if(action==="apply"){const text=args.join(" ").slice(0,1500);if(!text)return m.reply("استخدم: "+p+"apply سبب التقديم");await write("application",{text,status:"pending",createdAt:Date.now()});await audit("application_created",{text});return m.reply("📨 تم حفظ تقديمك.");}
- if(action==="zajel"){const target=m.mentions.users.first(),text=args.filter(x=>!/^<@!?\d+>$/.test(x)).join(" ").slice(0,1500);if(!target||!text)return m.reply("استخدم: "+p+"zajel @عضو الرسالة");await target.send("🕊️ زاجل مجهول\n"+text).catch(()=>null);await audit("zajel_sent",{targetId:target.id});return m.reply("🕊️ تم إرسال الزاجل.");}
- if(action==="broadcast"){const ch=m.mentions.channels.first(),text=args.filter(x=>!/^<#\d+>$/.test(x)).join(" ").slice(0,1800);if(!ch||!text)return m.reply("استخدم: "+p+"broadcast #الروم الرسالة");await ch.send(text);await audit("broadcast",{channelId:ch.id});return m.reply("📢 تم البرودكاست.");}
- if(action==="giveaway"){const seconds=Math.max(10,Math.min(86400,Number(args[0])||60)),winners=Math.max(1,Math.min(10,Number(args[1])||1)),prize=args.slice(2).join(" ")||"جائزة";const msg=await m.channel.send("🎉 قيفاوي | "+prize+" | "+seconds+" ثانية | اكتب "+p+"enter للمشاركة");const entries=new Set();const collector=m.channel.createMessageCollector({filter:x=>!x.author.bot&&x.content.trim().toLowerCase()===p+"enter",time:seconds*1000});collector.on("collect",x=>entries.add(x.author.id));collector.on("end",async()=>{const a=[...entries].sort(()=>Math.random()-.5).slice(0,winners);await msg.edit("🎉 انتهى القيفاوي | "+prize+" | الفائزون: "+(a.length?a.map(id=>"<@"+id+">").join(", "):"لا يوجد"));await audit("giveaway_finished",{prize,winners:a.length});});await audit("giveaway_created",{prize,seconds,winners});return m.reply("🎁 بدأ القيفاوي.");}
- if(action==="protect")return m.reply("🛡️ الحماية الأساسية مفعلة.");
- if(action==="helpadmin")return m.reply("🛠️ الإدارة: setprefix / setpresence / module / protect / broadcast / giveaway");
- if(action==="setprefix"){const np=String(args[0]||"").slice(0,8);if(!np)return m.reply("استخدم: "+p+"setprefix ?");await pool.query("UPDATE bot_instances SET prefix=$2,updated_at=NOW() WHERE id=$1",[r.id,np]);r.prefix=np;return m.reply("✅ Prefix: "+np);}
- if(action==="setpresence"){const text=args.join(" ").slice(0,190);if(!text)return m.reply("استخدم: "+p+"setpresence النص");await pool.query("UPDATE bot_instances SET presence_text=$2,updated_at=NOW() WHERE id=$1",[r.id,text]);r.presence_text=text;b.user.setPresence({activities:[{name:text,type:ActivityType.Watching,url:r.hide_website?"":r.website_url}],status:"online"});return m.reply("👁️ تم تحديث الـ Watching.");}
- if(action==="module"){const key=String(args[0]||"").slice(0,80),value=String(args[1]||"on").toLowerCase()!=="off";if(!key)return m.reply("استخدم: "+p+"module game on");await pool.query("INSERT INTO bot_plugins(bot_id,guild_id,plugin_key,enabled) VALUES($1,$2,$3,$4) ON CONFLICT(bot_id,guild_id,plugin_key) DO UPDATE SET enabled=$4,updated_at=NOW()",[r.id,m.guild.id,key,value]);return m.reply("⚙️ "+key+" = "+(value?"ON":"OFF"));}
- await audit("command",{command:action,args});return m.reply("❓ أمر غير معروف. استخدم "+p+"help");
-});;managedBots.set(r.id,b)}catch(e){console.error("managed bot",r.id,e.message);await pool.query("UPDATE bot_instances SET status='error',updated_at=NOW() WHERE id=$1",[r.id]).catch(()=>{})}}}
-app.get("/support",async(req,res)=>{try{const q=await pool.query("SELECT discord_user_id FROM app_users WHERE lower(username)=lower($1) OR lower(discord_username)=lower($1) LIMIT 1",["w4px"]);const id=q.rows[0]?.discord_user_id;if(id&&/^\d{17,20}$/.test(String(id)))return res.redirect("https://discord.com/users/"+id);return res.redirect("https://discord.com/app")}catch(e){return res.redirect("https://discord.com/app")}});
+    res.json({
+      role: roleJson(role, roleMembers.length),
+      members: sortedMemberJson(roleMembers),
+      updatedAt: memberSnapshotAt
+    });
+  } catch (error) {
+    console.error("Role members endpoint:", error);
+    res.status(503).json({ error: "Role members are temporarily unavailable" });
+  }
+});
 
-async function speakVoice(bot,guildId,channelId,phrase,language="ar"){const ch=await bot.channels.fetch(channelId).catch(()=>null);if(!ch||![ChannelType.GuildVoice,ChannelType.GuildStageVoice].includes(ch.type))throw Error("الروم الصوتي غير صالح");const me=ch.guild.members.me||await ch.guild.members.fetch(bot.user.id).catch(()=>null);if(!me?.permissionsIn(ch).has(PermissionsBitField.Flags.Connect)||!me?.permissionsIn(ch).has(PermissionsBitField.Flags.Speak))throw Error("البوت يحتاج Connect و Speak في الروم");const connection=joinVoiceChannel({channelId:ch.id,guildId,adapterCreator:ch.guild.voiceAdapterCreator,selfDeaf:false});const player=createAudioPlayer({behaviors:{noSubscriber:NoSubscriberBehavior.Stop}});const url=tts.getAudioUrl(String(phrase).slice(0,500),{lang:language||"ar",slow:false,host:"https://translate.google.com"});const stream=await new Promise((resolve,reject)=>https.get(url,res=>resolve(res)).on("error",reject));player.play(createAudioResource(stream,{inputType:StreamType.Arbitrary}));connection.subscribe(player);player.once(AudioPlayerStatus.Idle,()=>{try{connection.destroy()}catch{}});return true}
-function currentUser(req){return me(req)}
-async function findUserByName(name){
- const q=await pool.query("SELECT username,discord_username,discord_user_id,role,points,bio,avatar_url FROM app_users WHERE lower(username)=lower($1) OR lower(discord_username)=lower($1) LIMIT 1",[String(name||"").trim()]);
- return q.rows[0]||null;
-}
-app.get("/api/bots/:id/voice",auth,async(req,res)=>{const id=Number(req.params.id),u=me(req),b=await pool.query("SELECT * FROM bot_instances WHERE id=$1 AND owner_username=$2",[id,u.username]);if(!b.rowCount)return res.status(404).json({error:"البوت غير موجود"});const gid=b.rows[0].linked_guild_id,g=await client.guilds.fetch(gid).catch(()=>null);if(!g)return res.status(503).json({error:"السيرفر غير متاح"});const q=await pool.query("SELECT * FROM bot_voice_settings WHERE bot_id=$1 AND guild_id=$2",[id,gid]);const channels=[...g.channels.cache.values()].filter(x=>[ChannelType.GuildVoice,ChannelType.GuildStageVoice].includes(x.type)).map(x=>({id:x.id,name:x.name,type:x.type}));res.json({settings:q.rows[0]||null,channels})});
-app.patch("/api/bots/:id/voice",auth,async(req,res)=>{const id=Number(req.params.id),u=me(req),b=await pool.query("SELECT * FROM bot_instances WHERE id=$1 AND owner_username=$2",[id,u.username]);if(!b.rowCount)return res.status(404).json({error:"البوت غير موجود"});const gid=b.rows[0].linked_guild_id,channelId=String(req.body?.channelId||""),phrase=String(req.body?.phrase||"").trim().slice(0,500),enabled=req.body?.enabled!==false;if(!channelId||!phrase)return res.status(400).json({error:"حدد الروم واكتب العبارة"});const g=await client.guilds.fetch(gid),ch=await g.channels.fetch(channelId).catch(()=>null);if(!ch||![ChannelType.GuildVoice,ChannelType.GuildStageVoice].includes(ch.type))return res.status(400).json({error:"الروم الصوتي غير صالح"});const q=await pool.query("INSERT INTO bot_voice_settings(bot_id,guild_id,channel_id,phrase,enabled) VALUES($1,$2,$3,$4,$5) ON CONFLICT(bot_id,guild_id) DO UPDATE SET channel_id=$3,phrase=$4,enabled=$5,updated_at=NOW() RETURNING *",[id,gid,channelId,phrase,enabled]);res.json({ok:true,settings:q.rows[0]})});
-app.post("/api/bots/:id/voice/test",auth,async(req,res)=>{const id=Number(req.params.id),u=me(req),b=await pool.query("SELECT * FROM bot_instances WHERE id=$1 AND owner_username=$2",[id,u.username]);if(!b.rowCount)return res.status(404).json({error:"البوت غير موجود"});const s=(await pool.query("SELECT * FROM bot_voice_settings WHERE bot_id=$1 AND guild_id=$2",[id,b.rows[0].linked_guild_id])).rows[0],bot=managedBots.get(id);if(!s||!bot)return res.status(400).json({error:"احفظ الإعدادات والبوت يجب أن يكون متصلًا"});try{await speakVoice(bot,s.guild_id,s.channel_id,s.phrase,s.language);res.json({ok:true})}catch(e){res.status(400).json({error:e.message})}});
-app.get("/api/bots/:id/control",auth,async(req,res)=>{const id=Number(req.params.id),u=me(req),q=await pool.query("SELECT * FROM bot_instances WHERE id=$1",[id]);if(!q.rowCount)return res.status(404).json({error:"البوت غير موجود"});const b=q.rows[0];if(b.owner_username!==u.username&&u.role!=="owner"){const a=await pool.query("SELECT permissions FROM bot_access WHERE bot_id=$1 AND username=$2",[id,u.username]);if(!a.rowCount)return res.status(403).json({error:"لا تملك صلاحية لوحة هذا البوت"})}const [access,templates,plugins]=await Promise.all([pool.query("SELECT id,username,permissions FROM bot_access WHERE bot_id=$1 ORDER BY username",[id]),pool.query("SELECT * FROM bot_command_templates WHERE bot_id=$1 ORDER BY id DESC",[id]),pool.query("SELECT * FROM bot_plugins WHERE bot_id=$1 ORDER BY plugin_key",[id])]);res.json({access:access.rows,templates:templates.rows,plugins:plugins.rows,permissions:["settings","commands","access","plugins","logs","data","subscriptions"]})});
-app.post("/api/bots/:id/access",auth,async(req,res)=>{const id=Number(req.params.id),u=me(req),q=await pool.query("SELECT * FROM bot_instances WHERE id=$1 AND owner_username=$2",[id,u.username]);if(!q.rowCount&&u.role!=="owner")return res.status(403).json({error:"صلاحية إدارة الوصول مطلوبة"});const username=String(req.body?.username||"").trim().slice(0,32),permissions=Array.isArray(req.body?.permissions)?req.body.permissions.filter(x=>typeof x==="string").slice(0,20):[];const target=await findUserByName(username);if(!target)return res.status(404).json({error:"المستخدم غير موجود"});await pool.query("INSERT INTO bot_access(bot_id,username,permissions) VALUES($1,$2,$3::jsonb) ON CONFLICT(bot_id,username) DO UPDATE SET permissions=$3::jsonb,updated_at=NOW()",[id,target.username,JSON.stringify(permissions)]);await botAudit(id,q.rows[0]?.linked_guild_id,"access_updated",u.username,{target:target.username,permissions});res.json({ok:true})});
-app.delete("/api/bots/:id/access/:username",auth,async(req,res)=>{const id=Number(req.params.id),u=me(req),q=await pool.query("SELECT 1 FROM bot_instances WHERE id=$1 AND owner_username=$2",[id,u.username]);if(!q.rowCount&&u.role!=="owner")return res.status(403).json({error:"صلاحية إدارة الوصول مطلوبة"});await pool.query("DELETE FROM bot_access WHERE bot_id=$1 AND username=$2",[id,String(req.params.username)]);await botAudit(id,null,"access_removed",u.username,{target:req.params.username});res.json({ok:true})});
-app.post("/api/bots/:id/templates",auth,async(req,res)=>{const id=Number(req.params.id),u=me(req),q=await pool.query("SELECT * FROM bot_instances WHERE id=$1 AND owner_username=$2",[id,u.username]);if(!q.rowCount&&u.role!=="owner")return res.status(403).json({error:"صلاحية الأوامر مطلوبة"});const name=String(req.body?.name||"").trim().slice(0,100),command=String(req.body?.command||"").trim().toLowerCase().replace(/[^\w\u0600-\u06ff-]/g,"").slice(0,80),response=String(req.body?.responseTemplate||"").slice(0,2000),description=String(req.body?.description||"").slice(0,300);if(!name||!command||!response)return res.status(400).json({error:"اسم القالب والأمر والرد مطلوبة"});const x=await pool.query("INSERT INTO bot_command_templates(bot_id,guild_id,name,command,description,response_template,settings) VALUES($1,$2,$3,$4,$5,$6,$7::jsonb) RETURNING *",[id,q.rows[0].linked_guild_id,name,command,description,response,JSON.stringify({allowedRoles:Array.isArray(req.body?.allowedRoles)?req.body.allowedRoles.slice(0,30):[],blockedRoles:Array.isArray(req.body?.blockedRoles)?req.body.blockedRoles.slice(0,30):[],channels:Array.isArray(req.body?.channels)?req.body.channels.slice(0,30):[]})]);await botAudit(id,q.rows[0].linked_guild_id,"template_created",u.username,{command});res.status(201).json({template:x.rows[0]})});
-app.patch("/api/bots/:id/templates/:templateId",auth,async(req,res)=>{const id=Number(req.params.id),u=me(req),q=await pool.query("SELECT 1 FROM bot_instances WHERE id=$1 AND owner_username=$2",[id,u.username]);if(!q.rowCount&&u.role!=="owner")return res.status(403).json({error:"صلاحية الأوامر مطلوبة"});const x=await pool.query("UPDATE bot_command_templates SET enabled=COALESCE($3,enabled),response_template=COALESCE($4,response_template),updated_at=NOW() WHERE id=$1 AND bot_id=$2 RETURNING *",[Number(req.params.templateId),id,typeof req.body?.enabled==="boolean"?req.body.enabled:null,req.body?.responseTemplate!=null?String(req.body.responseTemplate).slice(0,2000):null]);if(!x.rowCount)return res.status(404).json({error:"القالب غير موجود"});res.json({template:x.rows[0]})});
-app.delete("/api/bots/:id/templates/:templateId",auth,async(req,res)=>{const id=Number(req.params.id),u=me(req),q=await pool.query("SELECT 1 FROM bot_instances WHERE id=$1 AND owner_username=$2",[id,u.username]);if(!q.rowCount&&u.role!=="owner")return res.status(403).json({error:"صلاحية الأوامر مطلوبة"});await pool.query("DELETE FROM bot_command_templates WHERE id=$1 AND bot_id=$2",[Number(req.params.templateId),id]);res.json({ok:true})});
-app.patch("/api/bots/:id/plugins/:pluginKey",auth,async(req,res)=>{const id=Number(req.params.id),u=me(req),q=await pool.query("SELECT 1 FROM bot_instances WHERE id=$1 AND owner_username=$2",[id,u.username]);if(!q.rowCount&&u.role!=="owner")return res.status(403).json({error:"صلاحية الإضافات مطلوبة"});const key=String(req.params.pluginKey).slice(0,80),enabled=req.body?.enabled!==false,config=req.body?.config&&typeof req.body.config==="object"?req.body.config:{};const x=await pool.query("SELECT linked_guild_id FROM bot_instances WHERE id=$1",[id]);const z=await pool.query("INSERT INTO bot_plugins(bot_id,guild_id,plugin_key,enabled,config) VALUES($1,$2,$3,$4,$5::jsonb) ON CONFLICT(bot_id,guild_id,plugin_key) DO UPDATE SET enabled=$4,config=$5::jsonb,updated_at=NOW() RETURNING *",[id,x.rows[0].linked_guild_id,key,enabled,JSON.stringify(config)]);res.json({plugin:z.rows[0]})});
-app.get("/api/profile",auth,async(req,res)=>{
- const q=await pool.query("SELECT username,discord_username,discord_user_id,role,points,bio,avatar_url,created_at,last_login_at FROM app_users WHERE username=$1",[me(req).username]);
- if(!q.rowCount)return res.status(404).json({error:"الحساب غير موجود"});
- const u=q.rows[0];res.json({user:{username:u.username,discordUsername:u.discord_username,discordUserId:u.discord_user_id,role:u.role,points:u.points||0,bio:u.bio||"",avatar:u.avatar_url||"",createdAt:u.created_at,lastLoginAt:u.last_login_at}});
-});
-app.patch("/api/profile",auth,async(req,res)=>{
- const bio=String(req.body?.bio||"").trim().slice(0,500),discordUsername=String(req.body?.discordUsername||"").trim().slice(0,100);
- let avatar=String(req.body?.avatar||"").trim().slice(0,1000);
- if(discordUsername){
-  const m=(await members()).find(x=>x.user.username.toLowerCase()===discordUsername.toLowerCase()||x.displayName.toLowerCase()===discordUsername.toLowerCase()||String(x.user.globalName||"").toLowerCase()===discordUsername.toLowerCase());
-  if(!m)return res.status(400).json({error:"اسم Discord غير موجود في السيرفر"});
-  avatar=(m.user.avatarURL({extension:"png",size:256,forceStatic:true})||m.user.displayAvatarURL({extension:"png",size:256,forceStatic:true}));
-  await pool.query("UPDATE app_users SET discord_username=$1,discord_user_id=$2,avatar_url=$3,bio=$4 WHERE username=$5",[m.user.username,m.id,avatar,bio,me(req).username]);
-  req.session.user.discordUsername=m.user.username;req.session.user.discordUserId=m.id;req.session.user.avatar=avatar; }else{
-  await pool.query("UPDATE app_users SET bio=$1,avatar_url=CASE WHEN $2='' THEN avatar_url ELSE $2 END WHERE username=$3",[bio,avatar,me(req).username]);
-  req.session.user.bio=bio;if(avatar)req.session.user.avatar=avatar;
- }
- res.json({ok:true,user:req.session.user});
-});
-app.get("/api/members/search",async(req,res)=>{const q=String(req.query.q||"").trim().toLowerCase();try{const a=(await members()).filter(m=>!q||[m.user.username,m.displayName,m.user.globalName||"",m.id].join(" ").toLowerCase().includes(q)).slice(0,30).map(memberJson);res.json({members:a})}catch(e){res.status(503).json({error:"تعذر تحميل الأعضاء"})}});
-app.get("/api/groups",async(req,res)=>{
- const q=await pool.query("SELECT g.*,COALESCE(json_agg(json_build_object('username',gm.username)) FILTER (WHERE gm.username IS NOT NULL),'[]') members FROM community_groups g LEFT JOIN group_members gm ON gm.group_id=g.id WHERE g.status='open' GROUP BY g.id ORDER BY g.id DESC LIMIT 100");
- res.json({groups:q.rows});
-});
-app.post("/api/groups",auth,async(req,res)=>{
- const name=String(req.body?.name||"").trim().slice(0,80),description=String(req.body?.description||"").trim().slice(0,1000),u=me(req).username;
- if(name.length<2)return res.status(400).json({error:"اسم القروب قصير"});
- const q=await pool.query("INSERT INTO community_groups(name,description,owner_username) VALUES($1,$2,$3) RETURNING *",[name,description,u]);
- await pool.query("INSERT INTO group_members(group_id,username) VALUES($1,$2)",[q.rows[0].id,u]);
- res.status(201).json({ok:true,group:q.rows[0]});
-});
-app.post("/api/groups/:id/join",auth,async(req,res)=>{
- const id=Number(req.params.id),u=me(req).username;
- const g=await pool.query("SELECT * FROM community_groups WHERE id=$1 AND status='open'",[id]);if(!g.rowCount)return res.status(404).json({error:"القروب غير موجود"});
- const already=await pool.query("SELECT 1 FROM group_members WHERE group_id=$1 AND username=$2",[id,u]);if(already.rowCount)return res.status(409).json({error:"أنت عضو بالفعل"});
- const q=await pool.query("INSERT INTO group_join_requests(group_id,username) VALUES($1,$2) ON CONFLICT DO NOTHING RETURNING *",[id,u]);if(!q.rowCount)return res.status(409).json({error:"لديك طلب سابق"});
- res.status(201).json({ok:true,request:q.rows[0],message:"تم إرسال طلب الانضمام"});
-});
-app.get("/api/groups/:id",async(req,res)=>{
- const q=await pool.query("SELECT g.*,COALESCE(json_agg(json_build_object('username',gm.username)) FILTER (WHERE gm.username IS NOT NULL),'[]') members FROM community_groups g LEFT JOIN group_members gm ON gm.group_id=g.id WHERE g.id=$1 GROUP BY g.id",[Number(req.params.id)]);
- if(!q.rowCount)return res.status(404).json({error:"القروب غير موجود"});res.json({group:q.rows[0]});
-});
-app.get("/api/chat/messages",async(req,res)=>{const q=await pool.query("SELECT id,username,discord_username,body,created_at FROM public_chat ORDER BY id DESC LIMIT 100");res.json({messages:q.rows.reverse()})});
-app.post("/api/chat/messages",auth,async(req,res)=>{const body=String(req.body?.body||"").trim().slice(0,2000);if(!body)return res.status(400).json({error:"اكتب الرسالة"});const u=me(req);const q=await pool.query("INSERT INTO public_chat(username,discord_username,body) VALUES($1,$2,$3) RETURNING *",[u.username,u.discordUsername,body]);await pool.query("UPDATE app_users SET points=points+1 WHERE username=$1",[u.username]);res.status(201).json({ok:true,message:q.rows[0]})});
-app.get("/api/private-messages",auth,async(req,res)=>{const u=me(req).username;const q=await pool.query("SELECT id,sender_username,recipient_username,body,created_at,read_at FROM private_messages WHERE sender_username=$1 OR recipient_username=$1 ORDER BY id DESC LIMIT 200",[u]);res.json({messages:q.rows})});
-app.post("/api/private-messages",auth,async(req,res)=>{const to=String(req.body?.recipient||"").trim(),body=String(req.body?.body||"").trim().slice(0,4000);if(!to||!body)return res.status(400).json({error:"حدد المستلم واكتب الرسالة"});const target=await findUserByName(to);if(!target)return res.status(404).json({error:"المستلم غير موجود"});if(target.username===me(req).username)return res.status(400).json({error:"لا يمكنك مراسلة نفسك"});const q=await pool.query("INSERT INTO private_messages(sender_username,recipient_username,body) VALUES($1,$2,$3) RETURNING *",[me(req).username,target.username,body]);res.status(201).json({ok:true,message:q.rows[0]})});
-app.post("/api/private-messages/:id/read",auth,async(req,res)=>{const q=await pool.query("UPDATE private_messages SET read_at=NOW() WHERE id=$1 AND recipient_username=$2 RETURNING id",[Number(req.params.id),me(req).username]);res.json({ok:Boolean(q.rowCount)})});
-app.get("/api/jokes",async(req,res)=>{const q=await pool.query("SELECT * FROM jokes ORDER BY id DESC LIMIT 100");res.json({items:q.rows})});
-app.post("/api/jokes",auth,async(req,res)=>{const body=String(req.body?.body||"").trim().slice(0,500);if(body.length<5)return res.status(400).json({error:"النكتة قصيرة"});const q=await pool.query("INSERT INTO jokes(username,body) VALUES($1,$2) RETURNING *",[me(req).username,body]);res.status(201).json({joke:q.rows[0]})});
-app.post("/api/jokes/:id/react",auth,async(req,res)=>{const type=req.body?.type==="dislike"?"dislike":"like",jid=Number(req.params.id),u=me(req).username;const old=await pool.query("SELECT type FROM joke_reactions WHERE joke_id=$1 AND username=$2",[jid,u]);if(old.rowCount&&old.rows[0].type===type)return res.json({ok:true});if(old.rowCount){await pool.query("UPDATE joke_reactions SET type=$3 WHERE joke_id=$1 AND username=$2",[jid,u,type]);await pool.query("UPDATE jokes SET likes=likes+CASE WHEN $1='like' THEN 1 ELSE -1 END,dislikes=dislikes+CASE WHEN $1='dislike' THEN 1 ELSE -1 END WHERE id=$2",[type,jid])}else{await pool.query("INSERT INTO joke_reactions(joke_id,username,type) VALUES($1,$2,$3)",[jid,u,type]);await pool.query("UPDATE jokes SET "+(type==="like"?"likes":"dislikes")+"="+(type==="like"?"likes":"dislikes")+"+1 WHERE id=$1",[jid])}res.json({ok:true})});
-app.get("/api/stories",async(req,res)=>{const q=await pool.query("SELECT * FROM stories ORDER BY id DESC LIMIT 50");res.json({items:q.rows})});
-app.post("/api/stories/generate",async(req,res)=>{const genres={مغامرة:["في ليلة هادئة وصل إشعار غريب إلى هاتفه.","قادته الإشارة إلى باب لم يره أحد من قبل.","خلف الباب وجد خريطة تقوده إلى مكان جديد."],غموض:["توقفت الساعة عند نفس الدقيقة كل ليلة.","وجد ورقة في جيبه بخط لا يعرفه.","في الموعد اكتشف أن الرسالة تعرف سره."],"رعب خفيف":["انطفأت الأنوار لحظة واحدة.","عندما عادت كان الكرسي قد تحرك.","ضحك، ثم سمع نفس الضحكة من غرفة فارغة."],كوميديا:["قرر أن يبدأ يومه بنشاط.","ضبط خمس منبهات ثم عاد للنوم.","استيقظ يسأل لماذا الحياة صعبة."],خيال:["وجد بابًا خلف مكتبة قديمة.","دخل مدينة معلقة فوق السحاب.","في أول بيت وجد ذكرى لم يعشها بعد."]};const genre=genres[req.body?.genre]||genres["مغامرة"],length=String(req.body?.length||"قصيرة"),n=length==="طويلة"?3:length==="متوسطة"?2:1,body=genre.slice(0,n).join(" ");const q=await pool.query("INSERT INTO stories(username,genre,length,body) VALUES($1,$2,$3,$4) RETURNING *",[me(req)?.username||"زائر",req.body?.genre||"مغامرة",length,body]);res.status(201).json({story:q.rows[0]})});
-app.get("/api/ratings",async(req,res)=>{const q=await pool.query("SELECT * FROM ratings ORDER BY id DESC LIMIT 100");res.json({items:q.rows})});
-app.post("/api/ratings",auth,async(req,res)=>{const value=Math.max(1,Math.min(5,Number(req.body?.value)||0)),body=String(req.body?.body||"").trim().slice(0,1000);if(!value)return res.status(400).json({error:"التقييم غير صالح"});const q=await pool.query("INSERT INTO ratings(username,value,body) VALUES($1,$2,$3) RETURNING *",[me(req).username,value,body]);res.status(201).json({rating:q.rows[0]})});
-app.post("/api/tickets",auth,async(req,res)=>{const subject=String(req.body?.subject||"").trim().slice(0,160),body=String(req.body?.body||"").trim().slice(0,4000);if(!subject||!body)return res.status(400).json({error:"اكتب عنوان التذكرة والرسالة"});const db=await pool.connect();try{await db.query("BEGIN");const t=await db.query("INSERT INTO tickets(username,subject) VALUES($1,$2) RETURNING *",[me(req).username,subject]);await db.query("INSERT INTO ticket_messages(ticket_id,username,body) VALUES($1,$2,$3)",[t.rows[0].id,me(req).username,body]);await db.query("COMMIT");res.status(201).json({ticket:t.rows[0]})}catch(e){await db.query("ROLLBACK");res.status(500).json({error:"تعذر إنشاء التذكرة"})}finally{db.release()}});
-app.get("/api/tickets",auth,async(req,res)=>{const q=await pool.query("SELECT * FROM tickets WHERE username=$1 ORDER BY id DESC",[me(req).username]);res.json({items:q.rows})});
-app.get("/api/tickets/:id",auth,async(req,res)=>{const q=await pool.query("SELECT * FROM tickets WHERE id=$1 AND username=$2",[Number(req.params.id),me(req).username]);if(!q.rowCount)return res.status(404).json({error:"التذكرة غير موجودة"});const m=await pool.query("SELECT * FROM ticket_messages WHERE ticket_id=$1 ORDER BY id",[Number(req.params.id)]);res.json({ticket:q.rows[0],messages:m.rows})});
-app.post("/api/applications",async(req,res)=>{const discordUsername=String(req.body?.discordUsername||"").trim().slice(0,100),body=String(req.body?.body||"").trim().slice(0,4000),type=String(req.body?.type||"staff").slice(0,40);if(!discordUsername||!body)return res.status(400).json({error:"اكتب اسم Discord وتفاصيل التقديم"});const q=await pool.query("INSERT INTO applications(username,discord_username,type,body) VALUES($1,$2,$3,$4) RETURNING *",[me(req)?.username||null,discordUsername,type,body]);res.status(201).json({application:q.rows[0]})});
-app.get("/api/anonymous",auth,async(req,res)=>{const q=await pool.query("SELECT id,title,body,reveal_sender,sender_username,created_at FROM anonymous_messages WHERE recipient_username=$1 ORDER BY id DESC LIMIT 100",[me(req).username]);res.json({items:q.rows.map(x=>({...x,sender:x.reveal_sender?x.sender_username:null,mention:x.reveal_sender&&x.sender_username?("@"+x.sender_username):null}))})});
-app.post("/api/anonymous",auth,async(req,res)=>{const recipient=String(req.body?.recipient||"").trim(),title=String(req.body?.title||"").trim().slice(0,160),body=String(req.body?.body||"").trim().slice(0,4000),reveal=Boolean(req.body?.revealSender);if(!recipient||!title||!body)return res.status(400).json({error:"حدد المستلم والعنوان واكتب الرسالة"});const target=await findUserByName(recipient);if(!target)return res.status(404).json({error:"المستلم غير موجود"});if(target.username===me(req)?.username)return res.status(400).json({error:"لا ترسل لنفسك"});const q=await pool.query("INSERT INTO anonymous_messages(recipient_username,title,body,reveal_sender,sender_username) VALUES($1,$2,$3,$4,$5) RETURNING id,title,body,reveal_sender,created_at",[target.username,title,body,reveal,me(req).username]);res.status(201).json({ok:true,message:q.rows[0]})});
-app.get("/api/account",auth,async(req,res)=>{const q=await pool.query("SELECT username,discord_username,discord_user_id,role,banned,points,bio,avatar_url,created_at,last_login_at FROM app_users WHERE username=$1",[me(req).username]);if(!q.rowCount)return res.status(404).json({error:"الحساب غير موجود"});res.json({user:q.rows[0]})});
-app.patch("/api/account/password",auth,async(req,res)=>{const old=String(req.body?.oldPassword||""),next=String(req.body?.newPassword||"");if(next.length<6)return res.status(400).json({error:"كلمة المرور الجديدة 6 أحرف على الأقل"});const q=await pool.query("SELECT id,password_hash FROM app_users WHERE username=$1",[me(req).username]);if(!q.rowCount||!await bcrypt.compare(old,q.rows[0].password_hash))return res.status(400).json({error:"كلمة المرور الحالية غير صحيحة"});await pool.query("UPDATE app_users SET password_hash=$1 WHERE id=$2",[await bcrypt.hash(next,12),q.rows[0].id]);res.json({ok:true})});
-app.get("/api/admin/tickets",owner,async(req,res)=>{const q=await pool.query("SELECT * FROM tickets ORDER BY id DESC LIMIT 200");res.json({items:q.rows})});
-app.post("/api/admin/tickets/:id/reply",owner,async(req,res)=>{const body=String(req.body?.body||"").trim().slice(0,4000);if(!body)return res.status(400).json({error:"اكتب الرد"});await pool.query("INSERT INTO ticket_messages(ticket_id,username,body) VALUES($1,$2,$3)",[Number(req.params.id),me(req).username,body]);await pool.query("UPDATE tickets SET updated_at=NOW() WHERE id=$1",[Number(req.params.id)]);res.json({ok:true})});
-app.post("/api/admin/tickets/:id/close",owner,async(req,res)=>{await pool.query("UPDATE tickets SET status='closed',updated_at=NOW() WHERE id=$1",[Number(req.params.id)]);res.json({ok:true})});
-app.get("/api/admin/applications",owner,async(req,res)=>{const q=await pool.query("SELECT * FROM applications ORDER BY id DESC LIMIT 200");res.json({items:q.rows})});
-app.post("/api/admin/applications/:id/decision",owner,async(req,res)=>{const status=req.body?.status==="accepted"?"accepted":"rejected";const note=String(req.body?.note||"").slice(0,1000);await pool.query("UPDATE applications SET status=$2,decision_note=$3,updated_at=NOW() WHERE id=$1",[Number(req.params.id),status,note]);res.json({ok:true})});
-app.get("/api/admin/groups",owner,async(req,res)=>{const q=await pool.query("SELECT * FROM community_groups ORDER BY id DESC LIMIT 200");res.json({groups:q.rows})});
-app.get("/api/admin/logs",owner,async(req,res)=>{const [a,b]=await Promise.all([pool.query("SELECT id,created_at,username,'chat' AS action,body AS details FROM public_chat ORDER BY id DESC LIMIT 200"),pool.query("SELECT id,created_at,username,event_type AS action,details FROM bot_logs ORDER BY id DESC LIMIT 500")]);const items=[...a.rows,...b.rows].sort((x,y)=>new Date(y.created_at)-new Date(x.created_at)).slice(0,500);res.json({items})});
-app.get("/api/admin/groups/:id/requests",owner,async(req,res)=>{const q=await pool.query("SELECT * FROM group_join_requests WHERE group_id=$1 AND status='pending' ORDER BY id",[Number(req.params.id)]);res.json({items:q.rows})});
-app.post("/api/admin/groups/:id/requests/:requestId",owner,async(req,res)=>{const status=req.body?.status==="accepted"?"accepted":"rejected",db=await pool.connect();try{await db.query("BEGIN");const q=await db.query("SELECT * FROM group_join_requests WHERE id=$1 AND group_id=$2 AND status='pending' FOR UPDATE",[Number(req.params.requestId),Number(req.params.id)]);if(!q.rowCount)throw Error("الطلب غير موجود");const r=q.rows[0];if(status==="accepted")await db.query("INSERT INTO group_members(group_id,username) VALUES($1,$2) ON CONFLICT DO NOTHING",[r.group_id,r.username]);await db.query("UPDATE group_join_requests SET status=$2 WHERE id=$1",[r.id,status]);await db.query("COMMIT");res.json({ok:true,status})}catch(e){await db.query("ROLLBACK");res.status(400).json({error:e.message})}finally{db.release()}});
+app.get("/api/public/top", async (req, res) => {
+  try {
+    const members = (await getAllMembers(await getGuild())).map(memberJson);
+    const top = (key) => [...members]
+      .sort((a, b) => (b.stats[key] || 0) - (a.stats[key] || 0))
+      .slice(0, 10);
 
-app.use((req,res,next)=>req.path.startsWith("/api/")?res.status(404).json({error:"المسار غير موجود"}):next());
-app.get("*",(req,res)=>res.sendFile(path.join(__dirname,"public","index.html")));
-(async()=>{try{await init();await ensureOwner();await client.login(token);client.once("ready",async()=>{console.log("MLD Discord ready:",client.user.tag);await loadManagedBots()});app.listen(port,()=>console.log("MLD rebuilt server listening on",port))}catch(e){console.error("BOOT FAILED",e);process.exit(1)}})();
+    res.json({
+      messages: top("messages"),
+      mentions: top("mentionsReceived"),
+      voice: top("voiceMinutes"),
+      joins: top("voiceJoins"),
+      updatedAt: memberSnapshotAt
+    });
+  } catch (error) {
+    console.error("Top endpoint:", error);
+    res.status(503).json({ error: "Top is temporarily unavailable" });
+  }
+});
+
+app.get("/api/public/member/:id", async (req, res) => {
+  try {
+    const guild = await getGuild();
+    const member = await guild.members.fetch(req.params.id).catch(() => null);
+
+    if (!member) return res.status(404).json({ error: "Member not found" });
+
+    const highest = member.roles.cache
+      .filter((role) => role.id !== guild.id && !role.managed)
+      .sort((a, b) => b.position - a.position)
+      .first();
+
+    res.json({
+      ...memberJson(member),
+      highestRole: highest ? roleJson(highest) : null,
+      permissions: highest ? importantPermissions(highest.permissions) : [],
+      upcomingRoles: guild.roles.cache
+        .filter((role) => role.position > (highest?.position || 0) && !role.managed)
+        .sort((a, b) => a.position - b.position)
+        .first(8)
+        .map((role) => roleJson(role))
+    });
+  } catch (error) {
+    console.error("Member endpoint:", error);
+    res.status(404).json({ error: "Member not found" });
+  }
+});
+
+app.post("/api/public/message", async (req, res) => {
+  const now = Date.now();
+  const ip = req.ip || "unknown";
+  const last = sendHits.get(ip) || 0;
+
+  if (now - last < 10_000) {
+    return res.status(429).json({ error: "انتظر 10 ثواني قبل الإرسال مرة أخرى" });
+  }
+
+  const title = String(req.body?.title || "رسالة من إدارة MLD").trim();
+  const text = String(req.body?.message || "").trim();
+  const targetId = String(req.body?.memberId || "").trim();
+
+  if (!targetId || !text || text.length > 2000 || title.length > 120) {
+    return res.status(400).json({ error: "بيانات الرسالة غير صحيحة" });
+  }
+
+  try {
+    const member = await (await getGuild()).members.fetch(targetId).catch(() => null);
+    if (!member) return res.status(404).json({ error: "العضو غير موجود" });
+
+    const embed = new EmbedBuilder()
+      .setTitle(title)
+      .setDescription(text)
+      .setColor("#ff9cdc")
+      .setFooter({ text: "MLD Community" })
+      .setTimestamp();
+
+    await member.send({ embeds: [embed] });
+    sendHits.set(ip, now);
+    res.json({ ok: true });
+  } catch (error) {
+    console.error("DM endpoint:", error);
+    res.status(500).json({ error: "تعذر الإرسال؛ قد يكون الخاص مقفلًا" });
+  }
+});
+
+client.on("guildMemberAdd", invalidateMemberSnapshot);
+client.on("guildMemberRemove", invalidateMemberSnapshot);
+client.on("guildMemberUpdate", invalidateMemberSnapshot);
+
+client.on("messageCreate", (message) => {
+  if (message.author.bot) return;
+
+  const sender = getActivity(message.author.id);
+  sender.messages += 1;
+  sender.chatRounds += 1;
+
+  for (const id of message.mentions.users.keys()) {
+    getActivity(id).mentionsReceived += 1;
+    sender.mentionsSent += 1;
+  }
+});
+
+client.on("voiceStateUpdate", (oldState, newState) => {
+  const id = newState.id;
+
+  if (!oldState.channelId && newState.channelId) {
+    voiceSessions.set(id, Date.now());
+    getActivity(id).voiceJoins += 1;
+  }
+
+  if (oldState.channelId && !newState.channelId && voiceSessions.has(id)) {
+    getActivity(id).voiceMinutes += Math.round(
+      (Date.now() - voiceSessions.get(id)) / 60000
+    );
+    voiceSessions.delete(id);
+  }
+});
+
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
+app.listen(port, () => console.log(`MLD listening on port ${port}`));
+client.once("ready", () => console.log(`Logged in as ${client.user.tag}`));
+client.login(token).catch((error) => {
+  console.error("Discord login failed:", error.message);
+  process.exit(1);
+});
