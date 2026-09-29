@@ -59,7 +59,7 @@ async function renderGames(){
     const list=$("#games-session-list"); if(!list)return;
     if(!sessions.length){list.innerHTML="<div class='games-empty'>🎮 ما فيه جلسات مفتوحة الآن — كن أول واحد ينشئ جلسة.</div>";return}
     list.innerHTML=sessions.map(s=>{const g=gameMap[s.game_id]||{icon:"🎮",name:s.game_name,max:s.max_players};const own=mldUser&&s.owner_username===mldUser.username;return `<article class="game-session-row"><span class="game-session-icon">${g.icon}</span><div class="game-session-main"><b>${esc(s.game_name)}</b><small>بواسطة @${esc(s.owner_username)} · ${num(s.players)}/${num(s.max_players)} لاعبين · ${num(s.spectators)} مشاهد</small></div><code>${esc(s.code)}</code><div class="game-session-actions"><button class="primary game-join" data-code="${esc(s.code)}">${own?"🎮 افتح":"انضم"}</button><button class="ghost game-watch" data-code="${esc(s.code)}">👁 مشاهدة</button></div></article>`}).join("");
-    list.querySelectorAll(".game-join").forEach(btn=>btn.onclick=async()=>{const code=btn.dataset.code;const s=sessions.find(x=>x.code===code);if(s){if(!(mldUser&&s.owner_username===mldUser.username)){const r=await fetch("/api/games/sessions/"+encodeURIComponent(code)+"/join",{method:"POST"});if(!r.ok){const d=await r.json().catch(()=>({}));return alert(d.error||"تعذر الانضمام")} } openReadyGame("https://mld-gamenest-production.up.railway.app/");}});
+    list.querySelectorAll(".game-join").forEach(btn=>btn.onclick=async()=>{const code=btn.dataset.code;const s=sessions.find(x=>x.code===code);if(s){if(!(mldUser&&s.owner_username===mldUser.username)){const r=await fetch("/api/games/sessions/"+encodeURIComponent(code)+"/join",{method:"POST"});if(!r.ok){const d=await r.json().catch(()=>({}));return alert(d.error||"تعذر الانضمام")} } openReadyGame("https://mld-gamenest-production.up.railway.app/",s?.game_id||"");}});
     list.querySelectorAll(".game-watch").forEach(btn=>btn.onclick=()=>openReadyGame("https://mld-gamenest-production.up.railway.app/"));
   };
   document.querySelectorAll("[data-game-choice]").forEach(x=>x.onclick=()=>{selected=x.dataset.game;document.querySelectorAll("[data-game-choice]").forEach(y=>y.classList.toggle("selected",y.dataset.game===selected));});
@@ -279,7 +279,7 @@ async function homeView(){
 function openReadyGame(url,gameId){
   const u=new URL(url||"https://mld-gamenest-production.up.railway.app/");
   u.searchParams.set("lang","en");
-  if(gameId)u.searchParams.set("game",gameId);
+  gameId=gameId||document.querySelector(".game-choice.selected")?.dataset.game||""; if(gameId)u.searchParams.set("game",gameId);
   const wrap=document.createElement("div");
   wrap.className="mld-game-modal";
   wrap.innerHTML="<div class='mld-game-modal-card'><div class='mld-game-modal-head'><div><b>🎮 ملاذ ألعاب</b><small>واجهة الألعاب داخل ملاذ</small></div><button type='button' class='mld-game-modal-close' aria-label='إغلاق'>×</button></div><iframe class='mld-game-modal-frame' title='MLD Game' allow='autoplay; fullscreen' src='"+esc(u.toString())+"'></iframe></div>";
