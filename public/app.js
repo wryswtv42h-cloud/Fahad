@@ -31,7 +31,19 @@ function menu(){
  $("#menu").innerHTML=g.map(x=>'<div class="folder"><button class="folder-head" type="button">'+esc(x[0])+' <span>⌄</span></button><div class="folder-items">'+x[1].map(y=>'<button type="button" data-view="'+y[1]+'">'+esc(y[0])+"</button>").join("")+"</div></div>").join("");
 }
 async function stats(){
- try{const d=await api("/api/site/stats");$("#membersStat").textContent=Number(d.memberCount||0).toLocaleString("ar-SA");$("#onlineStat").textContent=Number(d.online||0).toLocaleString("ar-SA");$("#visitsStat").textContent=Number(d.visits||0).toLocaleString("ar-SA");$("#discordStat").textContent="متصل"}catch{$("#discordStat").textContent="غير متاح"}
+ try{
+  const [d,s]=await Promise.all([api("/api/site/stats"),api("/api/public/server").catch(()=>({}))]);
+  const memberCount=Number(d.memberCount||s.memberCount||0);
+  const online=Number(d.online||0);
+  const visits=Number(d.visits||0);
+  $("#membersStat").textContent=memberCount.toLocaleString("ar-SA");
+  $("#onlineStat").textContent=online.toLocaleString("ar-SA");
+  $("#visitsStat").textContent=visits.toLocaleString("ar-SA");
+  $("#discordStat").textContent=s.name?"متصل":"متصل";
+  $("#heroSubtitle").textContent=s.name?("مجتمع "+s.name+" — متصل مباشرة ببيانات السيرفر."): "مجتمع متكامل بتجربة عربية سلسة، مرتبط مباشرة ببيانات السيرفر.";
+ }catch(e){
+  $("#membersStat").textContent="0";$("#onlineStat").textContent="0";$("#visitsStat").textContent="0";$("#discordStat").textContent="غير متاح";
+ }
 }
 function home(){
  $("#status").textContent=me?"مرحبًا "+me.username:"النظام يعمل";
@@ -196,12 +208,20 @@ async function render(v){
 }
 async function boot(){
  try{const d=await api("/api/auth/me");me=d.user||null}catch{me=null}
- menu();await render(location.hash.slice(1)||"home");await stats();api("/api/site/visit",{method:"POST"}).catch(()=>{});setInterval(stats,15000);
+ menu();await render(location.hash.slice(1)||"home");await stats();
+api("/api/site/visit",{method:"POST"}).then(()=>stats()).catch(()=>{});
+setInterval(stats,15000);
 }
 document.addEventListener("click",e=>{
  const f=e.target.closest(".folder-head");if(f){f.parentElement.classList.toggle("open");return}
  const b=e.target.closest("[data-view]");if(b){const v=b.dataset.view;$("#drawer").classList.remove("open");history.replaceState(null,"","#"+v);render(v);return}
 });
-$("#menuBtn").onclick=()=>$("#drawer").classList.toggle("open");
+const menuBtn=$("#menuBtn"),drawer=$("#drawer");
+if(menuBtn&&drawer){
+ menuBtn.addEventListener("click",e=>{e.preventDefault();e.stopPropagation();drawer.classList.toggle("open");drawer.setAttribute("aria-hidden",String(!drawer.classList.contains("open")))});
+}
+document.addEventListener("click",e=>{
+ if(drawer&&drawer.classList.contains("open")&&!drawer.contains(e.target)&&!menuBtn?.contains(e.target)){drawer.classList.remove("open");drawer.setAttribute("aria-hidden","true")}
+});
 window.addEventListener("hashchange",()=>render(location.hash.slice(1)||"home"));
 boot();
