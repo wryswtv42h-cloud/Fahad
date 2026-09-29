@@ -15,13 +15,38 @@
   function accountView(){
     var html;
     if(account){
-      html="<div class='platform-head'><div><span class='eyebrow'>MLD ACCOUNT</span><h2>حسابك جاهز</h2><p class='muted'>صلاحيتك الحالية محفوظة على حسابك.</p></div><div class='account-card'><div>"+badge()+"</div><h3>@"+esc(account.username)+"</h3><p>Discord ID: "+esc(account.discordId)+"</p><button class='primary' id='logout'>تسجيل خروج</button></div></div>";
+      html="<div class='platform-head'><div><span class='eyebrow'>MLD ACCOUNT</span><h2>حسابك جاهز</h2><p class='muted'>حسابك مرتبط بـ Discord ولا يمكن إنشاء حساب ثانٍ لنفس Discord.</p></div><div class='account-card'><div>"+badge()+"</div><h3>@"+esc(account.username)+"</h3><p>Discord: "+esc(account.discordId||"غير مربوط")+"</p><button class='primary' id='logout'>تسجيل خروج</button></div></div>";
     }else{
-      html="<div class='account-card narrow'><span class='eyebrow'>MLD ACCOUNT</span><h2>إنشاء حساب MLD</h2><input id='acc-user' class='full' placeholder='اسم المستخدم'><input id='acc-discord' class='full' placeholder='Discord ID'><input id='acc-pass' class='full' type='password' placeholder='كلمة المرور (6 أحرف+)'><button class='primary wide' id='create-account'>إنشاء الحساب الآن</button><p class='muted small'>للاختبار: Discord ID = w4px يمنح الحساب OWNER مباشرة.</p><button class='platform-link' id='show-login'>عندي حساب — تسجيل الدخول</button></div>";
+      html="<div class='account-card narrow'><span class='eyebrow'>MLD ACCOUNT</span><h2>إنشاء حساب MLD</h2><p class='muted'>لازم تكون عضوًا في سيرفر ملاذ. اختر حسابك من اقتراحات Discord؛ لن يتم إنشاء الحساب إلا بعد تأكيد الرسالة التي تصلك في الخاص.</p><label>يوزر Discord</label><input id='acc-discord-search' class='full' placeholder='اكتب اليوزر للبحث...' autocomplete='off'><div id='discord-suggestions' class='recipient-results'></div><input id='acc-user' class='full' placeholder='اسم المستخدم في الموقع (a-z, 0-9, _)'><input id='acc-pass' class='full' type='password' placeholder='كلمة المرور (6 أحرف+)'><p id='acc-selected' class='muted small'>لم يتم اختيار عضو Discord بعد.</p><button class='primary wide' id='create-account'>إرسال طلب إنشاء الحساب</button><div id='acc-pending' class='account-card hidden'></div><button class='platform-link' id='show-login'>عندي حساب — تسجيل الدخول</button></div>";
     }
     show("الحساب",html);
     var create=$("#create-account");
-    if(create)create.onclick=function(){create.disabled=true;api("/api/platform/accounts",{method:"POST",body:JSON.stringify({username:$("#acc-user").value,discordId:$("#acc-discord").value,password:$("#acc-pass").value})}).then(function(d){token=d.token;account=d.account;localStorage.setItem("mld_token",token);accountView()}).catch(function(e){alert(e.message)}).finally(function(){create.disabled=false})};
+    var selectedDiscord=null;
+    var search=$("#acc-discord-search");
+    var timer;
+    function renderSuggestions(list){
+      var box=$("#discord-suggestions");
+      box.innerHTML=(list||[]).slice(0,8).map(function(m){return "<button class='recipient' data-discord-id='"+esc(m.id)+"' data-discord-name='"+esc(m.displayName||m.globalName||m.username)+"'><img src='"+esc(m.avatar||"/logo.svg.JPG")+"'><span>"+esc(m.displayName||m.globalName||m.username)+"<small>@"+esc(m.username)+"</small></span></button>"}).join("");
+      box.querySelectorAll("[data-discord-id]").forEach(function(b){b.onclick=function(){selectedDiscord={id:b.dataset.discordId,name:b.dataset.discordName};search.value="@"+b.dataset.discordName;box.innerHTML="<b class='selected'>تم اختيار @"+esc(b.dataset.discordName)+" ✓</b>";$("#acc-selected").textContent="Discord ID: "+selectedDiscord.id;};});
+    }
+    if(search)search.oninput=function(){clearTimeout(timer);var q=search.value.trim();selectedDiscord=null;$("#acc-selected").textContent="جاري البحث...";if(q.length<2){$("#discord-suggestions").innerHTML="";$("#acc-selected").textContent="اكتب حرفين على الأقل للبحث";return;}timer=setTimeout(function(){api("/api/platform/account/discord-members?q="+encodeURIComponent(q)).then(function(d){renderSuggestions(d.members);$("#acc-selected").textContent=d.members.length?"اختر حسابك من القائمة":"لا يوجد عضو مطابق داخل السيرفر";}).catch(function(e){$("#acc-selected").textContent=e.message;});},250);};
+    if(create)create.onclick=function(){
+      if(!selectedDiscord){alert("اختر حساب Discord من الاقتراحات أولًا");return;}
+      create.disabled=true;create.textContent="جاري إرسال رسالة التأكيد...";
+      api("/api/platform/accounts",{method:"POST",body:JSON.stringify({username:$("#acc-user").value,discordId:selectedDiscord.id,password:$("#acc-pass").value})}).then(function(d){
+        $("#acc-pending").className="account-card";$("#acc-pending").innerHTML="<b>📩 تم إرسال رسالة تأكيد إلى Discord</b><p class='muted'>افتح الخاص في Discord واضغط <b>نعم</b> إذا أنت من أنشأ الحساب، أو <b>لا</b> لإلغاء العملية.</p><p id='pending-status' class='muted'>بانتظار تأكيدك...</p>";
+        create.textContent="بانتظار تأكيد Discord...";
+        var attempts=0;
+        var poll=setInterval(function(){
+          attempts++;
+          api("/api/platform/accounts/pending/"+encodeURIComponent(d.pendingId)+"?token="+encodeURIComponent(d.browserToken)).then(function(v){
+            if(v.status==="confirmed"){clearInterval(poll);token=v.token;account=v.account;localStorage.setItem("mld_token",token);accountView();}
+            else if(v.status==="cancelled"||attempts>=60){clearInterval(poll);if(attempts>=60)$("#pending-status").textContent="انتهت مهلة التأكيد. اضغط إنشاء الحساب للمحاولة من جديد.";create.disabled=false;create.textContent="إرسال طلب إنشاء الحساب";}
+          }).catch(function(){});
+          if(attempts>=60)clearInterval(poll);
+        },5000);
+      }).catch(function(e){alert(e.message);create.disabled=false;create.textContent="إرسال طلب إنشاء الحساب";});
+    };
     var login=$("#show-login");if(login)login.onclick=loginView;
     var logout=$("#logout");if(logout)logout.onclick=function(){api("/api/platform/logout",{method:"POST"}).catch(function(){}).finally(function(){token="";account=null;localStorage.removeItem("mld_token");accountView()})};
   }

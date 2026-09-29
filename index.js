@@ -6,7 +6,7 @@ const fs = require("fs");
 const crypto = require("crypto");
 const express = require("express");
 const cors = require("cors");
-const { Client, GatewayIntentBits, EmbedBuilder } = require("discord.js");
+const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
 
 const token = process.env.DISCORD_BOT_TOKEN;
 const guildId = process.env.DISCORD_GUILD_ID;
@@ -462,6 +462,51 @@ client.on("messageCreate", (message) => {
   }
 });
 
+client.on("interactionCreate", async (interaction) => {
+  if (!interaction.isButton()) return;
+  const customId = String(interaction.customId || "");
+  if (!customId.startsWith("mld_account_")) return;
+  const parts = customId.split(":");
+  const action = parts[0];
+  const pendingId = parts[1];
+  const pending = (platform.pendingAccounts || []).find(p => p.id === pendingId);
+  if (!pending || pending.status !== "pending" || Date.parse(pending.expiresAt) <= Date.now()) {
+    return interaction.reply({ content: "انتهت صلاحية طلب إنشاء الحساب. ارجع للموقع وحاول مرة أخرى.", ephemeral: true }).catch(() => {});
+  }
+  if (interaction.user.id !== pending.discordId) {
+    return interaction.reply({ content: "هذا التأكيد مخصص لصاحب حساب Discord الذي طلب إنشاء الحساب.", ephemeral: true }).catch(() => {});
+  }
+  if (action === "mld_account_no") {
+    pending.status = "cancelled";
+    pending.cancelledAt = new Date().toISOString();
+    savePlatform();
+    logPlatform("account_confirmation_cancelled", null, pending.username + ":" + pending.discordId);
+    return interaction.update({ content: "❌ تم إلغاء إنشاء الحساب. لم يتم إنشاء أي حساب.", components: [] }).catch(() => {});
+  }
+  if (action === "mld_account_yes") {
+    if (platform.accounts.some(a => String(a.discordId) === String(pending.discordId))) {
+      pending.status = "cancelled";
+      savePlatform();
+      return interaction.update({ content: "⚠️ هذا Discord مرتبط بحساب موجود بالفعل.", components: [] }).catch(() => {});
+    }
+    const account = {
+      id: crypto.randomUUID(),
+      username: pending.username,
+      discordId: pending.discordId,
+      role: pending.role,
+      passwordHash: pending.passwordHash,
+      salt: pending.salt,
+      createdAt: new Date().toISOString()
+    };
+    platform.accounts.push(account);
+    pending.status = "confirmed";
+    pending.accountId = account.id;
+    pending.confirmedAt = new Date().toISOString();
+    savePlatform();
+    logPlatform("account_created", account.id, account.role === "owner" ? "owner account" : "member account");
+    return interaction.update({ content: "✅ تم إنشاء حساب **@" + account.username + "** في ملاذ بنجاح. يمكنك الآن الدخول للموقع.", components: [] }).catch(() => {});
+  }
+});
 client.on("voiceStateUpdate", (oldState, newState) => {
   const id = newState.id;
 
@@ -487,6 +532,7 @@ const platformDir = path.join(__dirname, "data");
 const platformFile = path.join(platformDir, "platform.json");
 const OWNER_DISCORD_ID = String(process.env.OWNER_DISCORD_ID || "w4px").trim().toLowerCase();
 const sessions = new Map();
+const pendingAccountConfirmations = new Map();
 
 function loadPlatform() {
   try {
@@ -501,7 +547,8 @@ function loadPlatform() {
       accounts: Array.isArray(data.accounts) ? data.accounts : [],
       groups: Array.isArray(data.groups) ? data.groups : [],
       lobbies: Array.isArray(data.lobbies) ? data.lobbies : [],
-      logs: Array.isArray(data.logs) ? data.logs : []
+      logs: Array.isArray(data.logs) ? data.logs : [],
+      pendingAccounts: Array.isArray(data.pendingAccounts) ? data.pendingAccounts : []
     };
   } catch (error) {
     console.error("Platform storage read:", error);
@@ -575,27 +622,92 @@ app.get("/api/platform/games", (req, res) => {
   });
 });
 
-app.post("/api/platform/accounts", (req, res) => {
+app.get("/api/platform/account/discord-members", async (req, res) => {
+  try {
+    const q = String(req.query.q || "").trim().toLocaleLowerCase("ar");
+    if (q.length < 2) return res.json({ members: [] });
+    const members = await getAllMembers(await getGuild());
+    const clean = q.replace(/^@/, "");
+    const result = members.filter(m => {
+      const hay = [m.user.username, m.user.globalName, m.displayName, m.user.tag, m.id].filter(Boolean).join(" ").toLocaleLowerCase("ar");
+      return hay.includes(clean);
+    }).slice(0, 12).map(m => ({
+      id: m.id,
+      username: m.user.username,
+      globalName: m.user.globalName,
+      displayName: m.displayName,
+      avatar: m.user.displayAvatarURL({ extension: "png", size: 128 })
+    }));
+    res.json({ members: result });
+  } catch (e) {
+    console.error("Account Discord member search:", e);
+    res.status(503).json({ error: "تعذر جلب أعضاء Discord مؤقتًا" });
+  }
+});
+
+app.post("/api/platform/accounts", async (req, res) => {
   const username = String(req.body?.username || "").trim().toLowerCase();
   const discordId = String(req.body?.discordId || "").trim();
   const password = String(req.body?.password || "");
   if (!/^[a-z0-9_]{3,24}$/.test(username)) return res.status(400).json({ error: "اليوزر يجب أن يكون 3-24 حرفًا إنجليزيًا أو _" });
   if (password.length < 6) return res.status(400).json({ error: "كلمة المرور 6 أحرف على الأقل" });
-  if (!discordId) return res.status(400).json({ error: "أدخل Discord ID" });
+  if (!/^\d{15,22}$/.test(discordId)) return res.status(400).json({ error: "اختر عضوًا صحيحًا من السيرفر" });
   if (platform.accounts.some(a => a.username === username)) return res.status(409).json({ error: "اليوزر مستخدم بالفعل" });
+  if (platform.accounts.some(a => String(a.discordId) === discordId)) return res.status(409).json({ error: "هذا Discord مربوط بحساب موجود بالفعل" });
+  if (platform.pendingAccounts?.some(a => a.username === username || String(a.discordId) === discordId)) return res.status(409).json({ error: "لديك طلب إنشاء حساب بانتظار التأكيد" });
+
+  const guild = await getGuild();
+  const member = await guild.members.fetch(discordId).catch(() => null);
+  if (!member) return res.status(404).json({ error: "لازم تكون موجودًا في سيرفر ملاذ لإنشاء الحساب" });
 
   const owner = discordId.toLowerCase() === OWNER_DISCORD_ID;
   const pass = hashPassword(password);
-  const account = {
-    id: crypto.randomUUID(), username, discordId,
-    role: owner ? "owner" : "member", passwordHash: pass.hash, salt: pass.salt,
-    createdAt: new Date().toISOString()
+  const pendingId = crypto.randomUUID();
+  const browserToken = crypto.randomBytes(32).toString("hex");
+  const pending = {
+    id: pendingId, browserToken, username, discordId,
+    role: owner ? "owner" : "member",
+    passwordHash: pass.hash, salt: pass.salt,
+    createdAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+    status: "pending"
   };
-  platform.accounts.push(account);
-  const token = crypto.randomBytes(32).toString("hex");
-  sessions.set(token, account.id);
-  logPlatform("account_created", account.id, owner ? "owner account" : "member account");
-  res.status(201).json({ token, account: safeAccount(account), owner });
+  platform.pendingAccounts = platform.pendingAccounts || [];
+  platform.pendingAccounts.push(pending);
+  platform.pendingAccounts = platform.pendingAccounts.filter(p => p.status === "pending" && Date.parse(p.expiresAt) > Date.now());
+  savePlatform();
+
+  try {
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId("mld_account_yes:" + pendingId).setLabel("نعم، إنشاء الحساب").setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId("mld_account_no:" + pendingId).setLabel("لا، إلغاء").setStyle(ButtonStyle.Danger)
+    );
+    await member.send({
+      content: "🔐 **تأكيد إنشاء حساب ملاذ**\\n\\nتم طلب إنشاء حساب باسم **@" + username + "** المرتبط بحساب Discord الخاص بك.\\nهل أنت من أنشأ هذا الحساب؟",
+      components: [row]
+    });
+    logPlatform("account_confirmation_sent", null, username + ":" + discordId);
+    res.status(202).json({ pending: true, pendingId, browserToken, expiresAt: pending.expiresAt, message: "تم إرسال رسالة تأكيد إلى الخاص في Discord" });
+  } catch (e) {
+    platform.pendingAccounts = platform.pendingAccounts.filter(p => p.id !== pendingId);
+    savePlatform();
+    res.status(400).json({ error: "تعذر إرسال رسالة التأكيد إلى الخاص. افتح رسائل Discord الخاصة ثم حاول مرة أخرى." });
+  }
+});
+
+app.get("/api/platform/accounts/pending/:id", (req, res) => {
+  const p = (platform.pendingAccounts || []).find(x => x.id === req.params.id && x.browserToken === String(req.query.token || ""));
+  if (!p) return res.status(404).json({ error: "طلب إنشاء الحساب غير موجود أو انتهت صلاحيته" });
+  if (p.status === "confirmed" && p.accountId) {
+    const account = platform.accounts.find(a => a.id === p.accountId);
+    if (!account) return res.status(404).json({ error: "الحساب غير موجود" });
+    const token = crypto.randomBytes(32).toString("hex");
+    sessions.set(token, account.id);
+    p.status = "completed";
+    savePlatform();
+    return res.json({ status: "confirmed", token, account: safeAccount(account), owner: account.role === "owner" });
+  }
+  res.json({ status: p.status, expiresAt: p.expiresAt });
 });
 
 app.post("/api/platform/login", (req, res) => {
