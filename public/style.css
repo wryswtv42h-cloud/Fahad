@@ -597,3 +597,25 @@ select.full option{background:#130c1b;color:#fff8ff}
   .mobile-menu-folder-head{min-height:56px!important}
   .mobile-menu-item{min-height:44px!important}
 }
+
+/* MLD native game tables + emoji-free folders */
+.mobile-menu-folder-body{display:block!important;max-height:0;overflow:hidden;opacity:0;padding:0 8px!important;transition:max-height .24s ease,opacity .18s ease,padding .24s ease!important}
+.mobile-menu-folder.is-open .mobile-menu-folder-body{max-height:700px;opacity:1;padding:7px 8px 9px!important}
+.mobile-menu-folder-items{display:grid;gap:2px}
+.mobile-menu-folder .folder-icon,.mobile-menu-folder .menu-item-icon,.mobile-menu-home .folder-icon,.mobile-menu-auth .folder-icon{background:transparent!important;border:0!important}
+.mld-native-game-modal{position:fixed;inset:0;z-index:10000;background:#07040be8;display:grid;place-items:center;padding:14px}
+.mld-native-game-card{width:min(1180px,100%);height:min(860px,94vh);display:flex;flex-direction:column;border:1px solid #805891;border-radius:24px;overflow:hidden;background:#110a18;box-shadow:0 25px 80px #0008}
+.mld-native-game-head{min-height:64px;display:flex;align-items:center;justify-content:space-between;gap:14px;padding:10px 16px;background:linear-gradient(135deg,#170f20,#31203f);color:#fff8ff}
+.mld-native-game-head div{display:flex;flex-direction:column;gap:3px}.mld-native-game-head small{color:#d5c0d9}
+.mld-native-close{border:1px solid #fbcff355;background:#ffffff10;color:#fff8ff;border-radius:11px;padding:9px 14px;cursor:pointer}
+.mld-native-game-body{flex:1;min-height:0;padding:18px;overflow:auto}
+.mld-game-table-native{min-height:100%;border:1px solid #805891;border-radius:24px;background:radial-gradient(circle at center,#382047,#130b1c 68%);padding:18px;display:flex;flex-direction:column;gap:16px}
+.mld-table-top{display:flex;justify-content:space-between;gap:10px;color:#d5c0d9;font-size:13px}
+.mld-seats-grid{display:grid;grid-template-columns:repeat(4,minmax(100px,1fr));gap:10px}
+.mld-seat{min-height:74px;border:1px dashed #805891;border-radius:16px;background:#ffffff06;display:flex;align-items:center;justify-content:center;gap:8px;color:#d5c0d9}
+.mld-seat.occupied{border-style:solid;border-color:#ff9cde66;background:#ff9cde0c;color:#fff8ff}
+.mld-seat span{width:12px;height:12px;border-radius:50%;background:#ffffff25}.mld-seat.occupied span{background:#70f5b1}
+.mld-native-board{flex:1;min-height:300px;border:1px solid #fbcff355;border-radius:28px;background:linear-gradient(145deg,#25152f,#17101f);display:grid;place-items:center;text-align:center;padding:30px}
+.mld-native-board-title{font-size:clamp(24px,4vw,42px);font-weight:950;color:#fff8ff}.mld-native-board p{color:#d5c0d9;max-width:620px;line-height:1.8}
+.mld-native-board-actions{display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap}
+@media(max-width:700px){.mld-native-game-modal{padding:0}.mld-native-game-card{height:100vh;border-radius:0}.mld-native-game-body{padding:10px}.mld-seats-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.mld-game-table-native{padding:10px;border-radius:18px}.mld-native-board{min-height:260px}}
