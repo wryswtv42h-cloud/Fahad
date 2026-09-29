@@ -151,7 +151,7 @@ function rebuildMobileMenu(){
   html+='<button type="button" class="mobile-menu-main" data-view="home">الرئيسية</button>';
   html+=group("المجتمع",[["members","الأعضاء"],["top","TOP"],["roles","الرتب القيادية"],["groups","القروبات"],["reviews","الآراء"]],true);
   html+=group("التواصل",[["chat","الشات"],["message","الزاجل"],["anonymous","الفضفضة"],["tickets","التذاكر"]]);
-  html+=group("الألعاب",[["games","صالات الألعاب"],["game-logs","لوق الألعاب"]]);
+  html+=group("الألعاب",[["games","صالات الألعاب"],["jokes","😂 النكت"],["stories","📖 القصص والصوت"],["game-logs","لوق الألعاب"]]);
   html+=group("الحساب",[["profile","بروفايلي"],["account","حسابي"],["apply","التقديم"]]);
   if(isAdmin) html+=group("الإدارة",[["admin","لوحة الإدارة"]]);
   if(isOwner) html+=group("الأونر",[["owner","مركز الأونر"],["broadcast","برودكاست السيرفر"]]);
@@ -164,6 +164,22 @@ function rebuildMobileMenu(){
   });
 }
 
+async function jokesView(){
+ searchWrap.style.display="none";title.textContent="😂 النكت";subtitle.textContent="نكت خفيفة بلهجة سعودية ونكت من أعضاء المجتمع.";content.className="feature-grid";
+ content.innerHTML="<article class='feature-card joke-spotlight'><div class='feature-icon'>😂</div><span class='eyebrow'>MLD SMART JOKES</span><blockquote id='joke-main' class='joke-main'>جاري تجهيز النكتة...</blockquote><div class='joke-actions'><button class='primary' id='joke-next'>🔄 غيرها</button><button class='games-secondary' id='joke-add'>✍️ أضف نكتتك</button></div></article><section class='feature-card'><h3>نكت المجتمع</h3><div id='joke-list' class='joke-list'></div></section>";
+ async function load(){const d=await fetch("/api/jokes?"+Date.now()).then(r=>r.json());const items=d.items||[];const main=items[0];$("#joke-main").textContent=main?main.body:"ما فيه نكت الآن";$("#joke-list").innerHTML=items.slice(0,12).map(j=>"<article class='joke-item'><p>"+esc(j.body)+"</p><small>"+esc(j.author||"ملاذ")+"</small><div><button data-joke-like='"+j.id+"'>👍 "+j.likes+"</button><button data-joke-dislike='"+j.id+"'>👎 "+j.dislikes+"</button></div></article>").join("")||"<p class='muted'>كن أول من يضيف نكتة.</p>";document.querySelectorAll("[data-joke-like]").forEach(b=>b.onclick=()=>react(b.dataset.jokeLike,"like"));document.querySelectorAll("[data-joke-dislike]").forEach(b=>b.onclick=()=>react(b.dataset.jokeDislike,"dislike"))}
+ async function react(id,type){await mldMe();if(!mldUser)return change("login");const r=await fetch("/api/jokes/"+id+"/react",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({type})});const d=await r.json();if(!r.ok)return alert(d.error);load()}
+ $("#joke-next").onclick=async()=>{const r=await fetch("/api/jokes/generate",{method:"POST"});const d=await r.json();if(r.ok){$("#joke-main").textContent=d.body;load()}};
+ $("#joke-add").onclick=async()=>{await mldMe();if(!mldUser)return change("login");openModal();box.innerHTML="<div class='feature-card'><h3>✍️ أضف نكتتك</h3><textarea id='new-joke' class='full' rows='5' maxlength='500' placeholder='اكتب نكتتك...'></textarea><button id='save-joke' class='primary wide'>نشر</button></div>";$("#save-joke").onclick=async()=>{const body=$("#new-joke").value.trim();if(!body)return;const r=await fetch("/api/jokes",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({body})});const d=await r.json();if(!r.ok)return alert(d.error);closeModal();load()}};await load();setStatus("النكت جاهزة")}
+async function storiesView(){
+ searchWrap.style.display="none";title.textContent="📖 القصص والصوت";subtitle.textContent="ولّد قصة، واختر جوّها، ثم اسمعها بصوت عربي من جهازك.";content.className="feature-grid";
+ content.innerHTML="<article class='feature-card story-maker'><span class='eyebrow'>MLD STORY STUDIO</span><h2>✨ مولد القصص</h2><div class='story-controls'><select id='story-genre' class='full'><option>مغامرة</option><option>غموض</option><option>رعب خفيف</option><option>كوميديا</option><option>خيال</option></select><select id='story-length' class='full'><option value='قصيرة'>قصيرة</option><option value='متوسطة'>متوسطة</option><option value='طويلة'>طويلة</option></select><button id='story-generate' class='primary'>ولّد قصة</button><button id='story-speak' class='games-secondary'>🔊 اقرأ بصوت</button><button id='story-stop' class='games-secondary'>⏹ إيقاف</button></div><article id='story-output' class='story-output'>ولّد قصة وستظهر هنا.</article></article>";
+ let storyText="";
+ $("#story-generate").onclick=async()=>{const r=await fetch("/api/stories/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({genre:$("#story-genre").value,length:$("#story-length").value})});const d=await r.json();if(!r.ok)return alert(d.error);storyText=d.body;$("#story-output").innerHTML="<h3>📖 "+esc(d.genre)+"</h3><p>"+esc(d.body)+"</p>"};
+ $("#story-speak").onclick=()=>{if(!storyText)return alert("ولّد قصة أولًا");if(!("speechSynthesis" in window))return alert("المتصفح لا يدعم القراءة الصوتية");speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(storyText);u.lang="ar-SA";u.rate=.9;u.pitch=1;speechSynthesis.speak(u)};
+ $("#story-stop").onclick=()=>{if("speechSynthesis" in window)speechSynthesis.cancel()};
+ setStatus("استوديو القصص جاهز");
+}
 async function anonymousView(){
   await mldMe(); if(!mldUser)return authView();
   searchWrap.style.display="none"; title.textContent="الفضفضة"; subtitle.textContent="اكتب بدون ظهور اسمك أو حسابك. لا يظهر للزوار أي معرف لصاحب المنشور أو الرد.";
@@ -191,6 +207,8 @@ window.change=async function(v){
     if(v==="message"){await messageView();return}
     if(v==="anonymous"){await anonymousView();return}
     if(v==="games"){await renderGames();return}
+    if(v==="jokes"){await jokesView();return}
+    if(v==="stories"){await storiesView();return}
     if(v==="game-logs"){await ownerGameLogs();return}
     if(v==="groups"){await groupsReal();return}
     if(v==="account"){await mldMe();if(!mldUser)return authView();await renderAccount();return}
