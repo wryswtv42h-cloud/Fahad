@@ -236,6 +236,12 @@ document.addEventListener("click",e=>{
   closeMobileMenu();
   window.change(target);
 },true);
+window.addEventListener("error",e=>{
+  console.error("MLD client error",e.error||e.message);
+});
+window.addEventListener("unhandledrejection",e=>{
+  console.error("MLD unhandled rejection",e.reason);
+});
 document.addEventListener("keydown",e=>{
   if(e.key==="Escape"&&mobile)closeMobileMenu();
 });
@@ -280,11 +286,27 @@ async function homeView(){mldClearTimer("homeReviews");mldClearTimer("homeStats"
       "<div class='home-rights'>© 2026 ملاذ — جميع الحقوق محفوظة · حقوق السيرفر: ملاذ · المؤسس والمالك: فهد المطيري</div>";
     renderReviews();
     if(allReviews.length>3){
-      setInterval(()=>{
+      mldEvery("homeReviews",()=>{
         reviewOffset=(reviewOffset+3)%allReviews.length;
         renderReviews();
       },5000);
     }
+    mldEvery("homeStats",async()=>{
+      if(document.hidden||view!=="home")return;
+      try{
+        const r=await fetch("/api/site/stats?live="+Date.now(),{cache:"no-store"});
+        if(!r.ok)return;
+        const st=await r.json();
+        const cards=document.querySelectorAll(".home-stats b");
+        if(cards[1])cards[1].childNodes[0].nodeValue=num(st.online);
+        if(cards[2])cards[2].childNodes[0].nodeValue=num(st.visits);
+        const sync=document.querySelector(".home-live-card p");
+        if(sync)sync.textContent="السيرفر متصل · آخر مزامنة "+new Date().toLocaleTimeString("ar-SA",{hour:"2-digit",minute:"2-digit",second:"2-digit"});
+        const online=$("#server-online"),visits=$("#server-visits");
+        if(online)online.textContent=num(st.online);
+        if(visits)visits.textContent=num(st.visits);
+      }catch(e){console.debug("live stats",e)}
+    },1000);
     bind();
     setStatus("بيانات ملاذ وتقييماته محدثة");
   }catch(e){
@@ -377,7 +399,8 @@ async function mldChatView(mode="public"){
     bind();
   };
   await render();
-  clearInterval(window.mldChatPoll);
-  window.mldChatPoll=setInterval(()=>{if(!document.hidden&&mode==="public"&&!activeConversation)render()},5000);
-  setStatus("الشات جاهز — تحديث تلقائي كل 5 ثوانٍ");
+  mldEvery("chat",async()=>{
+    if(!document.hidden&&mode==="public"&&!activeConversation&&view==="chat")await render();
+  },1000);
+  setStatus("الشات جاهز — تحديث تلقائي كل ثانية");
 }
