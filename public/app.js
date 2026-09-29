@@ -34,13 +34,15 @@ async function stats(){
   const memberCount=Number(d.memberCount||s.memberCount||0);
   const online=Number(d.online||0);
   const visits=Number(d.visits||0);
-  $("#membersStat").textContent=memberCount.toLocaleString("ar-SA");
-  $("#onlineStat").textContent=online.toLocaleString("ar-SA");
-  $("#visitsStat").textContent=visits.toLocaleString("ar-SA");
-  $("#discordStat").textContent="متصل";
-  $("#heroSubtitle").textContent=s.name?("مجتمع "+s.name+" — متصل مباشرة ببيانات السيرفر."):"مجتمع متكامل بتجربة عربية سلسة، مرتبط مباشرة ببيانات السيرفر.";
+  const set=(id,value)=>{const el=$("#"+id);if(el)el.textContent=value};
+  set("membersStat",memberCount.toLocaleString("ar-SA"));
+  set("onlineStat",online.toLocaleString("ar-SA"));
+  set("visitsStat",visits.toLocaleString("ar-SA"));
+  set("discordStat","متصل");
+  set("heroSubtitle",s.name?("مجتمع "+s.name+" — متصل مباشرة ببيانات السيرفر."):"مجتمع متكامل بتجربة عربية سلسة، مرتبط مباشرة ببيانات السيرفر.");
  }catch(e){
-  $("#membersStat").textContent="—";$("#onlineStat").textContent="—";$("#visitsStat").textContent="—";$("#discordStat").textContent="غير متاح";
+  ["membersStat","onlineStat","visitsStat"].forEach(id=>{const el=$("#"+id);if(el)el.textContent="—"});
+  const el=$("#discordStat");if(el)el.textContent="غير متاح";
  }
 }
 async function home(){
@@ -316,10 +318,15 @@ function toggleMenu(e){
 if(menuBtn&&drawer){
  const runMenu=(e)=>{
   if(e){e.preventDefault();e.stopPropagation()}
-  toggleMenu(e);
-  menuBtn.setAttribute("aria-expanded",String(drawer.classList.contains("open")));
+  const open=!drawer.classList.contains("open");
+  drawer.classList.toggle("open",open);
+  drawer.setAttribute("aria-hidden",String(!open));
+  menuBtn.setAttribute("aria-expanded",String(open));
  };
- menuBtn.addEventListener("click",runMenu);
+ menuBtn.addEventListener("pointerup",runMenu);
+ menuBtn.addEventListener("keydown",e=>{
+  if(e.key==="Enter"||e.key===" "){e.preventDefault();runMenu(e)}
+ });
 }
 document.addEventListener("click",e=>{
  if(drawer&&drawer.classList.contains("open")&&!drawer.contains(e.target)&&!menuBtn?.contains(e.target)){drawer.classList.remove("open");drawer.setAttribute("aria-hidden","true")}
