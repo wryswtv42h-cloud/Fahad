@@ -315,7 +315,6 @@ function toggleMenu(e){
 }
 if(menuBtn&&drawer){
  menuBtn.onclick=toggleMenu;
- menuBtn.addEventListener("touchend",toggleMenu,{passive:false});
 }
 document.addEventListener("click",e=>{
  if(drawer&&drawer.classList.contains("open")&&!drawer.contains(e.target)&&!menuBtn?.contains(e.target)){drawer.classList.remove("open");drawer.setAttribute("aria-hidden","true")}
