@@ -24,6 +24,7 @@ app.use(helmet({contentSecurityPolicy:false,crossOriginEmbedderPolicy:false}));
 app.use(compression());app.use(express.json({limit:"256kb"}));
 app.use(session({name:"mld.sid",secret:process.env.SESSION_SECRET,resave:false,saveUninitialized:false,store:new pgSession({pool,tableName:"user_sessions",createTableIfMissing:true}),cookie:{httpOnly:true,sameSite:"lax",secure:process.env.NODE_ENV==="production",maxAge:2592000000}}));
 app.use(express.static(path.join(__dirname,"public"),{etag:true,maxAge:"5m"}));
+app.get("/health",async(req,res)=>{try{await pool.query("SELECT 1");res.status(200).json({ok:true,service:"mld"})}catch(e){res.status(503).json({ok:false})}});
 
 const BOT_MASTER_KEY=crypto.createHash("sha256").update(String(process.env.BOT_TOKEN_KEY||process.env.SESSION_SECRET||"change-me")).digest();
 function encryptSecret(value){const iv=crypto.randomBytes(12);const cipher=crypto.createCipheriv("aes-256-gcm",BOT_MASTER_KEY,iv);const enc=Buffer.concat([cipher.update(String(value),"utf8"),cipher.final()]);return [iv.toString("base64"),cipher.getAuthTag().toString("base64"),enc.toString("base64")].join(".")}
