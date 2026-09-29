@@ -180,8 +180,7 @@ module.exports = function setupBotManager({ app, auth, logPlatform, platform, sa
         intents:[
           GatewayIntentBits.Guilds,
           GatewayIntentBits.GuildMessages,
-          GatewayIntentBits.MessageContent,
-          GatewayIntentBits.GuildMembers
+          GatewayIntentBits.MessageContent
         ]
       });
       rt.client = c;
