@@ -1,8 +1,8 @@
 {
-  "name": "fahad-community-platform",
-  "version": "3.0.0",
+  "name": "malaz-railway-bot-api",
+  "version": "1.0.0",
   "private": true,
-  "description": "Fahad Community Platform with Discord integration",
+  "description": "Discord bot and read-only API for the Malaz website",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
@@ -11,21 +11,9 @@
     "node": ">=18"
   },
   "dependencies": {
-    "bcryptjs": "^2.4.3",
-    "connect-pg-simple": "^10.0.0",
     "cors": "^2.8.5",
     "discord.js": "^14.16.3",
     "dotenv": "^16.4.5",
-    "express": "^4.21.1",
-    "express-session": "^1.18.1",
-    "helmet": "^8.1.0",
-    "pg": "^8.16.3",
-    "socket.io": "^4.8.1",
-    "compression": "^1.8.1",
-    "@discordjs/voice": "^0.18.0",
-    "google-tts-api": "^2.0.2"
-  },
-  "devDependencies": {
-    "@playwright/test": "^1.55.0"
+    "express": "^4.21.1"
   }
 }
