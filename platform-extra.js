@@ -8,12 +8,7 @@ module.exports = function setupMLDExtra({ app, client, auth, ownerOnly, logPlatf
   const dir = path.join(__dirname, "data");
   const file = path.join(dir, "features.json");
   const defaultData = {
-    bots: [
-      { id:"community", name:"Community Bot", description:"إدارة المجتمع والبيانات", enabled:true, commands:["help","ping","server","top"] },
-      { id:"games", name:"Games Bot", description:"الألعاب والجلسات", enabled:true, commands:["games","lobby","uno","ludo","baloot"] },
-      { id:"security", name:"Security Bot", description:"الحماية والتنبيهات", enabled:true, commands:["security","warn","audit"] },
-      { id:"economy", name:"Economy Bot", description:"البنك والعملات والستريك", enabled:true, commands:["balance","daily","streak","pay"] }
-    ],
+    bots: [],
     botSettings: {},
     tickets: [],
     applications: [],
