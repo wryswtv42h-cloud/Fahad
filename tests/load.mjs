@@ -2,9 +2,9 @@ const BASE=process.env.BASE_URL||"https://discord-community-platform-production-
 const ENV_CONCURRENCY=Number(process.env.LOAD_CONCURRENCY||500);
 const ENV_DURATION=Number(process.env.LOAD_DURATION_MS||0);
 const stages=[
-{name:"warmup",concurrency:25,total:250,paths:["/health","/api/games"]},
-{name:"normal",concurrency:100,total:1000,paths:["/health","/api/public/server","/api/public/roles","/api/public/top","/api/games","/api/reviews","/api/announcements"]},
-{name:"heavy",concurrency:250,total:2500,paths:["/health","/api/public/server","/api/public/roles","/api/public/top","/api/games"]},
+{name:"warmup",concurrency:25,total:250,paths:["/health","/api/games/sessions"]},
+{name:"normal",concurrency:100,total:1000,paths:["/health","/api/public/server","/api/public/roles","/api/public/top","/api/games/sessions","/api/reviews","/api/announcements"]},
+{name:"heavy",concurrency:250,total:2500,paths:["/health","/api/public/server","/api/public/roles","/api/public/top","/api/games/sessions"]},
 {name:"peak",concurrency:ENV_CONCURRENCY,total:Math.max(5000,ENV_DURATION?Math.ceil(ENV_CONCURRENCY*ENV_DURATION/1000):5000),paths:["/health"]}
 ];
 async function one(path){const started=performance.now(),c=new AbortController(),timer=setTimeout(()=>c.abort(),8000);try{const r=await fetch(BASE+path,{signal:c.signal,headers:{"cache-control":"no-cache"}});return{ok:r.status<500,status:r.status,ms:performance.now()-started,path};}catch(e){return{ok:false,status:0,ms:performance.now()-started,path,error:String(e)}}finally{clearTimeout(timer)}}
