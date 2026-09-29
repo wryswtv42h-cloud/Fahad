@@ -45,7 +45,7 @@ async function stats(){
 }
 async function home(){
  $("#status").textContent="آراء المجتمع";
- let reviews=[];try{const d=await api("/api/reviews");reviews=d.reviews||[]}catch{}
+ let reviews=[];try{const d=await api("/api/ratings");reviews=d.reviews||[]}catch{}
  const sample=reviews.slice(0,12);
  const ratings=sample.map(x=>'<article class="card review-card"><div class="row"><div class="review-stars">★★★★★</div><span class="muted">'+esc(x.username||"عضو")+'</span></div><p>'+esc(x.body||x.text||x.content||"رأي من المجتمع")+'</p></article>').join("")||'<article class="card"><b>آراء المجتمع</b><p class="muted">كن أول من يضيف رأيه.</p></article>';
  $("#content").innerHTML='<section class="home-reviews"><div class="home-section-title"><div><p class="kicker">تجارب المجتمع</p><h3>التقييمات والآراء</h3></div><button class="ghost" data-view="reviews">عرض الكل</button></div><div class="content">'+ratings+'</div></section>'+
