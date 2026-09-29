@@ -43,12 +43,20 @@ async function stats(){
   $("#membersStat").textContent="—";$("#onlineStat").textContent="—";$("#visitsStat").textContent="—";$("#discordStat").textContent="غير متاح";
  }
 }
-function home(){
- $("#status").textContent=me?"مرحبًا "+me.username:"النظام يعمل";
- $("#content").innerHTML='<article class="card"><b>ملاذ</b><p class="muted">منصة عربية مرتبطة ببيانات السيرفر وقواعد PostgreSQL.</p></article>'+
- '<article class="card"><b>الألعاب</b><p class="muted">جلسات حقيقية للاعبين والمشاهدين مع حفظ حالة الجولة.</p></article>'+
- '<article class="card"><b>المجتمع</b><p class="muted">قروبات، شات عام، خاص، رسائل، تذاكر، تقديم وآراء.</p></article>'+
- '<article class="card"><b>الحساب</b><p class="muted">'+(me?"أنت مسجل باسم "+esc(me.username):"سجل الدخول لفتح المزايا الخاصة.")+"</p></article>";
+async function home(){
+ $("#status").textContent="آراء المجتمع";
+ let reviews=[];try{const d=await api("/api/reviews");reviews=d.reviews||[]}catch{}
+ const sample=reviews.slice(0,12);
+ const ratings=sample.map(x=>'<article class="card review-card"><div class="row"><div class="review-stars">★★★★★</div><span class="muted">'+esc(x.username||"عضو")+'</span></div><p>'+esc(x.body||x.text||x.content||"رأي من المجتمع")+'</p></article>').join("")||'<article class="card"><b>آراء المجتمع</b><p class="muted">كن أول من يضيف رأيه.</p></article>';
+ $("#content").innerHTML='<section class="home-reviews"><div class="home-section-title"><div><p class="kicker">تجارب المجتمع</p><h3>التقييمات والآراء</h3></div><button class="ghost" data-view="reviews">عرض الكل</button></div><div class="content">'+ratings+'</div></section>'+
+ '<section class="home-features"><div class="home-section-title"><div><p class="kicker">كل ما تحتاجه</p><h3>مميزات الموقع</h3></div></div><div class="feature-grid">'+
+ '<article class="card feature-card"><b>مجتمع متكامل</b><p class="muted">أعضاء، رتب، قروبات، شات عام ورسائل خاصة في مكان واحد.</p></article>'+
+ '<article class="card feature-card"><b>ألعاب جماعية</b><p class="muted">جلسات ألعاب للاعبين والمشاهدين مع نظام دخول ومتابعة.</p></article>'+
+ '<article class="card feature-card"><b>تواصل وخصوصية</b><p class="muted">محادثات خاصة، مجموعات، تذاكر ورسائل مجهولة.</p></article>'+
+ '<article class="card feature-card"><b>حسابك ومجتمعك</b><p class="muted">ملف شخصي، نقاط، رتب وبيانات محفوظة بشكل مستمر.</p></article>'+
+ '<article class="card feature-card"><b>بوتات وخدمات</b><p class="muted">ربط وإدارة البوتات من لوحة واحدة مع الصلاحيات والإعدادات.</p></article>'+
+ '<article class="card feature-card"><b>تجربة سريعة</b><p class="muted">واجهة بسيطة ومتجاوبة تعمل على الجوال والكمبيوتر.</p></article>'+
+ '</div></section>';
 }
 async function membersView(){
  const d=await api("/api/members"),a=d.members||[];
