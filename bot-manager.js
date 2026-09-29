@@ -16,13 +16,6 @@ module.exports = function setupBotManager({ app, auth, logPlatform, platform, sa
   const runtime = new Map();
   const oauthStates = new Map();
 
-  const slots = [
-    { id:"community", name:"Community Bot", description:"إدارة المجتمع", commands:["ping","help","server","members"] },
-    { id:"games", name:"Games Bot", description:"الألعاب والجلسات", commands:["games","ping","help"] },
-    { id:"security", name:"Security Bot", description:"الحماية والتنبيهات", commands:["security","ping","help"] },
-    { id:"economy", name:"Economy Bot", description:"البنك والستريك", commands:["balance","daily","streak","ping","help"] }
-  ];
-
   function load() {
     try {
       fs.mkdirSync(dir, { recursive:true });
@@ -65,14 +58,13 @@ module.exports = function setupBotManager({ app, auth, logPlatform, platform, sa
     return Buffer.concat([decipher.update(Buffer.from(payload.data, "base64")), decipher.final()]).toString("utf8");
   }
 
-  function slot(id) { return slots.find(s => s.id === id); }
   function owned(req) { return store.bots.filter(b => b.ownerId === req.account.id); }
   function safeBot(b) {
     const live = runtime.get(b.id);
     return {
-      id:b.id, slot:b.slot, name:b.name, description:b.description,
+      id:b.id, name:b.name, description:b.description,
       guildId:b.guildId, guildName:b.guildName, botUserId:b.botUserId,
-      botUsername:b.botUsername, enabled:Boolean(b.enabled),
+      botUsername:b.botUsername, botAvatar:b.botAvatar || null, enabled:Boolean(b.enabled),
       status:live?.status || b.status || "stopped",
       lastError:b.lastError || "",
       createdAt:b.createdAt
@@ -163,7 +155,7 @@ module.exports = function setupBotManager({ app, auth, logPlatform, platform, sa
   });
 
   app.get("/api/platform/bot-catalog", auth, (req,res) => {
-    res.json({ slots, encryptionReady:Boolean(masterSecret), oauthReady:Boolean(clientId && clientSecret && redirectUri), bots:owned(req).map(safeBot) });
+    res.json({ encryptionReady:Boolean(masterSecret), oauthReady:Boolean(clientId && clientSecret && redirectUri), bots:owned(req).map(safeBot) });
   });
 
   async function startBot(record) {
@@ -190,6 +182,7 @@ module.exports = function setupBotManager({ app, auth, logPlatform, platform, sa
           if (!guild) throw new Error("البوت ليس داخل السيرفر المحدد");
           record.botUserId = c.user.id;
           record.botUsername = c.user.tag || c.user.username;
+          record.botAvatar = c.user.displayAvatarURL({ extension: "png", size: 256 });
           record.status = "online";
           record.enabled = true;
           record.lastError = "";
@@ -209,23 +202,10 @@ module.exports = function setupBotManager({ app, auth, logPlatform, platform, sa
         rt.status="error";
         save();
       });
-      c.on("messageCreate", async message => {
+      c.on("messageCreate", message => {
         if (message.author.bot || !message.guild || message.guild.id !== record.guildId) return;
-        const content=String(message.content || "").trim();
-        if (!content.startsWith("!")) return;
-        const [cmd,...args]=content.slice(1).split(/\s+/);
-        const reply = async text => { try { await message.reply(String(text).slice(0,1900)); } catch {} };
-        try {
-          if (cmd==="ping") return reply("🏓 " + record.name + " شغال.");
-          if (cmd==="help") return reply("🤖 الأوامر: " + slot(record.slot).commands.map(x => "!" + x).join(" · "));
-          if (cmd==="server") return reply("🌐 " + message.guild.name + " · " + message.guild.memberCount + " عضو");
-          if (cmd==="members") return reply("👥 أعضاء السيرفر: " + message.guild.memberCount);
-          if (cmd==="games") return reply("🎮 بلوت · UNO · جاكارو · لودو · مونوبولي");
-          if (cmd==="security") return reply("🛡️ نظام الحماية متصل ويستقبل أوامر لوحة التحكم.");
-          if (cmd==="balance") return reply("💰 نظام البنك متصل. استخدم لوحة المنصة لإدارة الرصيد.");
-          if (cmd==="daily") return reply("🎁 اليومية متاحة من لوحة المنصة.");
-          if (cmd==="streak") return reply("🔥 الستريك متاح من لوحة المنصة.");
-        } catch (e) { console.error("Managed bot command:",e); }
+        record.lastActivityAt = new Date().toISOString();
+        save();
       });
       await c.login(token);
       return rt;
@@ -258,42 +238,61 @@ module.exports = function setupBotManager({ app, auth, logPlatform, platform, sa
     try {
       if (!masterSecret) return res.status(503).json({ error:"أضف BOT_TOKEN_ENCRYPTION_KEY في Railway قبل حفظ توكنات البوتات" });
       if (!req.account.discordId) return res.status(400).json({ error:"اربط حساب Discord أولًا" });
-      const slotId=String(req.body?.slot || "");
-      const s=slot(slotId);
       const guildId=String(req.body?.guildId || "");
       const token=String(req.body?.token || "").trim();
-      if (!s) return res.status(400).json({ error:"اختر بوتًا صحيحًا" });
+      const name=String(req.body?.name || "").trim().slice(0,80);
+      const prefix=String(req.body?.prefix || "!").trim().slice(0,5) || "!";
       if (!token || token.length < 20) return res.status(400).json({ error:"أدخل توكن البوت الصحيح" });
       const guilds=Array.isArray(req.account.discordGuilds) ? req.account.discordGuilds : [];
       const selected=guilds.find(g=>g.id===guildId);
       if (!selected) return res.status(403).json({ error:"السيرفر غير موجود ضمن السيرفرات التي ربطتها بحساب Discord" });
-      const existing=store.bots.find(b=>b.ownerId===req.account.id && b.slot===slotId);
-      if (existing) {
-        await stopBot(existing);
-        existing.token=encrypt(token);
-        existing.guildId=guildId;
-        existing.guildName=selected.name;
-        existing.name=s.name;
-        existing.description=s.description;
-        existing.lastError="";
-        existing.status="starting";
-        existing.enabled=true;
-        save();
-        try { await startBot(existing); } catch {}
-        return res.json({ bot:safeBot(existing) });
+
+      const testClient=new Client({ intents:[GatewayIntentBits.Guilds] });
+      let botUser;
+      try {
+        await testClient.login(token);
+        botUser=testClient.user;
+        if (!botUser?.bot) throw new Error("التوكن ليس لبوت Discord");
+        const guild=await testClient.guilds.fetch(guildId).catch(()=>null);
+        if (!guild) throw new Error("البوت غير موجود داخل السيرفر المحدد. ادعُ البوت إلى السيرفر أولًا ثم حاول مرة أخرى.");
+      } finally {
+        try { await testClient.destroy(); } catch {}
       }
+
+      const duplicate=store.bots.find(b=>b.ownerId===req.account.id && b.botUserId===botUser.id);
+      if (duplicate) return res.status(409).json({ error:"هذا البوت مضاف عندك بالفعل" });
+
       const record={
-        id:crypto.randomUUID(), ownerId:req.account.id, slot:slotId, name:s.name, description:s.description,
-        guildId, guildName:selected.name, token:encrypt(token), botUserId:null, botUsername:null,
-        enabled:true, status:"starting", lastError:"", createdAt:new Date().toISOString()
+        id:crypto.randomUUID(),
+        ownerId:req.account.id,
+        name:name || botUser.globalName || botUser.username || "بوت Discord",
+        description:"بوتك الخاص المستضاف على MLD",
+        guildId,
+        guildName:selected.name,
+        token:encrypt(token),
+        botUserId:botUser.id,
+        botUsername:botUser.tag || botUser.username,
+        botAvatar:botUser.displayAvatarURL({ extension:"png", size:256 }),
+        prefix,
+        enabled:true,
+        status:"starting",
+        lastError:"",
+        lastActivityAt:null,
+        createdAt:new Date().toISOString()
       };
       store.bots.push(record);
       save();
-      try { await startBot(record); } catch {}
+      try { await startBot(record); }
+      catch (e) {
+        store.bots=store.bots.filter(x=>x.id!==record.id);
+        save();
+        return res.status(400).json({ error:record.lastError || String(e.message || "تعذر تشغيل البوت") });
+      }
+      logPlatform("managed_bot_created",req.account.id,record.botUserId+":"+record.guildId);
       res.status(201).json({ bot:safeBot(record) });
     } catch(e) {
       console.error("Add managed bot:",e);
-      res.status(500).json({ error:String(e.message || "تعذر تشغيل البوت") });
+      res.status(400).json({ error:String(e.message || "تعذر إضافة البوت") });
     }
   });
 
@@ -317,7 +316,7 @@ module.exports = function setupBotManager({ app, auth, logPlatform, platform, sa
     await stopBot(b);
     store.bots.splice(i,1);
     save();
-    logPlatform("managed_bot_deleted",req.account.id,b.slot);
+    logPlatform("managed_bot_deleted",req.account.id,b.botUserId || b.id);
     res.json({ok:true});
   });
 
