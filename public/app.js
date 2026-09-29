@@ -3,7 +3,7 @@ const V={
  games:["الألعاب","جلسات حقيقية — لاعبين ومشاهدين"],groups:["القروبات","مجموعات المجتمع"],chat:["الشات العام","المحادثة العامة"],
  "private-chat":["الخاص","محادثاتك الخاصة"],message:["رسالة خاصة","إرسال رسالة"],jokes:["النكت","محتوى المجتمع"],
  stories:["القصص والصوت","قصص مولدة وصوت الجهاز"],tickets:["التذاكر","الدعم"],apply:["التقديم","طلبات التقديم"],
- reviews:["الآراء","آراء المجتمع"],anonymous:["الفضفضة","رسائل مجهولة"],profile:["ملفي","ملفي الشخصي"],account:["حسابي","إدارة الحساب"],login:["تسجيل الدخول","الدخول إلى الحساب"]
+ reviews:["الآراء","آراء المجتمع"],anonymous:["الفضفضة","رسائل مجهولة"],profile:["ملفي","ملفي الشخصي"],account:["حسابي","إدارة الحساب"],bots:["البوتات","لوحة البوتات والخدمات"],login:["تسجيل الدخول","الدخول إلى الحساب"]
 };
 const GAMES=[
  ["UNO","أونو",4],["BALOOT","بلوت",4],["JAKAROO","جاكارو",4],["LUDO","لودو",4],["QAWSAR","قوصر",4],
@@ -26,7 +26,7 @@ function menu(){
   ["المجتمع",[["الأعضاء","members"],["الأعلى","top"],["الرتب","roles"],["القروبات","groups"],["الآراء","reviews"]]],
   ["التواصل",[["الشات العام","chat"],["الخاص","private-chat"],["رسالة خاصة","message"],["الفضفضة","anonymous"],["التذاكر","tickets"]]],
   ["الألعاب والترفيه",[["جلسات الألعاب","games"],["النكت","jokes"],["القصص والصوت","stories"]]],
-  ["الحساب والخدمات",[["ملفي","profile"],["حسابي","account"],["التقديم","apply"],["تسجيل الدخول","login"]]]
+  ["الحساب والخدمات",[["ملفي","profile"],["حسابي","account"],["البوتات","bots"],["التقديم","apply"],["تسجيل الدخول","login"]]]
  ];
  $("#menu").innerHTML=g.map(x=>'<div class="folder"><button class="folder-head" type="button">'+esc(x[0])+' <span>⌄</span></button><div class="folder-items">'+x[1].map(y=>'<button type="button" data-view="'+y[1]+'">'+esc(y[0])+"</button>").join("")+"</div></div>").join("");
 }
@@ -125,9 +125,9 @@ async function message(){return privateChat()}
 async function anonymous(){
  if(!me){auth();return}
  const d=await api("/api/anonymous"),a=d.items||[];
- $("#status").textContent="الفضفضة";
- $("#content").innerHTML=formCard("إرسال فضفضة مجهولة",'<input id="anonTo" placeholder="اسم المستلم"><textarea id="anonBody" style="width:100%;min-height:130px" placeholder="اكتب ما تبي بدون اسمك"></textarea><button class="primary" id="anonSend">إرسال مجهول</button><h3>الوارد</h3><div>'+a.map(x=>'<div class="card" style="margin-bottom:8px"><span class="muted">مجهولة</span><p>'+esc(x.body)+'</p></div>').join("")+"</div>");
- $("#anonSend").onclick=async()=>{try{await api("/api/anonymous",{method:"POST",body:{recipient:$("#anonTo").value,body:$("#anonBody").value}});toast("تم الإرسال");anonymous()}catch(e){toast(e.message)}};
+ $("#status").textContent="الزاجل";
+ $("#content").innerHTML=formCard("الرسائل المجهولة — الزاجل",'<input id="anonTo" placeholder="اسم المستلم أو Discord"><input id="anonTitle" placeholder="عنوان الرسالة"><textarea id="anonBody" style="width:100%;min-height:130px" placeholder="اكتب الرسالة"></textarea><label class="row" style="gap:8px"><input id="anonReveal" type="checkbox" style="width:auto"> إظهار اسمي للمستلم مع منشن</label><button class="primary" id="anonSend">إرسال الزاجل</button><h3>الوارد</h3><div>'+a.map(x=>'<div class="card" style="margin-bottom:8px"><b>'+esc(x.title||"رسالة")+'</b><p>'+esc(x.body)+'</p><small class="muted">'+(x.sender?("من "+esc(x.mention||x.sender)):"مجهول")+' · '+new Date(x.created_at).toLocaleString("ar-SA")+'</small></div>').join("")+"</div>");
+ $("#anonSend").onclick=async()=>{try{await api("/api/anonymous",{method:"POST",body:{recipient:$("#anonTo").value,title:$("#anonTitle").value,body:$("#anonBody").value,revealSender:$("#anonReveal").checked}});toast("تم إرسال الزاجل");anonymous()}catch(e){toast(e.message)}};
 }
 async function jokes(){
  const d=await api("/api/jokes"),a=d.items||[];
@@ -211,10 +211,40 @@ function gameControls(s,st){
  }
  return h+"</article>";
 }
+async function bots(){
+ if(!me){auth();return}
+ const d=await api("/api/bots"),a=d.bots||[];
+ $("#status").textContent=a.length+" بوت";
+ let html=formCard("ربط بوت جديد",'<input id="botName" placeholder="اسم البوت"><input id="botToken" type="password" placeholder="Bot Token"><button class="primary" id="botAdd">ربط وتشغيل</button><p class="muted">التوكن يحفظ مشفرًا داخل قاعدة البيانات ولا يظهر في الواجهة.</p>');
+ html+=a.map(b=>'<article class="card"><div class="row"><div><b>'+esc(b.name)+'</b><div class="muted">ID: '+esc(b.client_id||"—")+'</div></div><span class="badge">'+esc(b.status||"offline")+'</span></div><p class="muted">Prefix: '+esc(b.prefix||"!")+' · الحالة: '+esc(b.presence_mode||"watching")+'</p><button class="primary" data-bot="'+b.id+'">لوحة التحكم</button><button class="ghost" data-botlogs="'+b.id+'">اللوقات</button></article>').join("");
+ $("#content").innerHTML=html;
+ $("#botAdd").onclick=async()=>{try{await api("/api/bots",{method:"POST",body:{name:$("#botName").value,token:$("#botToken").value}});toast("تم ربط البوت");bots()}catch(e){toast(e.message)}};
+ $("[data-bot]").forEach(x=>x.onclick=()=>botPanel(x.dataset.bot));
+ $("[data-botlogs]").forEach(x=>x.onclick=()=>botLogs(x.dataset.botlogs));
+}
+async function botPanel(id){
+ const d=await api("/api/bots/"+id),b=d.bot;
+ $("#status").textContent="لوحة "+b.name;
+ $("#content").innerHTML=formCard("إدارة البوت",
+ '<div class="row"><b>'+esc(b.name)+'</b><span class="badge">'+esc(b.status)+'</span></div>'+
+ '<input id="botPrefix" maxlength="8" value="'+esc(b.prefix||"!")+'" placeholder="Prefix">'+
+ '<select id="botPresence"><option value="watching" '+(b.presence_mode==="watching"?"selected":"")+'>Watching</option><option value="playing" '+(b.presence_mode==="playing"?"selected":"")+'>Playing</option></select>'+
+ '<input id="botPresenceText" maxlength="190" value="'+esc(b.presence_text||"")+'" placeholder="نص الحالة">'+
+ '<label class="row"><input id="botHide" type="checkbox" style="width:auto" '+(b.hide_website?"checked":"")+'> إخفاء رابط الموقع (اشتراك)</label>'+
+ '<button class="primary" id="botSave">حفظ الإعدادات</button><h3>الخدمات</h3><div class="row" style="flex-wrap:wrap">'+["حماية","إدارة","تذاكر","تقديمات","برودكاست","قيفاوي","ألعاب","بنك","موسيقى","ستريك"].map(x=>'<span class="badge">'+x+'</span>').join("")+'</div>'+
+ '<p class="muted">البيانات واللوقات محفوظة حتى بعد انتهاء الاشتراك؛ انتهاء الاشتراك يوقف الميزة ولا يحذف البيانات.</p>');
+ $("#botSave").onclick=async()=>{try{await api("/api/bots/"+id,{method:"PATCH",body:{prefix:$("#botPrefix").value,presenceMode:$("#botPresence").value,presenceText:$("#botPresenceText").value,hideWebsite:$("#botHide").checked}});toast("تم حفظ إعدادات البوت");botPanel(id)}catch(e){toast(e.message)}};
+}
+async function botLogs(id){
+ const d=await api("/api/bots/"+id+"/logs");
+ $("#status").textContent="لوقات البوت";
+ $("#content").innerHTML=formCard("السجل الكامل",(d.items||[]).map(x=>'<div class="card" style="margin-bottom:8px"><b>'+esc(x.event_type)+'</b><p class="muted">'+esc(x.username||"system")+' · '+new Date(x.created_at).toLocaleString("ar-SA")+'</p><pre style="white-space:pre-wrap">'+esc(JSON.stringify(x.details||{},null,2))+'</pre></div>').join("")||'<p class="muted">لا توجد لوقات بعد.</p>');
+}
+
 async function render(v){
  clearInterval(pollTimer);v=V[v]?v:"home";$("#viewTitle").textContent=V[v][0];$("#viewSub").textContent=V[v][1];$("#status").textContent="جاري تحميل البيانات...";$("#content").innerHTML="";
  try{
-  if(v==="home")return home();if(v==="members")return membersView();if(v==="roles")return roles();if(v==="top")return top();if(v==="groups")return groups();if(v==="chat")return chat();if(v==="private-chat")return privateChat();if(v==="message")return message();if(v==="anonymous")return anonymous();if(v==="jokes")return jokes();if(v==="stories")return stories();if(v==="tickets")return tickets();if(v==="apply")return applyView();if(v==="reviews")return reviews();if(v==="profile")return profile();if(v==="account")return account();if(v==="login")return auth();if(v==="games")return games();
+  if(v==="home")return home();if(v==="bots")return bots();if(v==="members")return membersView();if(v==="roles")return roles();if(v==="top")return top();if(v==="groups")return groups();if(v==="chat")return chat();if(v==="private-chat")return privateChat();if(v==="message")return message();if(v==="anonymous")return anonymous();if(v==="jokes")return jokes();if(v==="stories")return stories();if(v==="tickets")return tickets();if(v==="apply")return applyView();if(v==="reviews")return reviews();if(v==="profile")return profile();if(v==="account")return account();if(v==="login")return auth();if(v==="games")return games();
  }catch(e){$("#status").textContent=e.message;toast(e.message)}
 }
 async function boot(){
