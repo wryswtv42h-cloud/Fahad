@@ -3,92 +3,38 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#0b0d12">
+<meta name="theme-color" content="#090b12">
 <meta name="description" content="ملاذ — منصة مجتمع عربية متكاملة">
 <title>ملاذ — MLD</title>
 <link rel="icon" href="/logo.svg.JPG">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/app.css?v=30">
+<link rel="stylesheet" href="/app.css?v=100">
 </head>
 <body>
 <div id="app">
-<header class="topbar">
-  <div class="topbar-inner">
-    <button id="menuBtn" class="menu-btn" type="button" aria-label="فتح القائمة" aria-controls="drawer" aria-expanded="false">
-      <span></span><span></span><span></span>
-    </button>
-    <a class="brand" href="#home" aria-label="ملاذ">
-      <img src="/logo.svg.JPG" alt="ملاذ">
-      <span><b>MLD</b><small>ملاذ</small></span>
-    </a>
-    <div class="live"><i></i><span>متصل</span></div>
-  </div>
-</header>
-
-<aside id="drawer" class="drawer" aria-hidden="true">
-  <div class="drawer-head">
-    <div><b>القائمة</b><small>كل خدمات ملاذ</small></div>
-    <button class="drawer-close" type="button" aria-label="إغلاق القائمة" onclick="document.getElementById('menuBtn').click()">×</button>
-  </div>
-  <div id="menu"></div>
-</aside>
-
-<main>
-  <section class="home-shell">
-    <div class="home-hero">
-      <div class="hero-copy">
-        <div class="eyebrow"><span></span> مجتمعك في مكان واحد</div>
-        <h1>أهلًا بك في <em>ملاذ</em></h1>
-        <p>مجتمع، تواصل، ألعاب جماعية، قروبات، بوتات وخدمات — بتجربة عربية مرتبة وسريعة.</p>
-        <div class="hero-actions">
-          <a class="btn primary" href="#games">استكشف الألعاب <span>←</span></a>
-          <a class="btn secondary" href="#members">اكتشف المجتمع <span>←</span></a>
-        </div>
-      </div>
-      <div class="hero-mark">
-        <div class="hero-ring ring-a"></div><div class="hero-ring ring-b"></div>
-        <div class="hero-logo"><img src="/logo.svg.JPG" alt=""></div>
-        <div class="hero-chip chip-one">مجتمع</div>
-        <div class="hero-chip chip-two">ألعاب</div>
-        <div class="hero-chip chip-three">تواصل</div>
-      </div>
+  <div id="boot" class="boot"><div class="boot-logo"><img src="/logo.svg.JPG" alt=""></div><b>MLD</b><span>جاري تجهيز ملاذ…</span></div>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <button id="menuBtn" class="icon-btn" aria-label="القائمة" aria-expanded="false"><i></i><i></i><i></i></button>
+      <a class="brand" href="#home"><span class="brand-mark"><img src="/logo.svg.JPG" alt=""></span><span class="brand-text"><b>MLD</b><small>ملاذ</small></span></a>
+      <div class="top-actions"><button id="searchBtn" class="round-btn" aria-label="بحث">⌕</button><a id="topUser" class="user-mini" href="#login"><span class="avatar-fallback">؟</span><span class="user-mini-text"><b>زائر</b><small>تسجيل الدخول</small></span></a></div>
     </div>
-
-    <div class="quick-grid">
-      <a class="quick-card" href="#games"><span class="quick-icon">🎮</span><div><b>الألعاب</b><small>جلسات ومشاهدون</small></div><span class="arrow">←</span></a>
-      <a class="quick-card" href="#chat"><span class="quick-icon">💬</span><div><b>الشات</b><small>تواصل مع المجتمع</small></div><span class="arrow">←</span></a>
-      <a class="quick-card" href="#groups"><span class="quick-icon">👥</span><div><b>القروبات</b><small>كوّن مجموعتك</small></div><span class="arrow">←</span></a>
-      <a class="quick-card" href="#bots"><span class="quick-icon">⚙️</span><div><b>البوتات</b><small>إدارة وخدمات</small></div><span class="arrow">←</span></a>
-    </div>
-
-    <section class="home-section">
-      <div class="section-title"><div><span>المجتمع</span><h2>كل شيء مرتب لك</h2></div><a href="#reviews">الآراء <b>←</b></a></div>
-      <div id="status" class="status">جاري التحميل...</div>
-      <div id="content" class="content"></div>
-    </section>
-
-    <section class="home-banner">
-      <div><span class="banner-icon">✦</span><div><b>جاهز تدخل؟</b><small>افتح القائمة من الأعلى واستكشف كل أقسام ملاذ.</small></div></div>
-      <a class="btn primary" href="#login">دخول / إنشاء حساب</a>
-    </section>
-  </section>
-</main>
-
-<footer>
-  <div class="footer-brand"><img src="/logo.svg.JPG" alt=""><b>MLD</b><small>ملاذ</small></div>
-  <div class="socials">
-    <a href="https://www.tiktok.com/@jj51" target="_blank" rel="noopener" aria-label="TikTok" title="TikTok"><img src="https://cdn.simpleicons.org/tiktok/ffffff" alt="TikTok"></a>
-    <a href="https://www.instagram.com/li5uxi" target="_blank" rel="noopener" aria-label="Instagram" title="Instagram"><img src="https://cdn.simpleicons.org/instagram/ffffff" alt="Instagram"></a>
-  </div>
-</footer>
-
-<a class="support-float" href="/support" aria-label="الدعم" title="الدعم">
-<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.3 10.8a3.7 3.7 0 0 1 7.4 0v2.4a3.7 3.7 0 0 1-3.7 3.7h-.8l-2.5 2v-2.7a3.7 3.7 0 0 1-.4-1.7v-3.7Zm-2.8 1.4v-1.4a6.6 6.6 0 0 1 13.2 0v1.4M5.5 12.2H4.4a1.7 1.7 0 0 0-1.7 1.7v1.2a1.7 1.7 0 0 0 1.7 1.7h1.1m13-4.6h1.1a1.7 1.7 0 0 1 1.7 1.7v1.2a1.7 1.7 0 0 1-1.7 1.7h-1.1" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
-</a>
+  </header>
+  <div id="drawerShade" class="drawer-shade"></div>
+  <aside id="drawer" class="drawer" aria-hidden="true">
+    <div class="drawer-head"><div><b>ملاذ</b><small>لوحة المجتمع والخدمات</small></div><button id="drawerClose" class="round-btn">×</button></div>
+    <div id="menu"></div>
+    <div class="drawer-foot"><a href="https://www.tiktok.com/@jj51" target="_blank" rel="noopener">TikTok</a><a href="https://www.instagram.com/li5uxi" target="_blank" rel="noopener">Instagram</a><a href="#support">الدعم</a></div>
+  </aside>
+  <main id="view"></main>
+  <footer><div><b>MLD</b><span>ملاذ — مجتمعك في مكان واحد</span></div><nav><a href="#home">الرئيسية</a><a href="#games">الألعاب</a><a href="#members">المجتمع</a><a href="#reviews">الآراء</a></nav><small>© 2026 ملاذ — فهد المطيري</small></footer>
 </div>
+<div id="searchModal" class="modal-layer hidden"><div class="modal search-modal"><button class="modal-x" data-close>×</button><h2>ابحث داخل ملاذ</h2><p>ابحث عن عضو أو افتح قسمًا بسرعة.</p><input id="globalSearch" placeholder="اكتب اسم العضو أو القسم…" autocomplete="off"><div id="searchResults" class="search-results"></div></div></div>
+<div id="modal" class="modal-layer hidden"><div class="modal"><button class="modal-x" data-close>×</button><div id="modalBody"></div></div></div>
 <div id="toast" class="toast"></div>
-<script src="/app.js?v=30"></script>
+<div id="supportFab"><a href="/support" aria-label="الدعم">?</a></div>
+<script src="/app.js?v=100"></script>
 </body>
 </html>
