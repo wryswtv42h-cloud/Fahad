@@ -1,6 +1,44 @@
-:root{--bg:#070b16;--panel:rgba(10,18,34,.94);--card:#101d34;--card2:#17294a;--line:#31527e;--text:#f7fbff;--muted:#b8c9df;--pink:#62e8ff;--accent:#bda7ff;--purple:#7b61ff;--green:#5ff0b0;--focus:#bfefff}body{background:radial-gradient(circle at 8% -8%,#0fb7d955,transparent 30%),radial-gradient(circle at 96% 12%,#7555ff66,transparent 34%),linear-gradient(135deg,#050914,#0b1426 52%,#050914)}.topbar{background:#07101de8;border-bottom-color:#62e8ff33}.primary,.invite{background:linear-gradient(135deg,#62e8ff,#bda7ff);color:#07101b}.panel,.feature-card,.message-box,.home-reviews-section{border-color:#315b91}.card,.role-card,.top-card,.review-card-vertical,.stat-card,.game-live,.game-room{border-color:#294a78}.card:hover,.role-card:hover,.top-card:hover,.review-card-vertical:hover{border-color:#62e8ff}.search-wrap input,.full{background:#07101d;border-color:#38577f}.hero-art{background:linear-gradient(145deg,#aeefff,#7561d6 55%,#152a50);border-color:#62e8ff66}.game-board{background:radial-gradient(circle,#334b9a,#101b35 58%,#060b15);border-color:#62e8ff44}.game-room{background:radial-gradient(circle at 50% 28%,#243b70,#0d182c 38%,#050a14 78%)}.game-seat.turn{border-color:#62e8ff66;background:#62e8ff0f}@media(max-width:560px){.game-tile{background:linear-gradient(145deg,#172b49,#0e1a2e);border-color:#355b8c}}
-/* Game UI final dark palette — overrides legacy white game styles */
-.games-create-card,.games-hero-card,.games-panel,.games-live-card,.games-lobby,.games-catalog-box,.games-name-box{background:linear-gradient(145deg,#101d34,#0a1324)!important;color:#f7fbff!important;border-color:#315b91!important;box-shadow:0 20px 60px #0008!important}
-.games-create-card h3,.games-create-card p,.games-hero-card h2,.games-hero-card p,.games-catalog-head h3,.games-catalog-head p,.games-name-box p{color:#f7fbff!important}
-.games-secondary{background:#17294a!important;color:#eaf6ff!important;border:1px solid #31527e!important}.games-primary{background:linear-gradient(135deg,#62e8ff,#bda7ff)!important;color:#07101b!important}
-.games-picker,.games-catalog-grid{background:transparent!important}.game-choice,.games-catalog-item{background:linear-gradient(145deg,#172b49,#0d182b)!important;color:#f7fbff!important;border-color:#31527e!important}.game-choice:hover,.games-catalog-item:hover{border-color:#62e8ff!important}.game-choice.selected{border-color:#62e8ff!important;box-shadow:0 0 0 2px #62e8ff22!important}.game-choice small,.games-catalog-item small,.games-count{color:#b8c9df!important}.games-create-controls select,.games-name-box input{background:#07101d!important;color:#f7fbff!important;border-color:#38577f!important}.games-status{color:#b8c9df!important}.game-session-row{background:#101d34!important;border-color:#31527e!important;color:#f7fbff!important}.games-empty{color:#b8c9df!important}.mld-game-stage{background:#070d18!important}.mld-game-stage-head{background:linear-gradient(135deg,#0c1729,#17294a)!important}.mld-game-stage-actions button{background:#203756!important;color:#fff!important}.mld-game-frame-wrap{background:#070d18!important}.games-catalog-modal{background:#030711e8!important}.games-catalog-close{background:#ffffff12!important;color:#fff!important}
+/* MLD visual compatibility layer — preserves the original MLD identity.
+   Do not replace the main design with a separate theme. */
+:root{
+  --bg:#08060d;
+  --panel:rgba(24,14,36,.92);
+  --card:#25152f;
+  --card2:#372047;
+  --line:#805891;
+  --text:#fff8ff;
+  --muted:#d5c0d9;
+  --pink:#ff9cde;
+  --accent:#f9d9ef;
+  --purple:#a86fdf;
+  --green:#70f5b1;
+  --focus:#ffd2f2;
+}
+/* Keep dynamically generated game hub readable without changing the site's identity. */
+.games-create-card,.games-hero-card,.games-sessions-card,.games-catalog-card,.games-panel,.games-live-card,.games-lobby,.games-catalog-box,.games-name-box{
+  color:var(--text);
+  border-color:var(--line);
+  background:linear-gradient(145deg,var(--card2),#17101f);
+}
+.games-create-card h3,.games-create-card p,.games-hero-card h2,.games-hero-card p,
+.games-catalog-head h3,.games-catalog-head p,.games-name-box p{color:var(--text)}
+.games-secondary{color:var(--text);background:#ffffff10;border:1px solid #fbcff355}
+.games-primary{color:#241329;background:linear-gradient(135deg,var(--accent),#e9acd9)}
+.game-choice,.games-catalog-item{
+  color:var(--text);
+  background:linear-gradient(145deg,var(--card2),#17101f);
+  border-color:#fbcff355;
+}
+.game-choice:hover,.games-catalog-item:hover{border-color:var(--pink)}
+.game-choice.selected{border-color:var(--pink);box-shadow:0 0 0 2px #ff9cde22}
+.game-choice small,.games-catalog-item small,.games-count,.games-status,.games-empty{color:var(--muted)}
+.games-create-controls select,.games-name-box input{
+  background:#0d0914;color:var(--text);border-color:#f0d8ef66;
+}
+.game-session-row{background:#ffffff08;color:var(--text);border-color:#fbcff355}
+.mld-game-stage{background:#0b0712}
+.mld-game-stage-head{background:linear-gradient(135deg,#170f20,#31203f)}
+.mld-game-stage-actions button{background:#ffffff10;color:var(--text)}
+.mld-game-frame-wrap{background:#0b0712}
+.games-catalog-modal{background:#07040be8}
+.games-catalog-close{background:#ffffff12;color:#fff}
