@@ -10,8 +10,8 @@ const pgSession = require("connect-pg-simple")(session);
 const { Pool } = require("pg");
 const helmet = require("helmet");
 const compression = require("compression");
-const httpProxy = require("http-proxy");
-// game host cleanup hardening v2
+const gameEngines = require("./game-engines");
+// native MLD game engine: games stay inside this service
 
 const token = process.env.DISCORD_BOT_TOKEN;
 const guildId = process.env.DISCORD_GUILD_ID;
@@ -102,18 +102,6 @@ const authLimiter=rateLimit(10*60*1000,30,req=>"auth:"+req.ip);
 const resetLimiter=rateLimit(15*60*1000,5,req=>"reset:"+req.ip);
 const writeLimiter=rateLimit(60*1000,90,req=>"write:"+((req.session&&req.session.user?.username)||req.ip));
 
-
-const MLD_GAME_TARGET = process.env.MLD_GAME_TARGET || "https://mld-gamenest-production.up.railway.app";
-const mldGameProxy = httpProxy.createProxyServer({target:MLD_GAME_TARGET,changeOrigin:true,secure:true,ws:true});
-mldGameProxy.on("error",(err,req,res)=>{console.error("MLD game proxy:",err.message);if(res&&!res.headersSent)res.statusCode=502;try{if(res&&!res.writableEnded)res.end("Game service unavailable")}catch{}});
-mldGameProxy.on("proxyRes",(proxyRes)=>{delete proxyRes.headers["x-frame-options"];delete proxyRes.headers["content-security-policy"];});
-function proxyGame(req,res){mldGameProxy.web(req,res,{target:MLD_GAME_TARGET,changeOrigin:true,secure:true});}
-function isGameAssetRequest(req){const ref=String(req.headers.referer||"");return /\/mld-games\/game\.html(?:[?#]|$)/.test(ref);}
-app.use("/mld-games",(req,res)=>proxyGame(req,res));
-app.use((req,res,next)=>{
-  if(isGameAssetRequest(req) && (/^\/(?:style\.css|js\/|assets\/|api\/room-exists\/)/.test(req.url))) return proxyGame(req,res);
-  next();
-});
 
 app.get("/health",(req,res)=>{
   res.status(200).json({ok:true,service:"mld",version:"hardening-6",botReady:client.isReady(),membersCached:Boolean(memberSnapshot)});
@@ -318,7 +306,7 @@ async function initAppDatabase() {
     CREATE TABLE IF NOT EXISTS applications (id SERIAL PRIMARY KEY, username VARCHAR(32) NOT NULL, discord_username VARCHAR(100) NOT NULL, type VARCHAR(60) NOT NULL, answers JSONB NOT NULL DEFAULT '{}'::jsonb, status VARCHAR(20) NOT NULL DEFAULT 'pending', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()); CREATE TABLE IF NOT EXISTS application_questions (id SERIAL PRIMARY KEY, label VARCHAR(180) NOT NULL, key VARCHAR(80) NOT NULL UNIQUE, type VARCHAR(20) NOT NULL DEFAULT 'text', required BOOLEAN NOT NULL DEFAULT true, position INTEGER NOT NULL DEFAULT 0, active BOOLEAN NOT NULL DEFAULT true);
     CREATE TABLE IF NOT EXISTS community_groups (id SERIAL PRIMARY KEY, username VARCHAR(32) NOT NULL, discord_username VARCHAR(100) NOT NULL, name VARCHAR(60) NOT NULL, description VARCHAR(240) NOT NULL DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
     CREATE TABLE IF NOT EXISTS audit_logs (id BIGSERIAL PRIMARY KEY, username VARCHAR(32), discord_username VARCHAR(100), action VARCHAR(120) NOT NULL, details TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
-    CREATE TABLE IF NOT EXISTS game_sessions (id BIGSERIAL PRIMARY KEY, code VARCHAR(8) UNIQUE NOT NULL, game_id VARCHAR(60) NOT NULL, game_name VARCHAR(120) NOT NULL, owner_username VARCHAR(32) NOT NULL, status VARCHAR(20) NOT NULL DEFAULT 'open', max_players INTEGER NOT NULL DEFAULT 4, players INTEGER NOT NULL DEFAULT 0, spectators INTEGER NOT NULL DEFAULT 0, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), started_at TIMESTAMPTZ, ended_at TIMESTAMPTZ); CREATE INDEX IF NOT EXISTS game_sessions_status_idx ON game_sessions(status,created_at DESC);
+    CREATE TABLE IF NOT EXISTS game_sessions (id BIGSERIAL PRIMARY KEY, code VARCHAR(8) UNIQUE NOT NULL, game_id VARCHAR(60) NOT NULL, game_name VARCHAR(120) NOT NULL, owner_username VARCHAR(32) NOT NULL, status VARCHAR(20) NOT NULL DEFAULT 'open', max_players INTEGER NOT NULL DEFAULT 4, players INTEGER NOT NULL DEFAULT 0, spectators INTEGER NOT NULL DEFAULT 0, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), started_at TIMESTAMPTZ, ended_at TIMESTAMPTZ, players_json JSONB NOT NULL DEFAULT '[]'::jsonb, spectators_json JSONB NOT NULL DEFAULT '[]'::jsonb, state JSONB); ALTER TABLE game_sessions ADD COLUMN IF NOT EXISTS players_json JSONB NOT NULL DEFAULT '[]'::jsonb; ALTER TABLE game_sessions ADD COLUMN IF NOT EXISTS spectators_json JSONB NOT NULL DEFAULT '[]'::jsonb; ALTER TABLE game_sessions ADD COLUMN IF NOT EXISTS state JSONB; CREATE INDEX IF NOT EXISTS game_sessions_status_idx ON game_sessions(status,created_at DESC);
     ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS username VARCHAR(32);
     ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS discord_username VARCHAR(100);
     ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS details TEXT;
@@ -490,12 +478,127 @@ app.post("/api/jokes/generate",writeLimiter,async(req,res)=>{const body=jokeSeed
 app.post("/api/jokes/:id/react",writeLimiter,engagementUser,async(req,res)=>{const type=req.body?.type==="dislike"?"dislike":"like";try{const old=await pool.query("SELECT reaction FROM mld_joke_reactions WHERE joke_id=$1 AND username=$2",[req.params.id,req.mldUser.username]);if(old.rowCount)await pool.query("UPDATE mld_joke_reactions SET reaction=$3 WHERE joke_id=$1 AND username=$2",[req.params.id,req.mldUser.username,type]);else await pool.query("INSERT INTO mld_joke_reactions(joke_id,username,reaction) VALUES($1,$2,$3)",[req.params.id,req.mldUser.username,type]);await pool.query("UPDATE mld_jokes SET likes=(SELECT COUNT(*) FROM mld_joke_reactions WHERE joke_id=$1 AND reaction='like'),dislikes=(SELECT COUNT(*) FROM mld_joke_reactions WHERE joke_id=$1 AND reaction='dislike') WHERE id=$1",[req.params.id]);const q=await pool.query("SELECT id,body,author,likes,dislikes,created_at FROM mld_jokes WHERE id=$1",[req.params.id]);if(!q.rowCount)return res.status(404).json({error:"النكتة غير موجودة"});res.json(q.rows[0]);}catch(e){res.status(500).json({error:"تعذر حفظ التفاعل"})}});
 app.post("/api/stories/generate",async(req,res)=>{const genre=Object.prototype.hasOwnProperty.call(storySeed,req.body?.genre)?req.body.genre:"مغامرة";const len=req.body?.length==="طويلة"?6:req.body?.length==="متوسطة"?4:3;const src=storySeed[genre],parts=[];for(let i=0;i<len;i++)parts.push(src[i%src.length]);const body=parts.join(" ");try{const q=await pool.query("INSERT INTO mld_stories(genre,body) VALUES($1,$2) RETURNING id,genre,body,created_at",[genre,body]);res.status(201).json(q.rows[0]);}catch(e){res.status(500).json({error:"تعذر توليد القصة"})}});
 app.get("/api/support",async(req,res)=>{try{const g=await getGuild();const wanted=String(process.env.OWNER_DISCORD_USERNAME||process.env.OWNER_USERNAME||"w4px").trim().toLowerCase();let member=null;const members=await getAllMembers(g);for(const m of members){const names=[m.user?.username,m.user?.globalName,m.displayName].filter(Boolean).map(x=>String(x).toLowerCase());if(names.includes(wanted)||names.some(x=>x.split("#")[0]===wanted)){member=m;break;}}const id=member?.user?.id||null;res.json({ok:!!id,username:wanted,url:id?"https://discord.com/users/"+id:null});}catch(e){res.json({ok:false,username:String(process.env.OWNER_DISCORD_USERNAME||process.env.OWNER_USERNAME||"w4px").trim().toLowerCase(),url:null})}});
-app.get("/api/games/sessions",async(req,res)=>{try{if(gameSessionsCache&&Date.now()-gameSessionsCacheAt<1000)return res.json({sessions:gameSessionsCache,cached:true});const q=await pool.query("SELECT id,code,game_id,game_name,owner_username,status,max_players,players,spectators,created_at,started_at FROM game_sessions WHERE status IN ('open','playing') ORDER BY created_at DESC LIMIT 100");gameSessionsCache=q.rows;gameSessionsCacheAt=Date.now();res.json({sessions:q.rows,cached:false});}catch(e){res.status(500).json({error:"تعذر تحميل جلسات الألعاب"});}});
-app.post("/api/games/sessions",writeLimiter,async(req,res)=>{try{const gameId=String(req.body?.gameId||"").trim().slice(0,60),gameName=String(req.body?.gameName||gameId).trim().slice(0,120),maxPlayers=Math.max(2,Math.min(10,Number(req.body?.maxPlayers)||4)),playerName=String(req.body?.playerName||"زائر").trim().slice(0,32)||"زائر";if(!gameId||!gameName)return res.status(400).json({error:"اختر لعبة أولًا"});let code="";for(let i=0;i<12;i++){code=Math.random().toString(36).slice(2,8).toUpperCase();const x=await pool.query("SELECT 1 FROM game_sessions WHERE code=$1",[code]);if(!x.rowCount)break}const q=await pool.query("INSERT INTO game_sessions(code,game_id,game_name,owner_username,max_players,players) VALUES($1,$2,$3,$4,$5,1) RETURNING *",[code,gameId,gameName,playerName,maxPlayers]);res.json({ok:true,session:q.rows[0]});}catch(e){console.error("Game session create:",e);res.status(500).json({error:"تعذر إنشاء جلسة اللعبة"});}});
-app.post("/api/games/sessions/:code/join",writeLimiter,async(req,res)=>{try{const code=String(req.params.code||"").toUpperCase();const q=await pool.query("SELECT * FROM game_sessions WHERE code=$1 AND status='open' FOR UPDATE",[code]);if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة أو بدأت"});const s=q.rows[0];if(Number(s.players)>=Number(s.max_players))return res.status(409).json({error:"الجلسة مكتملة"});const playerName=String(req.body?.playerName||"زائر").trim().slice(0,32)||"زائر";await pool.query("UPDATE game_sessions SET players=players+1 WHERE code=$1",[code]);res.json({ok:true,session:{...s,players:Number(s.players)+1,owner_username:s.owner_username}});}catch(e){res.status(500).json({error:"تعذر الانضمام للجلسة"});}});
-app.post("/api/games/sessions/:code/start",writeLimiter,async(req,res)=>{try{const code=String(req.params.code||"").toUpperCase();const q=await pool.query("UPDATE game_sessions SET status='playing',started_at=COALESCE(started_at,NOW()) WHERE code=$1 AND status='open' RETURNING *",[code]);if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة أو بدأت"});res.json({ok:true,session:q.rows[0]});}catch(e){res.status(500).json({error:"تعذر تحديث حالة الجلسة"});}});
-app.post("/api/games/sessions/:code/spectate",writeLimiter,async(req,res)=>{try{const code=String(req.params.code||"").toUpperCase();const q=await pool.query("UPDATE game_sessions SET spectators=spectators+1 WHERE code=$1 AND status='playing' RETURNING *",[code]);if(!q.rowCount)return res.status(404).json({error:"الجلسة غير متاحة للمشاهدة"});res.json({ok:true,session:q.rows[0]});}catch(e){res.status(500).json({error:"تعذر تسجيل المشاهدة"});}});
-app.post("/api/games/sessions/:code/end",writeLimiter,async(req,res)=>{try{const code=String(req.params.code||"").toUpperCase();const q=await pool.query("UPDATE game_sessions SET status='ended',ended_at=COALESCE(ended_at,NOW()) WHERE code=$1 AND status<>'ended' RETURNING *",[code]);if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة"});res.json({ok:true,session:q.rows[0]});}catch(e){res.status(500).json({error:"تعذر إنهاء الجلسة"});}});
+
+const GAME_ENGINE_MAP={uno:"UNO",ludo:"LUDO",flightchess:"LUDO",baloot:"BALOOT",jackaroo:"JAKAROO",qawsar:"QAWSAR"};
+const GAME_LIMITS={UNO:{min:2,max:6},LUDO:{min:2,max:4},BALOOT:{min:4,max:4},JAKAROO:{min:2,max:4},QAWSAR:{min:2,max:6}};
+function engineFor(id){return GAME_ENGINE_MAP[String(id||"").toLowerCase()]||null}
+function gameIdentity(req,body={}){
+  const u=currentUser(req);
+  if(u)return {username:String(u.username).slice(0,32),discordUsername:String(u.discordUsername||"").slice(0,100)};
+  const guestId=String(body.guestId||"").trim().slice(0,64);
+  const username=String(body.playerName||"زائر").trim().slice(0,32)||"زائر";
+  return guestId?{guestId,username}:{guestId:"guest-"+require("crypto").randomBytes(8).toString("hex"),username};
+}
+function sameGamePlayer(a,b){return a&&b&&((a.username&&b.username&&String(a.username).toLowerCase()===String(b.username).toLowerCase())||(a.guestId&&b.guestId&&a.guestId===b.guestId))}
+function publicGameSession(row){
+  return {
+    id:row.id,code:row.code,game_id:row.game_id,game_name:row.game_name,owner_username:row.owner_username,
+    status:row.status,max_players:Number(row.max_players||4),players:Number(row.players||0),spectators:Number(row.spectators||0),
+    players_list:Array.isArray(row.players_json)?row.players_json.map((p,i)=>({seat:i+1,username:p.username||"زائر",guestId:p.guestId||null})):[],
+    created_at:row.created_at,started_at:row.started_at
+  };
+}
+app.get("/api/games/sessions",async(req,res)=>{
+  try{
+    const q=await pool.query("SELECT id,code,game_id,game_name,owner_username,status,max_players,players,spectators,created_at,started_at,players_json FROM game_sessions WHERE status IN ('open','playing') ORDER BY created_at DESC LIMIT 100");
+    res.set("Cache-Control","no-store");res.json({sessions:q.rows.map(publicGameSession)});
+  }catch(e){console.error("Game sessions list:",e);res.status(500).json({error:"تعذر تحميل جلسات الألعاب",sessions:[]})}
+});
+app.post("/api/games/sessions",writeLimiter,async(req,res)=>{
+  try{
+    const engine=engineFor(req.body?.gameId);if(!engine)return res.status(400).json({error:"هذه اللعبة غير مدعومة بمحرك داخل ملاذ حاليًا"});
+    const limits=GAME_LIMITS[engine],gameName=String(req.body?.gameName||engine).trim().slice(0,120);
+    const player=gameIdentity(req,{...req.body,playerName:req.body?.playerName||currentUser(req)?.username||"زائر"});
+    const max=Math.max(limits.min,Math.min(limits.max,Number(req.body?.maxPlayers)||limits.max));
+    let code="";
+    for(let i=0;i<12;i++){code=Math.random().toString(36).slice(2,8).toUpperCase();const x=await pool.query("SELECT 1 FROM game_sessions WHERE code=$1",[code]);if(!x.rowCount)break}
+    const q=await pool.query("INSERT INTO game_sessions(code,game_id,game_name,owner_username,max_players,players,players_json,spectators_json) VALUES($1,$2,$3,$4,$5,1,$6::jsonb,'[]'::jsonb) RETURNING *",[code,String(req.body.gameId||engine).toLowerCase(),gameName,player.username,max,JSON.stringify([player])]);
+    res.json({ok:true,session:publicGameSession(q.rows[0])});
+  }catch(e){console.error("Game session create:",e);res.status(500).json({error:"تعذر إنشاء جلسة اللعبة"})}
+});
+app.post("/api/games/sessions/:code/join",writeLimiter,async(req,res)=>{
+  const db=await pool.connect();
+  try{
+    await db.query("BEGIN");
+    const code=String(req.params.code||"").toUpperCase(),q=await db.query("SELECT * FROM game_sessions WHERE code=$1 AND status='open' FOR UPDATE",[code]);
+    if(!q.rowCount)throw Object.assign(new Error("الجلسة غير موجودة أو بدأت"),{statusCode:404});
+    const s=q.rows[0],players=Array.isArray(s.players_json)?s.players_json:[],player=gameIdentity(req,req.body||{});
+    if(players.some(p=>sameGamePlayer(p,player)))return db.query("ROLLBACK").then(()=>res.json({ok:true,session:publicGameSession(s),already:true}));
+    if(players.length>=Number(s.max_players))throw Object.assign(new Error("الجلسة مكتملة"),{statusCode:409});
+    players.push(player);
+    const u=await db.query("UPDATE game_sessions SET players=$2,players_json=$3::jsonb WHERE code=$1 RETURNING *",[code,players.length,JSON.stringify(players)]);
+    await db.query("COMMIT");res.json({ok:true,session:publicGameSession(u.rows[0])});
+  }catch(e){try{await db.query("ROLLBACK")}catch{};res.status(e.statusCode||500).json({error:e.message||"تعذر الانضمام للجلسة"})}finally{db.release()}
+});
+app.post("/api/games/sessions/:code/start",writeLimiter,async(req,res)=>{
+  try{
+    const code=String(req.params.code||"").toUpperCase(),q=await pool.query("SELECT * FROM game_sessions WHERE code=$1 AND status='open'",[code]);
+    if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة أو بدأت"});
+    const s=q.rows[0],u=currentUser(req);if(!u||String(u.username).toLowerCase()!==String(s.owner_username).toLowerCase())return res.status(403).json({error:"صاحب الجلسة فقط يستطيع بدء اللعبة"});
+    const players=Array.isArray(s.players_json)?s.players_json:[],engine=engineFor(s.game_id),limits=GAME_LIMITS[engine];
+    if(!engine||players.length<limits.min)return res.status(409).json({error:"اللعبة تحتاج "+limits.min+" لاعبين على الأقل"});
+    const state=gameEngines.create(engine,players);
+    const u2=await pool.query("UPDATE game_sessions SET status='playing',started_at=COALESCE(started_at,NOW()),state=$2::jsonb,players=$3 WHERE code=$1 AND status='open' RETURNING *",[code,JSON.stringify(state),players.length]);
+    res.json({ok:true,session:publicGameSession(u2.rows[0])});
+  }catch(e){console.error("Game start:",e);res.status(500).json({error:e.message||"تعذر بدء اللعبة"})}
+});
+app.get("/api/games/sessions/:code/state",async(req,res)=>{
+  try{
+    const code=String(req.params.code||"").toUpperCase(),q=await pool.query("SELECT * FROM game_sessions WHERE code=$1 AND status IN ('open','playing')",[code]);
+    if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة"});
+    const s=q.rows[0],players=Array.isArray(s.players_json)?s.players_json:[],viewer=gameIdentity(req,req.query||{});
+    if(s.status==="open")return res.json({ok:true,session:publicGameSession(s),state:null});
+    const state=s.state?JSON.parse(JSON.stringify(s.state)):null;
+    if(!state)return res.status(503).json({error:"حالة اللعبة غير جاهزة"});
+    res.set("Cache-Control","no-store");res.json({ok:true,session:publicGameSession(s),state:gameEngines.pub(state,players,viewer)});
+  }catch(e){console.error("Game state:",e);res.status(500).json({error:e.message||"تعذر تحميل حالة اللعبة"})}
+});
+app.post("/api/games/sessions/:code/action",writeLimiter,async(req,res)=>{
+  const db=await pool.connect();
+  try{
+    await db.query("BEGIN");
+    const code=String(req.params.code||"").toUpperCase(),q=await db.query("SELECT * FROM game_sessions WHERE code=$1 AND status='playing' FOR UPDATE",[code]);
+    if(!q.rowCount)throw Object.assign(new Error("الجلسة غير موجودة أو اللعبة لم تبدأ"),{statusCode:404});
+    const s=q.rows[0],players=Array.isArray(s.players_json)?s.players_json:[],actor=gameIdentity(req,req.body||{}),idx=players.findIndex(p=>sameGamePlayer(p,actor));
+    if(idx<0)throw Object.assign(new Error("لست لاعبًا في هذه الجلسة"),{statusCode:403});
+    const state=s.state?JSON.parse(JSON.stringify(s.state)):null;if(!state)throw Error("حالة اللعبة غير جاهزة");
+    const next=gameEngines.apply(state.game,state,players,actor,String(req.body?.action||""),req.body?.data||{});
+    const u=await db.query("UPDATE game_sessions SET state=$2::jsonb,status=$3 WHERE code=$1 RETURNING *",[code,JSON.stringify(next),next.phase==="finished"?"ended":"playing"]);
+    await db.query("COMMIT");
+    res.json({ok:true,finished:next.phase==="finished",session:publicGameSession(u.rows[0]),state:gameEngines.pub(next,players,actor)});
+  }catch(e){try{await db.query("ROLLBACK")}catch{};res.status(e.statusCode||400).json({error:e.message||"الحركة غير صالحة"})}finally{db.release()}
+});
+app.post("/api/games/sessions/:code/spectate",writeLimiter,async(req,res)=>{
+  const db=await pool.connect();
+  try{
+    await db.query("BEGIN");const code=String(req.params.code||"").toUpperCase(),q=await db.query("SELECT * FROM game_sessions WHERE code=$1 AND status='playing' FOR UPDATE",[code]);
+    if(!q.rowCount)throw Object.assign(new Error("الجلسة غير متاحة للمشاهدة"),{statusCode:404});
+    const s=q.rows[0],viewer=gameIdentity(req,req.body||{}),list=Array.isArray(s.spectators_json)?s.spectators_json:[];
+    if(!list.some(p=>sameGamePlayer(p,viewer)))list.push(viewer);
+    const u=await db.query("UPDATE game_sessions SET spectators=$2,spectators_json=$3::jsonb WHERE code=$1 RETURNING *",[code,list.length,JSON.stringify(list)]);
+    await db.query("COMMIT");res.json({ok:true,session:publicGameSession(u.rows[0])});
+  }catch(e){try{await db.query("ROLLBACK")}catch{};res.status(e.statusCode||500).json({error:e.message||"تعذر تسجيل المشاهدة"})}finally{db.release()}
+});
+app.post("/api/games/sessions/:code/leave",writeLimiter,async(req,res)=>{
+  const db=await pool.connect();
+  try{
+    await db.query("BEGIN");const code=String(req.params.code||"").toUpperCase(),q=await db.query("SELECT * FROM game_sessions WHERE code=$1 AND status IN ('open','playing') FOR UPDATE",[code]);
+    if(!q.rowCount)throw Object.assign(new Error("الجلسة غير موجودة"),{statusCode:404});
+    const s=q.rows[0],actor=gameIdentity(req,req.body||{}),players=Array.isArray(s.players_json)?s.players_json:[],next=players.filter(p=>!sameGamePlayer(p,actor));
+    if(next.length===players.length)throw Object.assign(new Error("أنت لست في الجلسة"),{statusCode:404});
+    if(s.status==="playing")throw Object.assign(new Error("لا يمكن تغيير مقاعد اللاعبين بعد بدء اللعبة"),{statusCode:409});
+    const u=await db.query("UPDATE game_sessions SET players=$2,players_json=$3::jsonb WHERE code=$1 RETURNING *",[code,next.length,JSON.stringify(next)]);
+    await db.query("COMMIT");res.json({ok:true,session:publicGameSession(u.rows[0])});
+  }catch(e){try{await db.query("ROLLBACK")}catch{};res.status(e.statusCode||500).json({error:e.message||"تعذر الخروج من الجلسة"})}finally{db.release()}
+});
+app.post("/api/games/sessions/:code/end",writeLimiter,async(req,res)=>{
+  try{
+    const code=String(req.params.code||"").toUpperCase(),q=await pool.query("SELECT * FROM game_sessions WHERE code=$1",[code]);if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة"});
+    const s=q.rows[0],u=currentUser(req);if(!u||String(u.username).toLowerCase()!==String(s.owner_username).toLowerCase())return res.status(403).json({error:"صاحب الجلسة فقط يستطيع إنهاء الجلسة"});
+    const x=await pool.query("UPDATE game_sessions SET status='ended',ended_at=COALESCE(ended_at,NOW()) WHERE code=$1 RETURNING *",[code]);res.json({ok:true,session:publicGameSession(x.rows[0])});
+  }catch(e){res.status(500).json({error:"تعذر إنهاء الجلسة"})}
+});
+
 app.get("/api/site/stats",async(req,res)=>{try{const q=await pool.query("SELECT visits FROM site_stats WHERE id=1");const g=await getGuild();const members=await getAllMembers(g);const presenceCount=[...(g.presences?.cache?.values?.()||[])].filter(p=>p.status&&p.status!=="offline"&&!g.members.cache.get(p.userId)?.user.bot).length;const online=presenceCount||members.filter(m=>!m.user.bot&&m.presence?.status&&m.presence.status!=="offline").length;res.set("Cache-Control","no-store");res.json({visits:Number(q.rows[0]?.visits||0),online,memberCount:Number(g.memberCount||members.length||0),updatedAt:new Date().toISOString()});}catch(e){console.error("Site stats:",e);res.status(503).json({error:"stats_unavailable"});}});
 app.post("/api/site/visit",async(req,res)=>{try{await pool.query("UPDATE site_stats SET visits=visits+1,updated_at=NOW() WHERE id=1");res.json({ok:true});}catch(e){res.status(500).json({error:"stats"});}});
 app.get("/api/site/settings",async(req,res)=>{try{const q=await pool.query("SELECT key,value FROM site_settings");res.json({settings:Object.fromEntries(q.rows.map(x=>[x.key,x.value]))});}catch(e){res.status(500).json({settings:{}});}});
