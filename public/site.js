@@ -247,7 +247,7 @@ Promise.race([mldMe(),new Promise(r=>setTimeout(r,700))]).catch(()=>null).then((
 
 
 /* MLD 2026 hardening: restored home route, real-time chat UI, game bridge. */
-async async function homeView(){
+async function homeView(){
   await mldMe();
   title.textContent="الرئيسية";
   subtitle.textContent="لوحة ملاذ الحية — وتقييمات المجتمع تتحدث تلقائيًا.";
