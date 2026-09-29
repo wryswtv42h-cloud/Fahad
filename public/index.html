@@ -3,55 +3,84 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#0b0c10">
-<meta name="description" content="ملاذ — منصة مجتمع متكاملة">
+<meta name="theme-color" content="#0b0d12">
+<meta name="description" content="ملاذ — منصة مجتمع عربية متكاملة">
 <title>ملاذ — MLD</title>
 <link rel="icon" href="/logo.svg.JPG">
-<link rel="stylesheet" href="/app.css?v=20">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/app.css?v=30">
 </head>
 <body>
 <div id="app">
 <header class="topbar">
   <div class="topbar-inner">
-    <button id="menuBtn" class="icon-btn menu-btn" type="button" aria-label="فتح القائمة" aria-controls="drawer" aria-expanded="false">
+    <button id="menuBtn" class="menu-btn" type="button" aria-label="فتح القائمة" aria-controls="drawer" aria-expanded="false">
       <span></span><span></span><span></span>
     </button>
     <a class="brand" href="#home" aria-label="ملاذ">
-      <span class="brand-mark"><img src="/logo.svg.JPG" alt=""></span>
-      <span class="brand-copy"><b>MLD</b><small>ملاذ</small></span>
+      <img src="/logo.svg.JPG" alt="ملاذ">
+      <span><b>MLD</b><small>ملاذ</small></span>
     </a>
-    <div class="live-pill"><i></i><span>متصل</span></div>
+    <div class="live"><i></i><span>متصل</span></div>
   </div>
 </header>
 
 <aside id="drawer" class="drawer" aria-hidden="true">
   <div class="drawer-head">
-    <div><b>القائمة</b><small>تنقّل داخل ملاذ</small></div>
-    <button class="drawer-close" type="button" aria-label="إغلاق القائمة" onclick="document.querySelector('#drawer')?.classList.remove('open');document.querySelector('#drawer')?.setAttribute('aria-hidden','true');document.querySelector('#menuBtn')?.setAttribute('aria-expanded','false')">×</button>
+    <div><b>القائمة</b><small>كل خدمات ملاذ</small></div>
+    <button class="drawer-close" type="button" aria-label="إغلاق القائمة" onclick="document.getElementById('menuBtn').click()">×</button>
   </div>
   <div id="menu"></div>
 </aside>
 
 <main>
-  <section class="workspace homepage-workspace">
-    <div class="section-head">
-      <div><p class="kicker">ملاذ</p><h2 id="viewTitle">الرئيسية</h2><p id="viewSub">كل شيء في مكان واحد.</p></div>
+  <section class="home-shell">
+    <div class="home-hero">
+      <div class="hero-copy">
+        <div class="eyebrow"><span></span> مجتمعك في مكان واحد</div>
+        <h1>أهلًا بك في <em>ملاذ</em></h1>
+        <p>مجتمع، تواصل، ألعاب جماعية، قروبات، بوتات وخدمات — بتجربة عربية مرتبة وسريعة.</p>
+        <div class="hero-actions">
+          <a class="btn primary" href="#games">استكشف الألعاب <span>←</span></a>
+          <a class="btn secondary" href="#members">اكتشف المجتمع <span>←</span></a>
+        </div>
+      </div>
+      <div class="hero-mark">
+        <div class="hero-ring ring-a"></div><div class="hero-ring ring-b"></div>
+        <div class="hero-logo"><img src="/logo.svg.JPG" alt=""></div>
+        <div class="hero-chip chip-one">مجتمع</div>
+        <div class="hero-chip chip-two">ألعاب</div>
+        <div class="hero-chip chip-three">تواصل</div>
+      </div>
     </div>
-    <div id="status" class="status">جاري التحميل...</div>
-    <div id="content" class="content"></div>
+
+    <div class="quick-grid">
+      <a class="quick-card" href="#games"><span class="quick-icon">🎮</span><div><b>الألعاب</b><small>جلسات ومشاهدون</small></div><span class="arrow">←</span></a>
+      <a class="quick-card" href="#chat"><span class="quick-icon">💬</span><div><b>الشات</b><small>تواصل مع المجتمع</small></div><span class="arrow">←</span></a>
+      <a class="quick-card" href="#groups"><span class="quick-icon">👥</span><div><b>القروبات</b><small>كوّن مجموعتك</small></div><span class="arrow">←</span></a>
+      <a class="quick-card" href="#bots"><span class="quick-icon">⚙️</span><div><b>البوتات</b><small>إدارة وخدمات</small></div><span class="arrow">←</span></a>
+    </div>
+
+    <section class="home-section">
+      <div class="section-title"><div><span>المجتمع</span><h2>كل شيء مرتب لك</h2></div><a href="#reviews">الآراء <b>←</b></a></div>
+      <div id="status" class="status">جاري التحميل...</div>
+      <div id="content" class="content"></div>
+    </section>
+
+    <section class="home-banner">
+      <div><span class="banner-icon">✦</span><div><b>جاهز تدخل؟</b><small>افتح القائمة من الأعلى واستكشف كل أقسام ملاذ.</small></div></div>
+      <a class="btn primary" href="#login">دخول / إنشاء حساب</a>
+    </section>
   </section>
 </main>
 
 <footer>
-  <div class="footer-brand"><span class="brand-mark small"><img src="/logo.svg.JPG" alt=""></span><span><b>MLD</b><small>ملاذ</small></span></div>
-  <span class="footer-copy">© 2026 ملاذ — فهد المطيري</span>
-  <div class="socials" aria-label="التواصل الاجتماعي">
-    <a href="https://www.tiktok.com/@jj51" target="_blank" rel="noopener" aria-label="TikTok" title="TikTok">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.2 4.2c.5 2.8 2.1 4.5 4.8 4.7v3.1c-1.7.1-3.3-.4-4.7-1.4v5.1a5.3 5.3 0 1 1-4.8-5.3v3.2a2.2 2.2 0 1 0 1.7 2.1V4.2h3Z"/></svg>
-    </a>
-    <a href="https://www.instagram.com/li5uxi" target="_blank" rel="noopener" aria-label="Instagram" title="Instagram">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.2" y="3.2" width="17.6" height="17.6" rx="5"/><circle cx="12" cy="12" r="4.1"/><circle cx="17.5" cy="6.7" r="1.1" class="fill"/></svg>
-    </a>
+  <div class="footer-brand"><img src="/logo.svg.JPG" alt=""><b>MLD</b><small>ملاذ</small></div>
+  <div class="socials">
+    <a href="https://www.tiktok.com/@jj51" target="_blank" rel="noopener" aria-label="TikTok" title="TikTok"><img src="https://cdn.simpleicons.org/tiktok/ffffff" alt="TikTok"></a>
+    <a href="https://www.instagram.com/li5uxi" target="_blank" rel="noopener" aria-label="Instagram" title="Instagram"><img src="https://cdn.simpleicons.org/instagram/ffffff" alt="Instagram"></a>
   </div>
 </footer>
 
@@ -60,6 +89,6 @@
 </a>
 </div>
 <div id="toast" class="toast"></div>
-<script src="/app.js?v=20"></script>
+<script src="/app.js?v=30"></script>
 </body>
 </html>
