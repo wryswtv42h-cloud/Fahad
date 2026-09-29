@@ -195,6 +195,28 @@ async function anonymousView(){
   await load();setStatus("الفضفضة جاهزة");
 }
 
+// Restored public route handlers used by the final router.
+async function mldChatView(mode="public"){
+  title.textContent=mode==="private"?"المحادثات الخاصة":"الشات";
+  subtitle.textContent=mode==="private"?"رسائلك الخاصة ومحادثاتك.":"شات المجتمع المباشر.";
+  searchWrap.style.display="none"; content.className="feature-grid";
+  const endpoint=mode==="private"?"/api/chat/private":"/api/chat";
+  try{
+    const r=await fetch(endpoint,{cache:"no-store"});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok) throw Error(d.error||"تعذر تحميل الشات");
+    const items=Array.isArray(d.messages)?d.messages:Array.isArray(d.items)?d.items:[];
+    content.innerHTML="<section class='feature-card'><h3>💬 "+(mode==="private"?"المحادثات الخاصة":"شات المجتمع")+"</h3><div class='joke-list'>"+(items.slice(-50).map(x=>"<article class='joke-item'><p>"+esc(x.body||x.message||x.text||"")+"</p><small>"+esc(x.username||x.author||"عضو")+"</small></article>").join("")||"<p class='muted'>لا توجد رسائل بعد.</p>")+"</div></section>";
+    setStatus("الشات جاهز");
+  }catch(e){
+    content.innerHTML="<section class='feature-card'><h3>💬 الشات</h3><p class='muted'>واجهة الشات جاهزة، ولا توجد رسائل قابلة للعرض حاليًا.</p></section>";
+    setStatus("الشات جاهز");
+  }
+}
+async function mldChatProfile(){title.textContent="بروفايلي";subtitle.textContent="بيانات حسابك ونشاطك.";searchWrap.style.display="none";content.className="feature-grid";await mldMe();content.innerHTML="<section class='feature-card'><h3>👤 بروفايلي</h3><p class='muted'>"+(mldUser?"مرحبًا "+esc(mldUser.username):"سجل دخولك لعرض ملفك")+"</p></section>";setStatus("البروفايل جاهز")}
+async function groupsReal(){title.textContent="القروبات";subtitle.textContent="مجتمع ملاذ والقروبات المتاحة.";searchWrap.style.display="none";content.className="feature-grid";try{const r=await fetch("/api/groups",{cache:"no-store"});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error();const items=d.groups||d.items||[];content.innerHTML="<section class='feature-card'><h3>👥 القروبات</h3>"+(items.map(g=>"<article class='joke-item'><b>"+esc(g.name||g.title||"قروب")+"</b><p>"+esc(g.description||"")+"</p></article>").join("")||"<p class='muted'>لا توجد قروبات متاحة حاليًا.</p>")+"</section>"}catch{content.innerHTML="<section class='feature-card'><h3>👥 القروبات</h3><p class='muted'>لا توجد قروبات متاحة حاليًا.</p></section>"}setStatus("القروبات جاهزة")}
+async function reviewsView(){title.textContent="الآراء";subtitle.textContent="آراء أعضاء المجتمع.";searchWrap.style.display="none";content.className="feature-grid";try{const r=await fetch("/api/reviews",{cache:"no-store"});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error();const items=d.reviews||d.items||[];content.innerHTML="<section class='feature-card'><h3>⭐ آراء المجتمع</h3>"+(items.map(x=>"<article class='joke-item'><p>"+esc(x.body||x.text||x.review||"")+"</p><small>"+esc(x.author||x.username||"عضو")+"</small></article>").join("")||"<p class='muted'>لا توجد آراء بعد.</p>")+"</section>"}catch{content.innerHTML="<section class='feature-card'><h3>⭐ آراء المجتمع</h3><p class='muted'>لا توجد آراء بعد.</p></section>"}setStatus("الآراء جاهزة")}
+
 // FINAL MLD ROUTER — single source of truth
 window.change=async function(v){
   view=v;
