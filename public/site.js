@@ -294,7 +294,7 @@ async async function homeView(){
 }
 
 function openReadyGame(url,gameId){
-  const u=new URL(url||"https://mld-gamenest-production.up.railway.app/");
+  const u=new URL(url||"/mld-games/",window.location.origin);
   u.searchParams.set("lang","en");
   gameId=gameId||document.querySelector(".game-choice.selected")?.dataset.game||""; if(gameId)u.searchParams.set("game",gameId);
   const wrap=document.createElement("div");
