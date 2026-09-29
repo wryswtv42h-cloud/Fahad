@@ -9,8 +9,9 @@ test("games hub opens and exposes the live room shell", async ({ page, request }
   const pageErrors = [];
   page.on("pageerror", err => pageErrors.push(err.message));
 
-  await page.goto(BASE + "/#games", { waitUntil: "domcontentloaded" });
+  await page.goto(BASE + "/", { waitUntil: "domcontentloaded" });
   await expect(page.locator("body")).toBeVisible();
+  await page.evaluate(() => window.change("games"));
   await expect(page.locator(".games-create-card")).toBeVisible({ timeout: 15000 });
   await expect(page.locator("#game-select")).toBeVisible();
   await expect(page.locator("#game-create")).toBeEnabled();
@@ -38,8 +39,9 @@ for (const project of [
     const { defaultBrowserType, ...use } = project.use;
     test.use(use);
     test("responsive games hub", async ({ page }) => {
-      await page.goto(BASE + "/#games", { waitUntil: "domcontentloaded" });
+      await page.goto(BASE + "/", { waitUntil: "domcontentloaded" });
       await expect(page.locator("body")).toBeVisible();
+      await page.evaluate(() => window.change("games"));
       await expect(page.locator(".games-create-card")).toBeVisible({ timeout: 15000 });
       await expect(page.locator("body")).not.toHaveCSS("overflow-x", "scroll");
     });
