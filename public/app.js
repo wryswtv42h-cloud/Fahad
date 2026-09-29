@@ -314,7 +314,12 @@ function toggleMenu(e){
  drawer.setAttribute("aria-hidden",String(!open));
 }
 if(menuBtn&&drawer){
- menuBtn.onclick=toggleMenu;
+ const runMenu=(e)=>{
+  if(e){e.preventDefault();e.stopPropagation()}
+  toggleMenu(e);
+  menuBtn.setAttribute("aria-expanded",String(drawer.classList.contains("open")));
+ };
+ menuBtn.addEventListener("click",runMenu);
 }
 document.addEventListener("click",e=>{
  if(drawer&&drawer.classList.contains("open")&&!drawer.contains(e.target)&&!menuBtn?.contains(e.target)){drawer.classList.remove("open");drawer.setAttribute("aria-hidden","true")}
