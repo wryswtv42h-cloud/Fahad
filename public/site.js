@@ -243,3 +243,136 @@ document.addEventListener("keydown",e=>{
 // INITIAL BOOT: never show the old static homepage before the new one is ready
 document.body.classList.add("mld-booting");
 Promise.race([mldMe(),new Promise(r=>setTimeout(r,700))]).catch(()=>null).then(()=>window.change("home")).catch(()=>window.change("home"));
+
+
+/* MLD 2026 hardening: restored home route, real-time chat UI, game bridge. */
+async function homeView(){
+  await mldMe();
+  title.textContent="الرئيسية";
+  subtitle.textContent="لوحة ملاذ الحية — بيانات السيرفر والأعضاء والتفاعل تتحدث تلقائيًا.";
+  searchWrap.style.display="none";
+  content.className="home-dashboard";
+  try{
+    const data=await Promise.all([
+      fetch("/api/public/server?live="+Date.now(),{cache:"no-store"}).then(x=>x.json()),
+      fetch("/api/public/top?live="+Date.now(),{cache:"no-store"}).then(x=>x.json()),
+      fetch("/api/public/roles?live="+Date.now(),{cache:"no-store"}).then(x=>x.json()),
+      siteStats()
+    ]);
+    const s=data[0],t=data[1],r=data[2],stats=data[3];
+    const members=(t.messages||[]).slice(0,6);
+    content.innerHTML=
+      "<section class='home-live-card'><span class='pill'>● LIVE</span><h2>"+esc(s.name||"MLD")+"</h2><p>السيرفر متصل · آخر مزامنة "+new Date().toLocaleTimeString("ar-SA",{hour:"2-digit",minute:"2-digit",second:"2-digit"})+"</p><div class='home-stats'><b>"+num(s.memberCount)+"<small>عضو</small></b><b>"+num(stats.online)+"<small>متصل الآن</small></b><b>"+num(stats.visits)+"<small>زيارة</small></b><b>"+num((r.roles||[]).length)+"<small>رتب قيادية</small></b></div></section>"+
+      "<section class='home-grid'><article class='feature-card'><h3>🔥 الأكثر تفاعلًا</h3><div class='joke-list'>"+
+      (members.map((m,i)=>"<button type='button' class='home-member' data-member='"+esc(m.id)+"'><span>"+(i+1)+"</span><img src='"+esc(avatar(m))+"' onerror=\"this.src='/logo.svg'\"><b>"+esc(m.name)+"</b><small>"+num(m.stats?.messages)+" رسالة</small></button>").join("")||"<p class='muted'>لا توجد بيانات.</p>")+
+      "</div></article><article class='feature-card'><h3>⚡ وصول سريع</h3><div class='home-actions'><button type='button' class='primary' data-view='members'>الأعضاء</button><button type='button' class='games-secondary' data-view='top'>TOP</button><button type='button' class='games-secondary' data-view='chat'>الشات العام</button><button type='button' class='games-secondary' data-view='games'>الألعاب</button><button type='button' class='games-secondary' data-view='roles'>الرتب</button><button type='button' class='games-secondary' data-view='groups'>القروبات</button></div></article></section>"+
+      "<div class='home-rights'>© 2026 ملاذ — جميع الحقوق محفوظة · حقوق السيرفر: ملاذ · المؤسس والمالك: فهد المطيري</div>";
+    bind();
+    setStatus("بيانات ملاذ محدثة");
+  }catch(e){
+    console.error("homeView",e);
+    content.innerHTML="<section class='feature-card'><h3>الرئيسية</h3><p class='muted'>جاري إعادة مزامنة بيانات السيرفر…</p><button type='button' class='primary' data-view='members'>فتح الأعضاء</button></section>";
+    setStatus("تعذر تحديث البيانات مؤقتًا");
+  }
+}
+
+function openReadyGame(url,gameId){
+  const u=new URL(url||"https://mld-gamenest-production.up.railway.app/");
+  u.searchParams.set("lang","en");
+  if(gameId)u.searchParams.set("game",gameId);
+  const wrap=document.createElement("div");
+  wrap.className="mld-game-modal";
+  wrap.innerHTML="<div class='mld-game-modal-card'><div class='mld-game-modal-head'><div><b>🎮 ملاذ ألعاب</b><small>واجهة الألعاب داخل ملاذ</small></div><button type='button' class='mld-game-modal-close' aria-label='إغلاق'>×</button></div><iframe class='mld-game-modal-frame' title='MLD Game' allow='autoplay; fullscreen' src='"+esc(u.toString())+"'></iframe></div>";
+  document.body.appendChild(wrap);
+  const close=()=>wrap.remove();
+  wrap.querySelector(".mld-game-modal-close").onclick=close;
+  wrap.addEventListener("click",e=>{if(e.target===wrap)close()});
+}
+
+async function mldChatView(mode="public"){
+  await mldMe();
+  if(!mldUser)return authView();
+  title.textContent=mode==="private"?"المحادثات الخاصة":"الشات العام";
+  subtitle.textContent=mode==="private"?"خاص وقروبات: إنشاء، إضافة، طرد، وحظر.":"محادثة جماعية مفتوحة لكل شخص مسجل دخول.";
+  searchWrap.style.display="none";
+  content.className="chat-app";
+  let activeConversation=null;
+  const safe=v=>esc(String(v||""));
+  const memberSearch=async q=>{
+    if(!q)return [];
+    const d=await fetch("/api/public/members?q="+encodeURIComponent(q)+"&limit=12",{cache:"no-store"}).then(r=>r.json()).catch(()=>({members:[]}));
+    return d.members||[];
+  };
+  const publicMessages=async()=>{
+    const d=await fetch("/api/chat/public?limit=70&"+Date.now(),{cache:"no-store"}).then(r=>r.json());
+    return d.messages||[];
+  };
+  const renderPublic=async()=>{
+    const msgs=await publicMessages();
+    return "<div class='chat-messages'>"+(msgs.map(m=>"<article class='chat-msg'><img src='"+safe(avatar(m))+"' onerror=\"this.src='/logo.svg'\"><div class='chat-msg-body'><div class='chat-msg-head'><b>"+safe(m.displayName||m.sender)+"</b><small>"+new Date(m.createdAt).toLocaleTimeString("ar-SA",{hour:"2-digit",minute:"2-digit"})+"</small></div><p>"+safe(m.body)+"</p><div class='chat-msg-actions'><button type='button' data-chat-block='"+safe(m.sender)+"'>حظر</button>"+(m.sender===mldUser.username||mldUser.role==="owner"?"<button type='button' data-chat-delete='"+m.id+"'>حذف</button>":"")+"</div></div></article>").join("")||"<div class='chat-empty'>لا توجد رسائل بعد. ابدأ المحادثة.</div>")+"</div>";
+  };
+  const renderConversationList=async()=>{
+    const d=await fetch("/api/chat/conversations?"+Date.now(),{cache:"no-store"}).then(r=>r.json()).catch(()=>({conversations:[]}));
+    const rows=d.conversations||[];
+    return "<div class='chat-conversations'>"+(rows.map(x=>"<button type='button' class='chat-conversation "+(Number(x.id)===activeConversation?"active":"")+"' data-conv-open='"+x.id+"'><b>"+safe(x.title||"محادثة")+"</b><small>"+safe(x.last_message||"لا توجد رسائل")+" · "+num(x.unread)+" جديدة</small></button>").join("")||"<p class='muted'>لا توجد محادثات خاصة حتى الآن.</p>")+"</div>";
+  };
+  const renderConversation=async id=>{
+    activeConversation=Number(id);
+    const data=await Promise.all([
+      fetch("/api/chat/conversations/"+id+"/messages?limit=80&"+Date.now(),{cache:"no-store"}).then(r=>r.json()),
+      fetch("/api/chat/conversations/"+id+"/participants",{cache:"no-store"}).then(r=>r.json())
+    ]);
+    const msgs=data[0].messages||[],parts=data[1].participants||[];
+    const owner=parts.find(p=>p.isOwner);
+    return "<div class='chat-private-head'><div><b>"+safe(owner?.display_name||"المحادثة")+"</b><small>"+parts.length+" أعضاء</small></div><button type='button' class='games-secondary' data-chat-back>رجوع</button></div>"+
+      "<div class='chat-members'>"+parts.map(p=>"<span><b>"+safe(p.display_name||p.username)+"</b>"+(p.isOwner?" 👑":"")+(p.username!==mldUser.username&&!p.isOwner?" <button type='button' data-chat-group-remove='"+safe(p.username)+"'>طرد</button>":"")+(p.username!==mldUser.username?" <button type='button' data-chat-block='"+safe(p.username)+"'>حظر</button>":"")+"</span>").join("")+"</div>"+
+      "<div class='chat-messages'>"+(msgs.map(m=>"<article class='chat-msg'><img src='"+safe(avatar(m))+"' onerror=\"this.src='/logo.svg'\"><div class='chat-msg-body'><div class='chat-msg-head'><b>"+safe(m.displayName||m.sender)+"</b><small>"+new Date(m.createdAt).toLocaleTimeString("ar-SA",{hour:"2-digit",minute:"2-digit"})+"</small></div><p>"+safe(m.body)+"</p></div></article>").join("")||"<div class='chat-empty'>ابدأ المحادثة.</div>")+"</div>"+
+      "<form class='chat-compose' id='private-compose'><input id='private-text' maxlength='2000' autocomplete='off' placeholder='اكتب رسالتك...'><button class='primary'>إرسال</button></form>";
+  };
+  const bind=()=>{
+    document.querySelectorAll("[data-chat-block]").forEach(b=>b.onclick=async()=>{
+      const u=b.dataset.chatBlock;
+      if(!confirm("حظر @"+u+"؟"))return;
+      const r=await fetch("/api/chat/blocks/"+encodeURIComponent(u),{method:"POST"});
+      const d=await r.json().catch(()=>({}));
+      if(!r.ok)return alert(d.error||"تعذر الحظر");
+      if(mode==="private"&&activeConversation){const pane=$("#chat-pane");if(pane){pane.innerHTML=await renderConversation(activeConversation);bind()}}
+      else render();
+    });
+    document.querySelectorAll("[data-chat-delete]").forEach(b=>b.onclick=async()=>{const r=await fetch("/api/chat/public/"+b.dataset.chatDelete,{method:"DELETE"});if(r.ok)render()});
+    document.querySelectorAll("[data-conv-open]").forEach(b=>b.onclick=async()=>{const pane=$("#chat-pane");if(pane){pane.innerHTML=await renderConversation(b.dataset.convOpen);bind()}});
+    document.querySelectorAll("[data-chat-back]").forEach(b=>b.onclick=render);
+    document.querySelectorAll("[data-chat-group-remove]").forEach(b=>b.onclick=async()=>{const r=await fetch("/api/chat/conversations/"+activeConversation+"/participants/"+encodeURIComponent(b.dataset.chatGroupRemove),{method:"DELETE"});const d=await r.json().catch(()=>({}));if(!r.ok)return alert(d.error||"تعذر الطرد");const pane=$("#chat-pane");if(pane){pane.innerHTML=await renderConversation(activeConversation);bind()}});
+    document.querySelectorAll("[data-chat-new]").forEach(b=>b.onclick=showNewChat);
+    $("#public-compose")?.addEventListener("submit",async e=>{e.preventDefault();const i=$("#public-text"),body=i.value.trim();if(!body)return;const r=await fetch("/api/chat/public",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({body})});const d=await r.json().catch(()=>({}));if(!r.ok)return alert(d.error||"تعذر الإرسال");i.value="";render()});
+    $("#private-compose")?.addEventListener("submit",async e=>{e.preventDefault();const i=$("#private-text"),body=i.value.trim();if(!body)return;const r=await fetch("/api/chat/conversations/"+activeConversation+"/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({body})});const d=await r.json().catch(()=>({}));if(!r.ok)return alert(d.error||"تعذر الإرسال");i.value="";const pane=$("#chat-pane");if(pane){pane.innerHTML=await renderConversation(activeConversation);bind()}});
+  };
+  const showNewChat=async()=>{
+    const pane=$("#chat-pane");if(!pane)return;
+    pane.innerHTML="<section class='chat-new'><h3>＋ شات خاص / قروب</h3><p class='muted'>حدد شخصًا واحدًا للخاص أو أكثر لإنشاء قروب.</p><input id='chat-member-search' class='full' placeholder='ابحث باليوزر أو الاسم...'><div id='chat-member-results'></div><input id='chat-group-title' class='full' placeholder='اسم القروب (اختياري)'><button id='chat-create' type='button' class='primary wide'>إنشاء</button><button id='chat-new-back' type='button' class='games-secondary wide'>رجوع</button></section>";
+    const input=$("#chat-member-search");
+    input.oninput=async()=>{const rows=await memberSearch(input.value.trim());$("#chat-member-results").innerHTML=rows.map(m=>"<label class='chat-pick'><input type='checkbox' value='"+safe(m.username)+"'><img src='"+safe(avatar(m))+"' onerror=\"this.src='/logo.svg'\"><span>"+safe(m.name)+" <small>@"+safe(m.username)+"</small></span></label>").join("")||"<p class='muted'>لا توجد نتائج.</p>"};
+    $("#chat-create").onclick=async()=>{
+      const picked=[...document.querySelectorAll("#chat-member-results input:checked")].map(x=>x.value);
+      if(!picked.length)return alert("اختر شخصًا واحدًا على الأقل");
+      const r=await fetch("/api/chat/conversations",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({participants:picked,title:$("#chat-group-title").value.trim()})});
+      const d=await r.json();if(!r.ok)return alert(d.error||"تعذر إنشاء المحادثة");
+      activeConversation=d.conversation.id;await render();
+      const pane=$("#chat-pane");if(pane){pane.innerHTML=await renderConversation(activeConversation);bind()}
+    };
+    $("#chat-new-back").onclick=render;
+  };
+  const render=async()=>{
+    if(mode==="private"){
+      content.innerHTML="<section class='chat-card chat-watermark'><div class='chat-tabs'><button type='button' class='primary' data-chat-new>＋ خاص / قروب جديد</button></div><div id='chat-pane'>"+await renderConversationList()+"</div><div class='chat-rights'>© 2026 ملاذ — جميع الحقوق محفوظة · حقوق السيرفر: ملاذ</div></section>";
+    }else{
+      content.innerHTML="<section class='chat-card chat-watermark'><div class='chat-toolbar'><div><h3>💬 الشات العام</h3><p>مفتوح لكل حساب مسجل دخول.</p></div><button type='button' class='games-secondary' data-chat-private>💌 خاص / قروب</button></div>"+await renderPublic()+"<form class='chat-compose' id='public-compose'><input id='public-text' maxlength='2000' autocomplete='off' placeholder='اكتب رسالتك للجميع...'><button class='primary'>إرسال</button></form><div class='chat-rights'>© 2026 ملاذ — جميع الحقوق محفوظة · حقوق السيرفر: ملاذ</div></section>";
+      document.querySelectorAll("[data-chat-private]").forEach(b=>b.onclick=()=>change("private-chat"));
+    }
+    bind();
+  };
+  await render();
+  clearInterval(window.mldChatPoll);
+  window.mldChatPoll=setInterval(()=>{if(!document.hidden&&mode==="public"&&!activeConversation)render()},5000);
+  setStatus("الشات جاهز — تحديث تلقائي كل 5 ثوانٍ");
+}
