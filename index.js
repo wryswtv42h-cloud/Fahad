@@ -2,6 +2,8 @@
 require("dotenv").config();
 
 const path = require("path");
+const fs = require("fs");
+const crypto = require("crypto");
 const express = require("express");
 const cors = require("cors");
 const { Client, GatewayIntentBits, EmbedBuilder } = require("discord.js");
@@ -417,6 +419,237 @@ client.on("voiceStateUpdate", (oldState, newState) => {
     );
     voiceSessions.delete(id);
   }
+});
+
+
+/* =========================
+   MLD PLATFORM CORE
+   Accounts / groups / game lobbies / logs / owner
+   ========================= */
+const platformDir = path.join(__dirname, "data");
+const platformFile = path.join(platformDir, "platform.json");
+const OWNER_DISCORD_ID = String(process.env.OWNER_DISCORD_ID || "w4px").trim().toLowerCase();
+const sessions = new Map();
+
+function loadPlatform() {
+  try {
+    fs.mkdirSync(platformDir, { recursive: true });
+    if (!fs.existsSync(platformFile)) {
+      fs.writeFileSync(platformFile, JSON.stringify({
+        accounts: [], groups: [], lobbies: [], logs: []
+      }, null, 2));
+    }
+    const data = JSON.parse(fs.readFileSync(platformFile, "utf8"));
+    return {
+      accounts: Array.isArray(data.accounts) ? data.accounts : [],
+      groups: Array.isArray(data.groups) ? data.groups : [],
+      lobbies: Array.isArray(data.lobbies) ? data.lobbies : [],
+      logs: Array.isArray(data.logs) ? data.logs : []
+    };
+  } catch (error) {
+    console.error("Platform storage read:", error);
+    return { accounts: [], groups: [], lobbies: [], logs: [] };
+  }
+}
+
+let platform = loadPlatform();
+
+function savePlatform() {
+  fs.mkdirSync(platformDir, { recursive: true });
+  const tmp = \${platformFile}.tmp;
+  fs.writeFileSync(tmp, JSON.stringify(platform, null, 2));
+  fs.renameSync(tmp, platformFile);
+}
+
+function logPlatform(action, accountId, details = "") {
+  platform.logs.unshift({
+    id: crypto.randomUUID(),
+    action,
+    accountId: accountId || null,
+    details: String(details).slice(0, 500),
+    at: new Date().toISOString()
+  });
+  platform.logs = platform.logs.slice(0, 500);
+  savePlatform();
+}
+
+function safeAccount(a) {
+  return {
+    id: a.id, username: a.username, discordId: a.discordId,
+    role: a.role, createdAt: a.createdAt
+  };
+}
+
+function auth(req, res, next) {
+  const header = String(req.headers.authorization || "");
+  const token = header.startsWith("Bearer ") ? header.slice(7) : "";
+  const accountId = token ? sessions.get(token) : null;
+  const account = accountId ? platform.accounts.find(a => a.id === accountId) : null;
+  if (!account) return res.status(401).json({ error: "سجّل دخولك أولًا" });
+  req.account = account;
+  req.token = token;
+  next();
+}
+
+function ownerOnly(req, res, next) {
+  if (req.account?.role !== "owner") return res.status(403).json({ error: "هذا القسم للأونر فقط" });
+  next();
+}
+
+function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
+  return { salt, hash: crypto.scryptSync(password, salt, 64).toString("hex") };
+}
+
+function passwordOk(password, account) {
+  const hash = crypto.scryptSync(password, account.salt, 64).toString("hex");
+  return crypto.timingSafeEqual(Buffer.from(hash, "hex"), Buffer.from(account.passwordHash, "hex"));
+}
+
+app.get("/api/platform/games", (req, res) => {
+  res.json({
+    botReady: client.isReady(),
+    games: [
+      { id: "baloot", name: "بلوت", icon: "🃏", players: "4", mode: "فرق" },
+      { id: "uno", name: "UNO", icon: "🎴", players: "2-4", mode: "تنافس" },
+      { id: "jackaroo", name: "جاكارو", icon: "♟️", players: "2-4", mode: "تنافس" },
+      { id: "ludo", name: "لودو", icon: "🎲", players: "2-4", mode: "تنافس" },
+      { id: "monopoly", name: "مونوبولي", icon: "🏦", players: "2-6", mode: "تنافس" }
+    ]
+  });
+});
+
+app.post("/api/platform/accounts", (req, res) => {
+  const username = String(req.body?.username || "").trim().toLowerCase();
+  const discordId = String(req.body?.discordId || "").trim();
+  const password = String(req.body?.password || "");
+  if (!/^[a-z0-9_]{3,24}$/.test(username)) return res.status(400).json({ error: "اليوزر يجب أن يكون 3-24 حرفًا إنجليزيًا أو _" });
+  if (password.length < 6) return res.status(400).json({ error: "كلمة المرور 6 أحرف على الأقل" });
+  if (!discordId) return res.status(400).json({ error: "أدخل Discord ID" });
+  if (platform.accounts.some(a => a.username === username)) return res.status(409).json({ error: "اليوزر مستخدم بالفعل" });
+
+  const owner = discordId.toLowerCase() === OWNER_DISCORD_ID;
+  const pass = hashPassword(password);
+  const account = {
+    id: crypto.randomUUID(), username, discordId,
+    role: owner ? "owner" : "member", passwordHash: pass.hash, salt: pass.salt,
+    createdAt: new Date().toISOString()
+  };
+  platform.accounts.push(account);
+  const token = crypto.randomBytes(32).toString("hex");
+  sessions.set(token, account.id);
+  logPlatform("account_created", account.id, owner ? "owner account" : "member account");
+  res.status(201).json({ token, account: safeAccount(account), owner });
+});
+
+app.post("/api/platform/login", (req, res) => {
+  const username = String(req.body?.username || "").trim().toLowerCase();
+  const password = String(req.body?.password || "");
+  const account = platform.accounts.find(a => a.username === username);
+  if (!account || !passwordOk(password, account)) return res.status(401).json({ error: "بيانات الدخول غير صحيحة" });
+  const token = crypto.randomBytes(32).toString("hex");
+  sessions.set(token, account.id);
+  res.json({ token, account: safeAccount(account) });
+});
+
+app.get("/api/platform/me", auth, (req, res) => res.json({ account: safeAccount(req.account) }));
+
+app.post("/api/platform/logout", auth, (req, res) => {
+  sessions.delete(req.token);
+  res.json({ ok: true });
+});
+
+app.get("/api/platform/groups", (req, res) => {
+  res.json({ groups: platform.groups.map(g => ({
+    id:g.id, name:g.name, description:g.description, owner:g.owner,
+    members:g.members.length, createdAt:g.createdAt
+  }))});
+});
+
+app.post("/api/platform/groups", auth, (req, res) => {
+  const name = String(req.body?.name || "").trim().slice(0, 40);
+  const description = String(req.body?.description || "").trim().slice(0, 200);
+  if (name.length < 2) return res.status(400).json({ error: "اسم المجموعة قصير" });
+  const group = {
+    id: crypto.randomUUID(), name, description, owner: req.account.username,
+    members: [req.account.username], createdAt: new Date().toISOString()
+  };
+  platform.groups.push(group);
+  logPlatform("group_created", req.account.id, name);
+  res.status(201).json({ group });
+});
+
+app.post("/api/platform/groups/:id/join", auth, (req, res) => {
+  const group = platform.groups.find(g => g.id === req.params.id);
+  if (!group) return res.status(404).json({ error: "المجموعة غير موجودة" });
+  if (!group.members.includes(req.account.username)) group.members.push(req.account.username);
+  savePlatform();
+  logPlatform("group_joined", req.account.id, group.name);
+  res.json({ ok: true, group });
+});
+
+app.get("/api/platform/lobbies", (req, res) => {
+  res.json({ lobbies: platform.lobbies.filter(l => l.status !== "closed") });
+});
+
+app.post("/api/platform/lobbies", auth, (req, res) => {
+  const game = String(req.body?.game || "");
+  const allowed = new Set(["baloot","uno","jackaroo","ludo","monopoly"]);
+  if (!allowed.has(game)) return res.status(400).json({ error: "اللعبة غير متاحة" });
+  const maxPlayers = Math.max(2, Math.min(6, Number(req.body?.maxPlayers || 4)));
+  const lobby = {
+    id: crypto.randomUUID(), game, host:req.account.username,
+    players:[req.account.username], spectators:[], maxPlayers,
+    status:"open", createdAt:new Date().toISOString()
+  };
+  platform.lobbies.push(lobby);
+  logPlatform("lobby_created", req.account.id, game);
+  res.status(201).json({ lobby });
+});
+
+app.post("/api/platform/lobbies/:id/join", auth, (req, res) => {
+  const lobby = platform.lobbies.find(l => l.id === req.params.id);
+  if (!lobby || lobby.status === "closed") return res.status(404).json({ error: "الجلسة غير متاحة" });
+  if (!lobby.players.includes(req.account.username)) {
+    if (lobby.players.length >= lobby.maxPlayers) return res.status(409).json({ error: "المقاعد مكتملة" });
+    lobby.players.push(req.account.username);
+  }
+  if (lobby.players.length >= lobby.maxPlayers) lobby.status = "ready";
+  savePlatform();
+  logPlatform("lobby_joined", req.account.id, lobby.game);
+  res.json({ lobby });
+});
+
+app.post("/api/platform/lobbies/:id/spectate", auth, (req, res) => {
+  const lobby = platform.lobbies.find(l => l.id === req.params.id);
+  if (!lobby) return res.status(404).json({ error: "الجلسة غير موجودة" });
+  if (!lobby.spectators.includes(req.account.username) && !lobby.players.includes(req.account.username)) {
+    lobby.spectators.push(req.account.username);
+  }
+  savePlatform();
+  logPlatform("lobby_spectated", req.account.id, lobby.game);
+  res.json({ lobby });
+});
+
+app.delete("/api/platform/lobbies/:id", auth, (req, res) => {
+  const i = platform.lobbies.findIndex(l => l.id === req.params.id);
+  if (i < 0) return res.status(404).json({ error: "الجلسة غير موجودة" });
+  if (platform.lobbies[i].host !== req.account.username && req.account.role !== "owner") {
+    return res.status(403).json({ error: "لا تملك صلاحية إغلاق الجلسة" });
+  }
+  platform.lobbies.splice(i, 1);
+  logPlatform("lobby_closed", req.account.id, req.params.id);
+  res.json({ ok:true });
+});
+
+app.get("/api/platform/logs", auth, ownerOnly, (req, res) => res.json({ logs: platform.logs.slice(0, 100) }));
+
+app.get("/api/platform/admin", auth, ownerOnly, (req, res) => {
+  res.json({
+    accounts: platform.accounts.length,
+    owners: platform.accounts.filter(a=>a.role==="owner").length,
+    groups: platform.groups.length, lobbies: platform.lobbies.length,
+    members: memberSnapshot?.length || 0, botReady: client.isReady()
+  });
 });
 
 app.get("*", (req, res) => {
