@@ -164,6 +164,9 @@ let memberSnapshotAt = 0;
 let memberFetchPromise = null;
 let publicRolesCache = null;
 let publicRolesCacheAt = 0;
+let publicServerCache=null, publicServerCacheAt=0;
+let publicTopCache=null, publicTopCacheAt=0;
+let gameSessionsCache=null, gameSessionsCacheAt=0;
 
 const MEMBER_CACHE_TTL = 45_000;
 const GUILD_CACHE_TTL = 15_000;
@@ -487,7 +490,7 @@ app.post("/api/jokes/generate",writeLimiter,async(req,res)=>{const body=jokeSeed
 app.post("/api/jokes/:id/react",writeLimiter,engagementUser,async(req,res)=>{const type=req.body?.type==="dislike"?"dislike":"like";try{const old=await pool.query("SELECT reaction FROM mld_joke_reactions WHERE joke_id=$1 AND username=$2",[req.params.id,req.mldUser.username]);if(old.rowCount)await pool.query("UPDATE mld_joke_reactions SET reaction=$3 WHERE joke_id=$1 AND username=$2",[req.params.id,req.mldUser.username,type]);else await pool.query("INSERT INTO mld_joke_reactions(joke_id,username,reaction) VALUES($1,$2,$3)",[req.params.id,req.mldUser.username,type]);await pool.query("UPDATE mld_jokes SET likes=(SELECT COUNT(*) FROM mld_joke_reactions WHERE joke_id=$1 AND reaction='like'),dislikes=(SELECT COUNT(*) FROM mld_joke_reactions WHERE joke_id=$1 AND reaction='dislike') WHERE id=$1",[req.params.id]);const q=await pool.query("SELECT id,body,author,likes,dislikes,created_at FROM mld_jokes WHERE id=$1",[req.params.id]);if(!q.rowCount)return res.status(404).json({error:"النكتة غير موجودة"});res.json(q.rows[0]);}catch(e){res.status(500).json({error:"تعذر حفظ التفاعل"})}});
 app.post("/api/stories/generate",async(req,res)=>{const genre=Object.prototype.hasOwnProperty.call(storySeed,req.body?.genre)?req.body.genre:"مغامرة";const len=req.body?.length==="طويلة"?6:req.body?.length==="متوسطة"?4:3;const src=storySeed[genre],parts=[];for(let i=0;i<len;i++)parts.push(src[i%src.length]);const body=parts.join(" ");try{const q=await pool.query("INSERT INTO mld_stories(genre,body) VALUES($1,$2) RETURNING id,genre,body,created_at",[genre,body]);res.status(201).json(q.rows[0]);}catch(e){res.status(500).json({error:"تعذر توليد القصة"})}});
 app.get("/api/support",async(req,res)=>{try{const g=await getGuild();const wanted=String(process.env.OWNER_DISCORD_USERNAME||process.env.OWNER_USERNAME||"w4px").trim().toLowerCase();let member=null;const members=await getAllMembers(g);for(const m of members){const names=[m.user?.username,m.user?.globalName,m.displayName].filter(Boolean).map(x=>String(x).toLowerCase());if(names.includes(wanted)||names.some(x=>x.split("#")[0]===wanted)){member=m;break;}}const id=member?.user?.id||null;res.json({ok:!!id,username:wanted,url:id?"https://discord.com/users/"+id:null});}catch(e){res.json({ok:false,username:String(process.env.OWNER_DISCORD_USERNAME||process.env.OWNER_USERNAME||"w4px").trim().toLowerCase(),url:null})}});
-app.get("/api/games/sessions",async(req,res)=>{try{const q=await pool.query("SELECT id,code,game_id,game_name,owner_username,status,max_players,players,spectators,created_at,started_at FROM game_sessions WHERE status IN ('open','playing') ORDER BY created_at DESC LIMIT 100");res.json({sessions:q.rows});}catch(e){res.status(500).json({error:"تعذر تحميل جلسات الألعاب"});}});
+app.get("/api/games/sessions",async(req,res)=>{try{if(gameSessionsCache&&Date.now()-gameSessionsCacheAt<1000)return res.json({sessions:gameSessionsCache,cached:true});const q=await pool.query("SELECT id,code,game_id,game_name,owner_username,status,max_players,players,spectators,created_at,started_at FROM game_sessions WHERE status IN ('open','playing') ORDER BY created_at DESC LIMIT 100");gameSessionsCache=q.rows;gameSessionsCacheAt=Date.now();res.json({sessions:q.rows,cached:false});}catch(e){res.status(500).json({error:"تعذر تحميل جلسات الألعاب"});}});
 app.post("/api/games/sessions",writeLimiter,async(req,res)=>{try{const gameId=String(req.body?.gameId||"").trim().slice(0,60),gameName=String(req.body?.gameName||gameId).trim().slice(0,120),maxPlayers=Math.max(2,Math.min(10,Number(req.body?.maxPlayers)||4)),playerName=String(req.body?.playerName||"زائر").trim().slice(0,32)||"زائر";if(!gameId||!gameName)return res.status(400).json({error:"اختر لعبة أولًا"});let code="";for(let i=0;i<12;i++){code=Math.random().toString(36).slice(2,8).toUpperCase();const x=await pool.query("SELECT 1 FROM game_sessions WHERE code=$1",[code]);if(!x.rowCount)break}const q=await pool.query("INSERT INTO game_sessions(code,game_id,game_name,owner_username,max_players,players) VALUES($1,$2,$3,$4,$5,1) RETURNING *",[code,gameId,gameName,playerName,maxPlayers]);res.json({ok:true,session:q.rows[0]});}catch(e){console.error("Game session create:",e);res.status(500).json({error:"تعذر إنشاء جلسة اللعبة"});}});
 app.post("/api/games/sessions/:code/join",writeLimiter,async(req,res)=>{try{const code=String(req.params.code||"").toUpperCase();const q=await pool.query("SELECT * FROM game_sessions WHERE code=$1 AND status='open' FOR UPDATE",[code]);if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة أو بدأت"});const s=q.rows[0];if(Number(s.players)>=Number(s.max_players))return res.status(409).json({error:"الجلسة مكتملة"});const playerName=String(req.body?.playerName||"زائر").trim().slice(0,32)||"زائر";await pool.query("UPDATE game_sessions SET players=players+1 WHERE code=$1",[code]);res.json({ok:true,session:{...s,players:Number(s.players)+1,owner_username:s.owner_username}});}catch(e){res.status(500).json({error:"تعذر الانضمام للجلسة"});}});
 app.post("/api/games/sessions/:code/start",writeLimiter,async(req,res)=>{try{const code=String(req.params.code||"").toUpperCase();const q=await pool.query("UPDATE game_sessions SET status='playing',started_at=COALESCE(started_at,NOW()) WHERE code=$1 AND status='open' RETURNING *",[code]);if(!q.rowCount)return res.status(404).json({error:"الجلسة غير موجودة أو بدأت"});res.json({ok:true,session:q.rows[0]});}catch(e){res.status(500).json({error:"تعذر تحديث حالة الجلسة"});}});
@@ -853,15 +856,11 @@ app.post("/api/owner/broadcast",requireOwner,async(req,res)=>{
 
 app.get("/api/public/server", async (req, res) => {
   try {
+    if(publicServerCache && Date.now()-publicServerCacheAt<5000) return res.json({...publicServerCache,cached:true});
     const guild = await getGuild();
-    res.json({
-      id: guild.id,
-      name: guild.name,
-      icon: guild.iconURL({ extension: "png", size: 256 }),
-      memberCount: guild.memberCount,
-      ownerName: process.env.SERVER_FOUNDER_NAME || "فهد المطيري",
-      invite: process.env.DISCORD_INVITE_URL || ""
-    });
+    publicServerCache={id:guild.id,name:guild.name,icon:guild.iconURL({extension:"png",size:256}),memberCount:guild.memberCount,ownerName:process.env.SERVER_FOUNDER_NAME||"فهد المطيري",invite:process.env.DISCORD_INVITE_URL||""};
+    publicServerCacheAt=Date.now();
+    res.json({...publicServerCache,cached:false});
   } catch (error) {
     console.error("Server endpoint:", error);
     res.status(503).json({ error: "Discord server unavailable" });
@@ -949,9 +948,13 @@ app.get("/api/public/roles/:id/members", async (req, res) => {
 
 app.get("/api/public/top", async (req, res) => {
   try {
+    if(publicTopCache && Date.now()-publicTopCacheAt<5000) return res.json({...publicTopCache,cached:true});
     const members=(await getAllMembers(await getGuild())).map(memberJson);
     const top=(key)=>[...members].sort((a,b)=>(b.stats[key]||0)-(a.stats[key]||0)).slice(0,10);
-    const gameQ=await pool.query("SELECT owner_username username,COUNT(*)::int wins FROM game_sessions WHERE status='ended' GROUP BY owner_username ORDER BY wins DESC LIMIT 10"); const gameTop=gameQ.rows.map(x=>({...x,points:Number(x.wins)*10})); res.json({messages:top("messages"),mentions:top("mentionsReceived"),voice:top("voiceMinutes"),joins:top("voiceJoins"),gameTop,updatedAt:memberSnapshotAt});
+    const gameQ=await pool.query("SELECT owner_username username,COUNT(*)::int wins FROM game_sessions WHERE status='ended' GROUP BY owner_username ORDER BY wins DESC LIMIT 10");
+    const gameTop=gameQ.rows.map(x=>({...x,points:Number(x.wins)*10}));
+    publicTopCache={messages:top("messages"),mentions:top("mentionsReceived"),voice:top("voiceMinutes"),joins:top("voiceJoins"),gameTop,updatedAt:memberSnapshotAt}; publicTopCacheAt=Date.now();
+    res.json({...publicTopCache,cached:false});
   } catch(error){console.error("Top endpoint:",error);res.status(503).json({error:"Top is temporarily unavailable"});}
 });
 app.get("/api/public/member/:id", async (req, res) => {
