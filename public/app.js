@@ -230,7 +230,7 @@ async function bots(){
  const d=await api("/api/bots"),a=d.bots||[];
  $("#status").textContent=a.length+" بوت";
  let html=formCard("ربط بوت جديد",
- '<div class="card" style="background:rgba(255,255,255,.025)"><b>ربط آمن ومتدرج</b><p class="muted">نفحص التوكن أولًا بدون حفظه، ثم نعرض فقط السيرفرات المسموح بها. كل بوت مربوط بسيرفر واحد.</p></div>'+
+ ''+
  '<input id="botName" placeholder="اسم البوت">'+
  '<input id="botToken" type="password" autocomplete="off" placeholder="Bot Token">'+
  '<button class="primary" id="botInspect">فحص التوكن واختيار السيرفر</button><div id="botGuildPicker" style="display:none;margin-top:12px"></div>'+
@@ -250,7 +250,7 @@ async function botPanel(id){
  $("#status").textContent="مركز قيادة "+b.name;
  const accessRows=(c.access||[]).map(x=>'<div class="card" style="margin-bottom:8px"><b>'+esc(x.username)+'</b><div class="muted">'+esc((x.permissions||[]).join(" · ")||"بدون صلاحيات")+'</div></div>').join("")||'<p class="muted">لا يوجد مديرون إضافيون.</p>';
  const templateRows=(c.templates||[]).map(x=>'<div class="card" style="margin-bottom:8px"><div class="row"><b>'+esc(x.command)+'</b><button class="ghost" data-tpl-toggle="'+x.id+'">'+(x.enabled?"تعطيل":"تفعيل")+'</button></div><p class="muted">'+esc(x.name)+' · '+esc(x.description||"")+'</p><p>'+esc(x.response_template)+'</p></div>').join("")||'<p class="muted">لا توجد قوالب. أضف أول أمر من النموذج.</p>';
- const pluginRows=pluginNames.map(k=>{const p=(c.plugins||[]).find(x=>x.plugin_key===k);return '<div class="card"><div class="row"><div><b>'+esc(k)+'</b><div class="muted">إضافة مستقلة قابلة للإيقاف والتكوين</div></div><button class="'+(p?.enabled===false?"ghost":"primary")+'" data-plugin="'+k+'">'+(p?.enabled===false?"تشغيل":"مفعلة")+'</button></div></div>'}).join("");
+ const pluginRows=pluginNames.map(k=>{const p=(c.plugins||[]).find(x=>x.plugin_key===k);return '<div class="card"><div class="row"><div><b>'+esc(k)+'</b><div class="muted"></div></div><button class="'+(p?.enabled===false?"ghost":"primary")+'" data-plugin="'+k+'">'+(p?.enabled===false?"تشغيل":"مفعلة")+'</button></div></div>'}).join("");
  $("#content").innerHTML=formCard("الإعدادات الأساسية",
  '<div class="row" style="flex-wrap:wrap"><span class="badge">سيرفر واحد</span><span class="badge">بيانات دائمة</span><span class="badge">صلاحيات دقيقة</span><span class="badge">قوالب أوامر</span></div>'+
  '<input id="botPrefix" maxlength="8" value="'+esc(b.prefix||"!")+'" placeholder="Prefix">'+
@@ -272,7 +272,7 @@ async function botPanel(id){
  '<input id="accessUser" placeholder="اسم مستخدم المنصة">'+
  '<div class="row" style="flex-wrap:wrap">'+perms.map(p=>'<label class="badge"><input type="checkbox" class="accessPerm" value="'+p+'" style="width:auto"> '+p+'</label>').join("")+'</div>'+
  '<button class="primary" id="accessAdd">منح الصلاحيات</button><div style="margin-top:12px">'+accessRows+'</div>')+
- '<div class="card"><b>مبدأ النظام</b><p class="muted">المالك يحتفظ بالتحكم الكامل. كل تغيير مهم يسجل في اللوقات، والاشتراك يوقف الميزة فقط ولا يحذف البيانات.</p></div>';
+ '<div class="card"><b></b><p class="muted">المالك يحتفظ بالتحكم الكامل. كل تغيير مهم يسجل في اللوقات، والاشتراك يوقف الميزة فقط ولا يحذف البيانات.</p></div>';
  $("#botSave").onclick=async()=>{try{await api("/api/bots/"+id,{method:"PATCH",body:{prefix:$("#botPrefix").value,presenceMode:$("#botPresence").value,presenceText:$("#botPresenceText").value,hideWebsite:$("#botHide").checked}});toast("تم حفظ الإعدادات");botPanel(id)}catch(e){toast(e.message)}};
  $("#tplAdd").onclick=async()=>{try{const roles=$("#tplRoles").value.split(",").map(x=>x.trim()).filter(Boolean),channels=$("#tplChannels").value.split(",").map(x=>x.trim()).filter(Boolean);await api("/api/bots/"+id+"/templates",{method:"POST",body:{name:$("#tplName").value,command:$("#tplCommand").value,description:$("#tplDesc").value,responseTemplate:$("#tplResponse").value,allowedRoles:roles,channels}});toast("تمت إضافة الأمر");botPanel(id)}catch(e){toast(e.message)}};
  $$("[data-tpl-toggle]").forEach(x=>x.onclick=async()=>{const t=(c.templates||[]).find(q=>String(q.id)===String(x.dataset.tplToggle));if(!t)return;try{await api("/api/bots/"+id+"/templates/"+t.id,{method:"PATCH",body:{enabled:!t.enabled}});botPanel(id)}catch(e){toast(e.message)}});
