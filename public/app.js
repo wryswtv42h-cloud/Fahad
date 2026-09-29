@@ -176,32 +176,49 @@ async function openGame(code){
 async function gameState(){
  if(!currentGame)return;
  try{
-  const d=await api("/api/games/sessions/"+currentGame+"/state"),s=d.session,state=d.state||{};
-  $("#viewTitle").textContent=s.gameName+" · "+s.code;$("#viewSub").textContent=s.status==="playing"?"اللعبة جارية":"اللوبي";
-  $("#status").textContent=s.players.length+" لاعبين · "+s.spectators.length+" مشاهدين";
-  const isHost=me&&me.username===s.ownerUsername;
-  let html='<article class="card" style="grid-column:1/-1"><div class="row"><div><b>اللاعبون</b><p class="muted">'+s.players.map(x=>esc(x.username)).join(" · ")+"</p></div><div><b>المشاهدون</b><p class="muted">"+s.spectators.map(x=>esc(x.username)).join(" · ")+"</p></div></div>"+(s.status==="open"&&isHost?'<button class="primary" id="startGame">بدء الجولة</button>':"")+"</article>";
-  if(s.status==="playing")html+=gameControls(s,state);else html+='<article class="card"><b>بانتظار البداية</b><p class="muted">شارك كود الجلسة مع اللاعبين ثم ابدأ الجولة من حساب المضيف.</p></article>';
+  const d=await api("/api/games/sessions/"+currentGame+"/state");
+  const session=d.session,state=d.state||{};
+  $("#viewTitle").textContent=session.gameName+" · "+session.code;
+  $("#viewSub").textContent=session.status==="playing"?"اللعبة جارية":"اللوبي";
+  $("#status").textContent=(session.players?.length||0)+" لاعبين · "+(session.spectators?.length||0)+" مشاهدين";
+  const isHost=me&&me.username===session.ownerUsername;
+  let html='<article class="card" style="grid-column:1/-1"><div class="row"><div><b>اللاعبون</b><p class="muted">'+(session.players||[]).map(x=>esc(x.username)).join(" · ")+'</p></div><div><b>المشاهدون</b><p class="muted">'+(session.spectators||[]).map(x=>esc(x.username)).join(" · ")+'</p></div></div>';
+  if(session.status==="open"&&isHost)html+='<button class="primary" id="startGame">بدء الجولة</button>';
+  html+='</article>';
+  if(session.status==="playing")html+=gameControls(session,state);else html+='<article class="card"><b>بانتظار البداية</b><p class="muted">شارك كود الجلسة مع اللاعبين ثم ابدأ الجولة.</p></article>';
   $("#content").innerHTML=html;
-  $("#startGame")?.addEventListener("click",async()=>{try{await api("/api/games/sessions/"+code+"/start",{method:"POST"});gameState()}catch(e){toast(e.message)}});
-  $$("[data-action]").forEach(b=>b.onclick=async()=>{try{const data={};if(b.dataset.index!=null)data.index=Number(b.dataset.index);if(b.dataset.token!=null)data.token=Number(b.dataset.token);if(b.dataset.color)data.color=b.dataset.color;if(b.dataset.mode)data.mode=b.dataset.mode;if(b.dataset.player!=null)data.player=Number(b.dataset.player);if(b.dataset.targetIndex!=null)data.targetIndex=Number(b.dataset.targetIndex);if(b.dataset.bid)data.bid=b.dataset.bid;await api("/api/games/sessions/"+code+"/action",{method:"POST",body:{action:b.dataset.action,data}});gameState()}catch(e){toast(e.message)}});
+  $("#startGame")?.addEventListener("click",async()=>{try{await api("/api/games/sessions/"+session.code+"/start",{method:"POST"});gameState()}catch(e){toast(e.message)}});
+  $$("[data-action]").forEach(btn=>btn.onclick=async()=>{
+   try{
+    const data={};
+    if(btn.dataset.index!=null)data.index=Number(btn.dataset.index);
+    if(btn.dataset.token!=null)data.token=Number(btn.dataset.token);
+    if(btn.dataset.color)data.color=btn.dataset.color;
+    if(btn.dataset.mode)data.mode=btn.dataset.mode;
+    if(btn.dataset.player!=null)data.player=Number(btn.dataset.player);
+    if(btn.dataset.targetIndex!=null)data.targetIndex=Number(btn.dataset.targetIndex);
+    if(btn.dataset.bid)data.bid=btn.dataset.bid;
+    await api("/api/games/sessions/"+session.code+"/action",{method:"POST",body:{action:btn.dataset.action,data}});
+    gameState();
+   }catch(e){toast(e.message)}
+  });
  }catch(e){toast(e.message);clearInterval(pollTimer)}
 }
-function gameControls(s,st){
- const p=st.private||{},turn=st.players?.[st.turnIndex]?.username||st.players?.[st.qawsarTurn]?.username||"—";
- let h=`<article class="card" style="grid-column:1/-1"><b>الدور: ${esc(turn)}</b><p class="muted">${esc(st.prompt||st.lastAction?.type||st.lastAction||"")}</p>`;
+function gameControls(session,st){
+ const p=st.private||{};
+ const turn=st.players?.[st.turnIndex]?.username||st.players?.[st.qawsarTurn]?.username||"—";
+ let h='<article class="card" style="grid-column:1/-1"><b>الدور: '+esc(turn)+'</b><p class="muted">'+esc(st.prompt||st.lastAction?.type||st.lastAction||"")+'</p>';
  if(st.game==="UNO"){
-  h+=`<p>لون اللعب: ${esc(st.color||"—")} · السحب: ${st.drawCount}</p><div class="row" style="flex-wrap:wrap">${(st.hand||[]).map((card,i)=>`<button class="primary" data-action="playCard" data-index="${i}" data-color="${esc(card.color||"")}" >${esc(card.value)} ${esc(card.color)}</button>`).join("")}</div><button class="ghost" data-action="draw">سحب ورقة</button>`;
+  h+='<p>لون اللعب: '+esc(st.color||"—")+' · السحب: '+esc(st.drawCount??0)+'</p><div class="row">'+(st.hand||[]).map((card,i)=>'<button class="primary" data-action="playCard" data-index="'+i+'" data-color="'+esc(card.color||"")+'">'+esc(card.value)+' '+esc(card.color)+'</button>').join("")+'</div><button class="ghost" data-action="draw">سحب ورقة</button>';
  }else if(st.game==="LUDO"){
-  h+=`<p>النرد: ${esc(st.dice??"—")}</p><button class="primary" data-action="roll">🎲 رمي النرد</button><div class="row" style="margin-top:10px">${(st.legalTokens||[]).map(i=>`<button class="ghost" data-action="moveToken" data-token="${i}">تحريك القطعة ${i+1}</button>`).join("")}</div>`;
- }else if(st.game==="JAKAROO"){
-  h+=`<p>الأوراق: ${(st.hand||[]).map((card,i)=>`<button class="ghost" data-action="playCard" data-index="${i}">${esc((card.rank||"")+ (card.suit||""))}</button>`).join(" ")}</p>`;
- }else if(st.game==="BALOOT"){
-  h+=st.phase==="bidding"?'<button class="ghost" data-action="bid" data-bid="pass">بس</button><button class="primary" data-action="bid" data-bid="sun">صن</button><button class="primary" data-action="bid" data-bid="hokum">حكم</button>':(st.hand||[]).map((card,i)=>`<button class="ghost" data-action="playCard" data-index="${i}">${esc((card.rank||"")+(card.suit||""))}</button>`).join(" ");
+  h+='<p>النرد: '+esc(st.dice??"—")+'</p><button class="primary" data-action="roll">🎲 رمي النرد</button><div class="row">'+(st.legalTokens||[]).map(i=>'<button class="ghost" data-action="moveToken" data-token="'+i+'">تحريك القطعة '+(i+1)+'</button>').join("")+'</div>';
+ }else if(st.game==="JAKAROO"||st.game==="BALOOT"){
+  h+='<div class="row">'+(st.hand||[]).map((card,i)=>'<button class="ghost" data-action="playCard" data-index="'+i+'">'+esc((card.rank||"")+(card.suit||""))+'</button>').join("")+'</div>';
+  if(st.game==="BALOOT"&&st.phase==="bidding")h+='<button class="ghost" data-action="bid" data-bid="pass">بس</button><button class="primary" data-action="bid" data-bid="sun">صن</button><button class="primary" data-action="bid" data-bid="hokum">حكم</button>';
  }else if(st.game==="QAWSAR"){
-  h+=`<p>الحالة: ${esc(st.qawsarPhase||"draw")} · الورقة المطروحة: ${esc(st.discarded?.rank||"—")}</p>`;
+  h+='<p>الحالة: '+esc(st.qawsarPhase||"draw")+' · المطروحة: '+esc(st.discarded?.rank||"—")+'</p>';
   h+=st.qawsarPhase==="draw"?'<button class="primary" data-action="draw">سحب</button><button class="ghost" data-action="takeDiscard" data-index="0">خذ المطروحة</button>':'<button class="primary" data-action="playCard" data-index="0" data-mode="swap">استبدل الورقة</button>';
-  h+=`<p class="muted">يدك: ${(p.hand||[]).map(x=>esc(x.card?.rank||x.rank||"?")).join(" · ")}</p>`;
+  h+='<p class="muted">يدك: '+(p.hand||[]).map(x=>esc(x.card?.rank||x.rank||"?")).join(" · ")+'</p>';
  }else{
   h+='<div class="row"><input id="genericText" placeholder="إجابتك"><button class="primary" id="genericSend">إرسال</button></div>';
   setTimeout(()=>$("#genericSend")?.addEventListener("click",async()=>{try{await api("/api/games/sessions/"+currentGame+"/action",{method:"POST",body:{action:"submit",data:{text:$("#genericText").value}}});gameState()}catch(e){toast(e.message)}}),0);
