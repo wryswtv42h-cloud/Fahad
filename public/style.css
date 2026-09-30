@@ -161,3 +161,10 @@ body.menu-open{position:fixed!important;left:0;right:0;width:100%;}
 .bot-features{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}.bot-features span{border:1px solid #fbcff355;border-radius:999px;padding:5px 8px;color:var(--accent);background:#ff9cdc0d;font-size:10px}.bot-description{line-height:1.7}
 /* MLD top announcement */
 .announcement-bar{position:relative;z-index:1000;width:100%;min-height:38px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:linear-gradient(90deg,rgba(255,156,220,.16),rgba(124,92,255,.14));border-bottom:1px solid rgba(255,255,255,.08);color:#fff;padding:7px 16px;font-size:14px;font-weight:700}.announcement-bar.hidden{display:none}.announcement-bar:before{content:"";position:absolute;inset:0;background:var(--announcement-color,rgba(255,156,220,.10));opacity:.45;pointer-events:none}.announcement-bar #announcement-text{position:relative;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:min(1200px,94vw);text-align:center}.announcement-bar #announcement-text:before{content:"📢";margin-inline-end:8px}@media(max-width:600px){.announcement-bar{min-height:34px;font-size:12px;padding:6px 10px}.announcement-bar #announcement-text{max-width:92vw}}
+
+/* FINAL MENU OVERRIDE - single source of truth */
+.mobile-menu{position:fixed!important;display:none;z-index:10000!important;right:auto!important;left:auto!important;top:auto!important;width:min(430px,calc(100vw - 20px))!important;max-height:calc(100vh - 80px)!important;overflow-y:auto!important;background:rgba(13,8,21,.99)!important;visibility:hidden;opacity:0;pointer-events:none;}
+.mobile-menu.open{display:grid!important;visibility:visible!important;opacity:1!important;pointer-events:auto!important;}
+html.menu-open,body.menu-open{overflow:hidden!important;}
+body.menu-open{position:static!important;}
+.mobile-menu.open::before{display:none!important;}
