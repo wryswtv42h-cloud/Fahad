@@ -76,3 +76,32 @@ html.menu-open,body.menu-open{overflow:hidden!important;overscroll-behavior:none
 body.menu-open{position:fixed!important;left:0;right:0;width:100%;}
 .mobile-menu.open{touch-action:pan-y;overscroll-behavior-y:contain;overflow-y:auto;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
 .mobile-menu.open *{touch-action:pan-y}
+
+/* Restore simple vertical MLD menu */
+.menu{display:grid;place-items:center;width:46px;height:46px;padding:0;border:1px solid #fbcff355;border-radius:12px;color:var(--text);background:#ffffff10;font-size:22px;cursor:pointer}
+.mobile-menu{
+  display:none;position:absolute;top:calc(100% + 8px);right:0;left:auto;
+  width:min(430px,calc(100vw - 20px));padding:10px;
+  background:rgba(13,8,21,.99);border:1px solid #f7c8ee44;border-radius:18px;
+  box-shadow:0 24px 60px #000b;max-height:calc(100vh - 92px);
+  overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;
+}
+.mobile-menu.open{display:grid;grid-template-columns:1fr;gap:7px;animation:menuIn .14s ease-out}
+.mobile-menu .menu-section{display:grid;grid-template-columns:1fr;gap:7px;padding:0;border:0;border-radius:0;background:transparent}
+.mobile-menu .menu-title{grid-column:auto;margin:5px 4px 1px;padding:5px 3px;color:var(--pink);font-size:11px;font-weight:900}
+.mobile-menu .menu-title::before{display:none}
+.mobile-menu button,.mobile-menu .invite{
+  width:100%;min-height:48px;margin:0;display:flex;align-items:center;justify-content:center;
+  text-align:center;padding:12px 14px;border:1px solid #fbcff355;border-radius:13px;
+  color:var(--text);background:#ffffff10;font-weight:800;font-size:14px;
+  box-shadow:none;transform:none;transition:.2s
+}
+.mobile-menu button:hover,.mobile-menu .invite:hover{border-color:var(--pink);background:var(--accent);color:#241329;transform:translateY(-1px)}
+.mobile-menu .invite{grid-column:auto}
+.mobile-menu .admin-menu{background:transparent;border:0}
+@media(max-width:560px){
+  .menu{width:46px;height:46px;border-radius:12px}
+  .mobile-menu{right:-1px;width:calc(100vw - 20px);padding:9px;max-height:calc(100vh - 78px);border-radius:18px}
+  .mobile-menu .menu-section{grid-template-columns:1fr;gap:7px}
+  .mobile-menu button,.mobile-menu .invite{min-height:48px;font-size:14px}
+}
