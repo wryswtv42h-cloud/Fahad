@@ -120,3 +120,31 @@
 html.menu-open,body.menu-open{overflow:hidden}
 .mobile-menu.open{z-index:10000!important}
 @media(min-width:561px){#menu-overlay.open{background:#0006}}
+
+
+/* MLD MENU v2 — unified visitor/member/admin/owner design */
+.mobile-menu{position:fixed!important;display:none;z-index:10000!important;width:min(430px,calc(100vw - 20px))!important;max-height:min(78vh,700px);padding:14px!important;overflow-y:auto;overflow-x:hidden;background:linear-gradient(180deg,rgba(20,11,29,.99),rgba(10,7,15,.99));border:1px solid #f7c8ee55;border-radius:22px;box-shadow:0 28px 90px #000d;visibility:hidden;opacity:0;pointer-events:none;box-sizing:border-box}
+.mobile-menu.open{display:block!important;visibility:visible;opacity:1;pointer-events:auto;animation:mldMenuIn .18s ease-out}
+.menu-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:2px 2px 12px;border-bottom:1px solid #80589155}
+.menu-head>div{display:flex;flex-direction:column;gap:2px}.menu-head span{font-size:20px;font-weight:1000;letter-spacing:4px;color:var(--accent)}.menu-head small{font-size:10px;color:var(--muted)}
+.menu-close{width:40px!important;height:40px!important;min-height:40px!important;padding:0!important;border-radius:12px!important;font-size:24px!important;line-height:1;color:var(--text);background:#ffffff0b!important;border:1px solid #fbcff344!important}
+.menu-userbar{display:flex;align-items:center;gap:8px;margin:12px 0;padding:9px;border:1px solid #80589166;border-radius:14px;background:#ffffff07;font-size:12px}
+.menu-user-dot{width:8px;height:8px;border-radius:50%;background:#8e7a99;box-shadow:0 0 10px #8e7a99;flex:0 0 auto}.menu-user-state{color:var(--muted);font-weight:800;flex:1}
+.menu-login,.menu-logout{width:auto!important;min-height:36px!important;padding:8px 12px!important;border-radius:10px!important;font-size:11px!important}
+.menu-section{margin-top:10px;padding:10px!important;border:1px solid #80589166!important;border-radius:16px!important;background:linear-gradient(145deg,#ffffff08,#ffffff03)!important;display:block!important}
+.menu-title{margin:0 0 8px!important;padding:3px 4px 8px!important;color:var(--pink)!important;font-size:11px!important;font-weight:1000!important;text-align:right!important;border-bottom:1px solid #80589155!important}
+.menu-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+.mobile-menu .menu-grid button{min-height:52px!important;margin:0!important;padding:9px 8px!important;display:flex!important;align-items:center!important;justify-content:flex-start!important;gap:9px!important;text-align:right!important;border:1px solid #fbcff333!important;border-radius:12px!important;background:#ffffff08!important;color:var(--text)!important;font-size:12px!important;font-weight:850!important;transition:transform .14s ease,border-color .14s ease,background .14s ease!important}
+.mobile-menu .menu-grid button i{width:30px;height:30px;display:grid;place-items:center;flex:0 0 30px;border-radius:9px;background:#ff9cdc12;color:var(--accent);font-style:normal;font-size:15px}
+.mobile-menu .menu-grid button span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mobile-menu .menu-grid button:hover{transform:translateY(-1px);border-color:#ff9cde99!important;background:#ff9cdc12!important}
+.mobile-menu .menu-grid button:active{transform:scale(.985)}
+.admin-menu{border-color:#b879d255!important;background:linear-gradient(145deg,#a86fdf0c,#ffffff03)!important}
+.admin-menu .menu-title{color:#d9a8ff!important}
+.admin-menu .menu-grid button i{background:#a86fdf14;color:#d9a8ff}
+.menu-invite{margin-top:10px!important;width:100%!important;min-height:48px!important;display:flex!important;align-items:center!important;justify-content:space-between!important;padding:12px 14px!important;border-radius:14px!important}
+.menu-invite b{font-size:18px}
+.mobile-menu .hidden,.mobile-menu .admin-only.hidden,.mobile-menu .owner-only.hidden,.mobile-menu .auth-only.hidden{display:none!important}
+@keyframes mldMenuIn{from{opacity:0;transform:translateY(-8px) scale(.985)}to{opacity:1;transform:none}}
+@media(max-width:560px){.mobile-menu{width:calc(100vw - 16px)!important;max-height:calc(100vh - 76px);padding:11px!important}.menu-grid{gap:6px}.mobile-menu .menu-grid button{min-height:50px!important;font-size:11px!important}.menu-section{padding:9px!important}}
+@media(min-width:561px){.mobile-menu{width:min(430px,calc(100vw - 24px))!important}}
