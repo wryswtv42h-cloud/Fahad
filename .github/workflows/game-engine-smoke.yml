@@ -14,3 +14,4 @@ jobs:
         with:
           node-version: 20
       - run: node scripts/game-engine-smoke.js
+      - run: node scripts/game-action-smoke.js
