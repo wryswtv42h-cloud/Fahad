@@ -20,7 +20,8 @@ module.exports = function setupMLDExtra({ app, client, auth, ownerOnly, adminOnl
     giveaways: [],
     jokes: [],
     jokeRatings: {},
-    stories: []
+    stories: [],
+    announcement: { enabled: false, text: "", color: "", updatedAt: null }
   };
 
   function load() {
@@ -78,6 +79,50 @@ module.exports = function setupMLDExtra({ app, client, auth, ownerOnly, adminOnl
     const username=clean(req.params.username,24).toLowerCase(); if(username===room.owner)return res.status(400).json({error:"لا يمكن حذف مالك الشات"});
     room.members=room.members.filter(x=>x!==username); save(); logPlatform("private_chat_member_removed",req.account.id,room.id+":"+username); res.json({room});
   });
+  app.get("/api/platform/announcement",(req,res)=>{
+    const a=data.announcement||{enabled:false,text:"",color:"",updatedAt:null};
+    res.json({announcement:{enabled:Boolean(a.enabled),text:clean(a.text,500),color:/^#[0-9a-fA-F]{6}$/.test(String(a.color||""))?a.color:"",updatedAt:a.updatedAt||null}});
+  });
+  app.post("/api/platform/announcement",auth,ownerOnly,(req,res)=>{
+    const text=clean(req.body?.text,500),enabled=Boolean(req.body?.enabled)&&text.length>0;
+    const color=/^#[0-9a-fA-F]{6}$/.test(String(req.body?.color||""))?String(req.body.color):"";
+    data.announcement={enabled,text,color,updatedAt:new Date().toISOString()};save();
+    logPlatform("announcement_updated",req.account.id,enabled?text:"disabled");
+    res.json({announcement:data.announcement});
+  });
+  app.get("/api/platform/broadcast/channels",auth,ownerOnly,async(req,res)=>{
+    try{
+      const guild=await getGuild();
+      const channels=guild.channels.cache.filter(ch=>ch.isTextBased()&&!ch.isThread()&&ch.viewable!==false)
+        .map(ch=>({id:ch.id,name:ch.name,canSend:Boolean(ch.permissionsFor(client.user)?.has("SendMessages"))}))
+        .filter(ch=>ch.canSend).sort((a,b)=>a.name.localeCompare(b.name,"ar"));
+      res.json({channels});
+    }catch(e){console.error("Broadcast channels:",e);res.status(503).json({error:"تعذر جلب قنوات البرودكاست"});}
+  });
+  app.post("/api/platform/broadcast",auth,ownerOnly,async(req,res)=>{
+    const message=clean(req.body?.message,4000);
+    const channelIds=Array.isArray(req.body?.channelIds)?[...new Set(req.body.channelIds.map(x=>String(x).trim()).filter(Boolean))].slice(0,20):[];
+    const mentionEveryone=Boolean(req.body?.mentionEveryone);
+    if(!message)return res.status(400).json({error:"اكتب رسالة البرودكاست"});
+    if(!channelIds.length)return res.status(400).json({error:"اختر قناة واحدة على الأقل"});
+    try{
+      const guild=await getGuild(),results=[];
+      for(const channelId of channelIds){
+        const channel=guild.channels.cache.get(channelId)||await guild.channels.fetch(channelId).catch(()=>null);
+        if(!channel||!channel.isTextBased()||channel.isThread()){results.push({channelId,ok:false,error:"القناة غير صالحة"});continue;}
+        const perms=channel.permissionsFor(client.user);
+        if(!perms?.has("ViewChannel")||!perms?.has("SendMessages")){results.push({channelId,ok:false,error:"البوت لا يملك صلاحية الإرسال"});continue;}
+        if(mentionEveryone&&!perms.has("MentionEveryone")){results.push({channelId,ok:false,error:"البوت لا يملك صلاحية Mention Everyone"});continue;}
+        const sent=await channel.send({content:message,allowedMentions:{parse:mentionEveryone?["everyone"]:[]}});
+        results.push({channelId,ok:true,messageId:sent.id});
+      }
+      const sentCount=results.filter(x=>x.ok).length;
+      if(!sentCount)return res.status(400).json({error:"لم يتم إرسال البرودكاست لأي قناة",results});
+      logPlatform("broadcast_sent",req.account.id,"channels="+sentCount+" mentionEveryone="+mentionEveryone);
+      res.json({ok:true,sentCount,results});
+    }catch(e){console.error("Broadcast send:",e);res.status(500).json({error:"تعذر تنفيذ البرودكاست"});}
+  });
+
   require("./bot-manager")({ app, auth, logPlatform, platform, savePlatform });
 
   app.get("/api/platform/bots",(req,res)=>res.json({bots:data.bots.map(b=>Object.assign({},b,{settings:data.botSettings[b.id]||{}}))}));
