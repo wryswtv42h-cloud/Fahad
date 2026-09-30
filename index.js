@@ -264,24 +264,34 @@ app.get("/api/public/stats", async (req, res) => {
 app.get("/api/public/server", async (req, res) => {
   try {
     const guild = await getGuild();
-    const configuredSupportId = /^\d{15,22}$/.test(String(process.env.OWNER_DISCORD_ID || "")) ? String(process.env.OWNER_DISCORD_ID) : "";
-    const supportMember = configuredSupportId ? null : guild.members.cache.find(m =>
-      String(m.user.username || "").toLowerCase() === String(process.env.OWNER_DISCORD_USERNAME || "w4px").toLowerCase() ||
-      String(m.user.globalName || "").toLowerCase() === String(process.env.OWNER_DISCORD_USERNAME || "w4px").toLowerCase()
-    );
     res.json({
       id: guild.id,
       name: guild.name,
       icon: guild.iconURL({ extension: "png", size: 256 }),
       memberCount: guild.memberCount,
       ownerName: process.env.SERVER_FOUNDER_NAME || "فهد المطيري",
-      invite: process.env.DISCORD_INVITE_URL || "",
-      supportDiscordId: configuredSupportId || supportMember?.id || ""
+      invite: process.env.DISCORD_INVITE_URL || ""
     });
   } catch (error) {
     console.error("Server endpoint:", error);
     res.status(503).json({ error: "Discord server unavailable" });
   }
+});
+
+app.get("/api/public/server", async (req, res) => {
+  try {
+    const guild = await getGuild();
+    const configuredSupportId = /^\d{15,22}$/.test(String(process.env.OWNER_DISCORD_ID || "")) ? String(process.env.OWNER_DISCORD_ID) : "";
+    const supportMember = configuredSupportId ? null : guild.members.cache.find(m =>
+      String(m.user.username || "").toLowerCase() === String(process.env.OWNER_DISCORD_USERNAME || "w4px").toLowerCase() ||
+      String(m.user.globalName || "").toLowerCase() === String(process.env.OWNER_DISCORD_USERNAME || "w4px").toLowerCase()
+    );
+    res.json({
+      id: guild.id, name: guild.name, icon: guild.iconURL({ extension: "png", size: 256 }),
+      memberCount: guild.memberCount, ownerName: process.env.SERVER_FOUNDER_NAME || "فهد المطيري",
+      invite: process.env.DISCORD_INVITE_URL || "", supportDiscordId: configuredSupportId || supportMember?.id || ""
+    });
+  } catch (error) { console.error("Server endpoint:", error); res.status(503).json({ error: "Discord server unavailable" }); }
 });
 
 app.get("/api/public/members", async (req, res) => {
@@ -639,6 +649,156 @@ function passwordOk(password, account) {
   const hash = crypto.scryptSync(password, account.salt, 64).toString("hex");
   return crypto.timingSafeEqual(Buffer.from(hash, "hex"), Buffer.from(account.passwordHash, "hex"));
 }
+
+app.get("/api/platform/games", (req, res) => {
+  res.json({
+    botReady: client.isReady(),
+    games: [
+      { id: "baloot", name: "بلوت", icon: "🃏", players: "4", mode: "فرق" },
+      { id: "uno", name: "UNO", icon: "🎴", players: "2-4", mode: "تنافس" },
+      { id: "jackaroo", name: "جاكارو", icon: "♟️", players: "2-4", mode: "تنافس" },
+      { id: "ludo", name: "لودو", icon: "🎲", players: "2-4", mode: "تنافس" },
+      { id: "monopoly", name: "مونوبولي", icon: "🏦", players: "2-6", mode: "تنافس" }
+    ]
+  });
+});
+
+app.get("/api/platform/account/discord-members", async (req, res) => {
+  try {
+    const q = String(req.query.q || "").trim().toLocaleLowerCase("ar");
+    if (q.length < 2) return res.json({ members: [] });
+    const members = await getAllMembers(await getGuild());
+    const clean = q.replace(/^@/, "");
+    const result = members.filter(m => {
+      const hay = [m.user.username, m.user.globalName, m.displayName, m.user.tag, m.id].filter(Boolean).join(" ").toLocaleLowerCase("ar");
+      return hay.includes(clean);
+    }).slice(0, 12).map(m => ({
+      id: m.id,
+      username: m.user.username,
+      globalName: m.user.globalName,
+      displayName: m.displayName,
+      avatar: m.user.displayAvatarURL({ extension: "png", size: 128 })
+    }));
+    res.json({ members: result });
+  } catch (e) {
+    console.error("Account Discord member search:", e);
+    res.status(503).json({ error: "تعذر جلب أعضاء Discord مؤقتًا" });
+  }
+});
+
+app.post("/api/platform/accounts", async (req, res) => {
+  const username = String(req.body?.username || "").trim().toLowerCase();
+  const discordId = String(req.body?.discordId || "").trim();
+  const password = String(req.body?.password || "");
+  if (!/^[a-z0-9_]{3,24}$/.test(username)) return res.status(400).json({ error: "اليوزر يجب أن يكون 3-24 حرفًا إنجليزيًا أو _" });
+  if (password.length < 6) return res.status(400).json({ error: "كلمة المرور 6 أحرف على الأقل" });
+  if (!/^\d{15,22}$/.test(discordId)) return res.status(400).json({ error: "اختر عضوًا صحيحًا من السيرفر" });
+  if (platform.accounts.some(a => a.username === username)) return res.status(409).json({ error: "اليوزر مستخدم بالفعل" });
+  if (platform.accounts.some(a => String(a.discordId) === discordId)) return res.status(409).json({ error: "هذا Discord مربوط بحساب موجود بالفعل" });
+  if (platform.pendingAccounts?.some(a => a.status === "pending" && Date.parse(a.expiresAt) > Date.now() && (a.username === username || String(a.discordId) === discordId))) return res.status(409).json({ error: "لديك طلب إنشاء حساب بانتظار التأكيد" });
+
+  const guild = await getGuild();
+  const member = await guild.members.fetch(discordId).catch(() => null);
+  if (!member) return res.status(404).json({ error: "لازم تكون موجودًا في سيرفر ملاذ لإنشاء الحساب" });
+
+  const owner = discordId.toLowerCase() === OWNER_DISCORD_ID || String(member.user.username || "").toLowerCase() === OWNER_DISCORD_USERNAME || String(member.user.globalName || "").toLowerCase() === OWNER_DISCORD_USERNAME;
+  const pass = hashPassword(password);
+  const pendingId = crypto.randomUUID();
+  const browserToken = crypto.randomBytes(32).toString("hex");
+  const pending = {
+    id: pendingId, browserToken, username, discordId,
+    role: owner ? "owner" : "member",
+    discordUsername: String(member.user.username || member.user.globalName || "").trim(),
+    passwordHash: pass.hash, salt: pass.salt,
+    createdAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+    status: "pending"
+  };
+  platform.pendingAccounts = platform.pendingAccounts || [];
+  platform.pendingAccounts.push(pending);
+  platform.pendingAccounts = platform.pendingAccounts.filter(p => p.status === "pending" && Date.parse(p.expiresAt) > Date.now());
+  savePlatform();
+
+  try {
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId("mld_account_yes:" + pendingId).setLabel("نعم، إنشاء الحساب").setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId("mld_account_no:" + pendingId).setLabel("لا، إلغاء").setStyle(ButtonStyle.Danger)
+    );
+    await member.send({
+      content: "🔐 **تأكيد إنشاء حساب ملاذ**\\n\\nتم طلب إنشاء حساب باسم **@" + username + "** المرتبط بحساب Discord الخاص بك.\\nهل أنت من أنشأ هذا الحساب؟",
+      components: [row]
+    });
+    logPlatform("account_confirmation_sent", null, username + ":" + discordId);
+    res.status(202).json({ pending: true, pendingId, browserToken, expiresAt: pending.expiresAt, message: "تم إرسال رسالة تأكيد إلى الخاص في Discord" });
+  } catch (e) {
+    platform.pendingAccounts = platform.pendingAccounts.filter(p => p.id !== pendingId);
+    savePlatform();
+    res.status(400).json({ error: "تعذر إرسال رسالة التأكيد إلى الخاص. افتح رسائل Discord الخاصة ثم حاول مرة أخرى." });
+  }
+});
+
+app.get("/api/platform/accounts/pending/:id", (req, res) => {
+  const p = (platform.pendingAccounts || []).find(x => x.id === req.params.id && x.browserToken === String(req.query.token || ""));
+  if (!p) return res.status(404).json({ error: "طلب إنشاء الحساب غير موجود أو انتهت صلاحيته" });
+  if (p.status === "confirmed" && p.accountId) {
+    const account = platform.accounts.find(a => a.id === p.accountId);
+    if (!account) return res.status(404).json({ error: "الحساب غير موجود" });
+    const token = crypto.randomBytes(32).toString("hex");
+    sessions.set(token, account.id);
+    savePlatform();
+    p.status = "completed";
+    savePlatform();
+    return res.json({ status: "confirmed", token, account: safeAccount(account), owner: account.role === "owner" });
+  }
+  res.json({ status: p.status, expiresAt: p.expiresAt });
+});
+
+app.post("/api/platform/login", (req, res) => {
+  const username = String(req.body?.username || "").trim().toLowerCase();
+  const password = String(req.body?.password || "");
+  const account = platform.accounts.find(a => a.username === username);
+  if (!account || !passwordOk(password, account)) return res.status(401).json({ error: "بيانات الدخول غير صحيحة" });
+  const token = crypto.randomBytes(32).toString("hex");
+  sessions.set(token, account.id);
+  res.json({ token, account: safeAccount(account) });
+});
+
+app.get("/api/platform/me", auth, (req, res) => res.json({ account: safeAccount(req.account) }));
+
+app.post("/api/platform/logout", auth, (req, res) => {
+  sessions.delete(req.token);
+  savePlatform();
+  res.json({ ok: true });
+});
+
+app.get("/api/platform/groups", (req, res) => {
+  res.json({ groups: platform.groups.map(g => ({
+    id:g.id, name:g.name, description:g.description, owner:g.owner,
+    members:g.members.length, createdAt:g.createdAt
+  }))});
+});
+
+app.post("/api/platform/groups", auth, (req, res) => {
+  const name = String(req.body?.name || "").trim().slice(0, 40);
+  const description = String(req.body?.description || "").trim().slice(0, 200);
+  if (name.length < 2) return res.status(400).json({ error: "اسم المجموعة قصير" });
+  const group = {
+    id: crypto.randomUUID(), name, description, owner: req.account.username,
+    members: [req.account.username], createdAt: new Date().toISOString()
+  };
+  platform.groups.push(group);
+  logPlatform("group_created", req.account.id, name);
+  res.status(201).json({ group });
+});
+
+app.post("/api/platform/groups/:id/join", auth, (req, res) => {
+  const group = platform.groups.find(g => g.id === req.params.id);
+  if (!group) return res.status(404).json({ error: "المجموعة غير موجودة" });
+  if (!group.members.includes(req.account.username)) group.members.push(req.account.username);
+  savePlatform();
+  logPlatform("group_joined", req.account.id, group.name);
+  res.json({ ok: true, group });
+});
 
 const GAME_CATALOG = [
   { id:"baloot", name:"بلوت", icon:"🃏", minPlayers:4, maxPlayers:4, mode:"فريقان · 4 لاعبين", description:"طاولة ورق بأربع مقاعد ودور واضح لكل لاعب." },
