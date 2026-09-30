@@ -112,3 +112,11 @@
   .mobile-menu{width:calc(100vw - 20px);max-height:calc(100vh - 78px);border-radius:18px}
   .mobile-menu button,.mobile-menu .invite{min-height:48px;font-size:14px}
 }
+
+
+/* MLD MENU OVERLAY — behavior only; existing visual identity preserved */
+#menu-overlay{position:fixed;inset:0;z-index:9998;background:#0008;backdrop-filter:blur(2px);opacity:0;visibility:hidden;pointer-events:none;transition:opacity .16s ease,visibility .16s ease}
+#menu-overlay.open{opacity:1;visibility:visible;pointer-events:auto}
+html.menu-open,body.menu-open{overflow:hidden}
+.mobile-menu.open{z-index:10000!important}
+@media(min-width:561px){#menu-overlay.open{background:#0006}}
