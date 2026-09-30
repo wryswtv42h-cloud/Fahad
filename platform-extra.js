@@ -96,7 +96,7 @@ module.exports = function setupMLDExtra({ app, client, auth, ownerOnly, logPlatf
     req.account.bio=clean(req.body?.bio,300);
     savePlatform();
     logPlatform("profile_updated",req.account.id,req.account.username);
-    res.json({account:req.account});
+    res.json({account:{id:req.account.id,username:req.account.username,discordId:req.account.discordId,role:req.account.role,createdAt:req.account.createdAt,profileName:req.account.profileName||req.account.username,avatar:req.account.avatar||"",bio:req.account.bio||""}});
   });
 
   app.get("/api/platform/tickets",auth,(req,res)=>{
@@ -132,7 +132,7 @@ module.exports = function setupMLDExtra({ app, client, auth, ownerOnly, logPlatf
   });
 
   app.get("/api/platform/reviews",(req,res)=>res.json({reviews:data.reviews.slice(0,100)}));
-  app.post("/api/platform/reviews",auth,(req,res)=>{
+  app.post("/api/platform/reviews",(req,res)=>{
     const r={id:id(),username:req.account.username,rating:Math.max(1,Math.min(5,Number(req.body?.rating||5))),text:clean(req.body?.text,500),createdAt:new Date().toISOString()};
     if(r.text.length<2)return res.status(400).json({error:"اكتب رأيك"});
     data.reviews.unshift(r); data.reviews=data.reviews.slice(0,200); save(); logPlatform("review_created",req.account.id,r.rating); res.status(201).json({review:r});
