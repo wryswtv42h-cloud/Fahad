@@ -200,11 +200,18 @@
   function ownerView(){
     if(!need())return;
     if(!account || account.role!=="owner"){alert("هذا القسم للأونر فقط");return;}
-    Promise.all([api("/api/platform/admin"),api("/api/platform/logs")]).then(function(x){
-      var d=x[0], l=x[1];
+    Promise.all([api("/api/platform/admin"),api("/api/platform/logs"),api("/api/platform/announcement"),api("/api/platform/broadcast/channels")]).then(function(x){
+      var d=x[0],l=x[1],ann=x[2].announcement||{},bc=x[3].channels||[];
       var stats=Object.keys(d).map(function(k){return "<div><b>"+esc(d[k])+"</b><small>"+esc(k)+"</small></div>"}).join("");
       var logs=(l.logs||[]).map(function(v){return "<div><b>"+esc(v.action)+"</b><span>"+esc(v.details)+"</span><small>"+new Date(v.at).toLocaleString("ar-SA")+"</small></div>"}).join("");
-      show("الأونر","<div class='platform-head'><div><span class='eyebrow'>OWNER CONTROL</span><h2>لوحة الأونر</h2><p class='muted'>تحكم كامل وسجل المنصة.</p></div>"+badge()+"</div><div class='admin-stats'>"+stats+"</div><div class='log-list'>"+(logs||"<div class='empty'>لا توجد سجلات.</div>")+"</div>");
+      var channels=bc.map(function(ch){return "<label class=\"check\"><input type=\"checkbox\" class=\"broadcast-channel\" value=\""+esc(ch.id)+"\"> #"+esc(ch.name)+"</label>"}).join("")||"<p class=\"muted\">لا توجد قنوات يمكن للبوت الإرسال فيها.</p>";
+      var html="<div class=\"platform-head\"><div><span class=\"eyebrow\">OWNER CONTROL</span><h2>لوحة الأونر</h2><p class=\"muted\">تحكم كامل وسجل المنصة.</p></div>"+badge()+"</div><div class=\"admin-stats\">"+stats+"</div>"+
+      "<div class=\"account-card\"><h3>📢 الإعلان العلوي</h3><p class=\"muted\">الإعلان يظهر أعلى الموقع لجميع الزوار.</p><textarea id=\"owner-ann-text\" class=\"full\" maxlength=\"500\" placeholder=\"اكتب الإعلان...\">"+esc(ann.text||"")+"</textarea><label class=\"check\"><input id=\"owner-ann-enabled\" type=\"checkbox\" "+(ann.enabled?"checked":"")+"> تفعيل الإعلان</label><label>لون الإعلان</label><input id=\"owner-ann-color\" class=\"full\" type=\"color\" value=\""+esc(ann.color||"#ff9cdc")+"\"><button class=\"primary\" id=\"save-announcement\">حفظ الإعلان</button></div>"+
+      "<div class=\"account-card\"><h3>📣 البرودكاست</h3><p class=\"muted\">أرسل رسالة من بوت MLD إلى قناة أو عدة قنوات في السيرفر.</p><div class=\"bot-system-grid\">"+channels+"</div><textarea id=\"owner-broadcast-text\" class=\"full\" maxlength=\"4000\" placeholder=\"اكتب رسالة البرودكاست...\"></textarea><label class=\"check\"><input id=\"broadcast-everyone\" type=\"checkbox\"> تفعيل @everyone</label><button class=\"primary\" id=\"send-broadcast\">إرسال البرودكاست</button><p id=\"broadcast-result\" class=\"muted small\"></p></div>"+
+      "<div class=\"log-list\">"+(logs||"<div class=\"empty\">لا توجد سجلات.</div>")+"</div>";
+      show("الأونر",html);
+      $("#save-announcement").onclick=function(){var btn=$("#save-announcement");btn.disabled=true;api("/api/platform/announcement",{method:"POST",body:JSON.stringify({text:$("#owner-ann-text").value,enabled:$("#owner-ann-enabled").checked,color:$("#owner-ann-color").value})}).then(function(){alert("تم حفظ الإعلان العلوي.");if(typeof loadAnnouncement==="function")loadAnnouncement();}).catch(function(e){alert(e.message)}).finally(function(){btn.disabled=false});};
+      $("#send-broadcast").onclick=function(){var ids=[];document.querySelectorAll(".broadcast-channel:checked").forEach(function(z){ids.push(z.value)});var msg=$("#owner-broadcast-text").value.trim();if(!ids.length)return alert("اختر قناة واحدة على الأقل");if(!msg)return alert("اكتب رسالة البرودكاست");var btn=$("#send-broadcast");btn.disabled=true;btn.textContent="جاري الإرسال...";api("/api/platform/broadcast",{method:"POST",body:JSON.stringify({channelIds:ids,message:msg,mentionEveryone:$("#broadcast-everyone").checked})}).then(function(v){$("#broadcast-result").textContent="تم الإرسال بنجاح إلى "+v.sentCount+" قناة ✓";$("#owner-broadcast-text").value=""}).catch(function(e){$("#broadcast-result").textContent=e.message}).finally(function(){btn.disabled=false;btn.textContent="إرسال البرودكاست"});};
     }).catch(function(e){alert(e.message)});
   }
   function profileView(){
