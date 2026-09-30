@@ -153,9 +153,9 @@
   function groupsView(){
     function publicApi(url){return fetch(url,{headers:{"Content-Type":"application/json"}}).then(function(r){return r.json().then(function(d){if(!r.ok)throw Error(d.error||"حدث خطأ");return d})})}
     publicApi("/api/platform/groups").then(function(d){
-      var list=d.groups.length?d.groups.map(function(g){return "<article class='group-card'><h3>"+esc(g.name)+"</h3><p>"+esc(g.description||"بدون وصف")+"</p><small>👥 "+g.members+" · @"+esc(g.owner)+"</small>"+(account?"<button class='platform-link' data-group='"+g.id+"'>انضمام</button>":"")+"</article>"}).join(""):"<div class='empty'>لا توجد مجموعات بعد.</div>";
-      show("المجموعات","<div class='platform-head'><div><span class='eyebrow'>MLD GROUPS</span><h2>المجموعات</h2><p class='muted'>مجتمعات صغيرة داخل MLD.</p></div>"+(account?"<button class='primary' id='new-group'>+ مجموعة</button>":"")+"</div><div id='group-create' class='account-card hidden'><input id='group-name' class='full' placeholder='اسم المجموعة'><input id='group-desc' class='full' placeholder='وصف مختصر'><button class='primary' id='save-group'>إنشاء</button></div><div class='group-grid'>"+list+"</div>");
-      var ng=$("#new-group");if(ng)ng.onclick=function(){$("#group-create").className=$("#group-create").className.indexOf("hidden")>=0?$("#group-create").className.replace(/\bhidden\b/g,"").trim():$("#group-create").className+" hidden"};
+      var list=d.groups.length?d.groups.map(function(g){return "<article class='group-card'><h3>"+esc(g.name)+"</h3><p>"+esc(g.description||"بدون وصف")+"</p><small>👥 "+g.members+" · @"+esc(g.owner)+"</small><button class='platform-link' data-group='"+g.id+"'>انضمام</button></article>"}).join(""):"<div class='empty'>لا توجد مجموعات بعد.</div>";
+      show("المجموعات","<div class='platform-head'><div><span class='eyebrow'>MLD GROUPS</span><h2>المجموعات</h2><p class='muted'>مجتمعات صغيرة داخل MLD.</p></div><button class='primary' id='new-group'>+ مجموعة</button></div><div id='group-create' class='account-card hidden'><input id='group-name' class='full' placeholder='اسم المجموعة'><input id='group-desc' class='full' placeholder='وصف مختصر'><button class='primary' id='save-group'>إنشاء</button></div><div class='group-grid'>"+list+"</div>");
+      var ng=$("#new-group");if(ng)ng.onclick=function(){if(!need())return;$("#group-create").className=$("#group-create").className.indexOf("hidden")>=0?$("#group-create").className.replace(/\bhidden\b/g,"").trim():$("#group-create").className+" hidden"};
       var sg=$("#save-group");if(sg)sg.onclick=function(){api("/api/platform/groups",{method:"POST",body:JSON.stringify({name:$("#group-name").value,description:$("#group-desc").value})}).then(groupsView).catch(function(e){alert(e.message)})};
       document.querySelectorAll("[data-group]").forEach(function(b){b.onclick=function(){if(!need())return;api("/api/platform/groups/"+b.dataset.group+"/join",{method:"POST"}).then(groupsView).catch(function(e){alert(e.message)})}});
     });
@@ -208,5 +208,5 @@
   updateOwnerMenu();
   if(token)api("/api/platform/me").then(function(d){account=d.account;updateOwnerMenu();}).catch(function(){token="";localStorage.removeItem("mld_token");updateOwnerMenu();});
   updateOwnerMenu();
-  window.MLDPlatform={accountView:accountView,gamesView:gamesView,groupsView:groupsView,adminView:adminView,profileView:profileView,chatView:chatView};
+  window.MLDPlatform={accountView:accountView,loginView:loginView,gamesView:gamesView,groupsView:groupsView,adminView:adminView,profileView:profileView,chatView:chatView};
 })();
