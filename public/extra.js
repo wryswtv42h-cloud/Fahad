@@ -6,7 +6,7 @@
   function token(){return localStorage.getItem("mld_token")||"";}
   function esc(v){return String(v==null?"":v).replace(/[&<>\"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c];});}
   function api(url,opt){opt=opt||{};opt.headers=Object.assign({"Content-Type":"application/json"},opt.headers||{});if(token())opt.headers.Authorization="Bearer "+token();return fetch(url,opt).then(function(r){return r.json().then(function(d){if(!r.ok)throw Error(d.error||"حدث خطأ");return d;});});}
-  function show(title,body){panel.className=panel.className.replace(/\bhidden\b/g,"").trim();$("#directory").className+=" hidden";$("#view-title").textContent=title;$("#subtitle").textContent="منصة MLD";panel.innerHTML=body;}
+  function show(title,body){panel.className=panel.className.replace(/\bhidden\b/g,"").trim();$("#directory").className+=" hidden";$("#view-title").textContent=title;$("#subtitle").textContent="منصة MLD";panel.innerHTML=body;requestAnimationFrame(function(){panel.scrollIntoView({behavior:"smooth",block:"start"});});}
   function login(){if(token())return true;if(window.MLDPlatform&&window.MLDPlatform.loginView){window.MLDPlatform.loginView();}if(window.MLDMenu)window.MLDMenu.close();else{var m=$("#mobile-menu");if(m)m.classList.remove("open");}return false;}
   function nav(){if(window.MLDMenu)window.MLDMenu.close();else{var m=$("#mobile-menu");if(m)m.className=m.className.replace(/\bopen\b/g,"").trim();}}
   function bots(){
