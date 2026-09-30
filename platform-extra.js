@@ -187,7 +187,7 @@ module.exports = function setupMLDExtra({ app, client, auth, ownerOnly, adminOnl
   });
 
   app.get("/api/platform/tickets",auth,(req,res)=>{
-    const mine=data.tickets.filter(t=>t.owner===req.account.username||req.account.role==="owner");
+    const mine=data.tickets.filter(t=>t.owner===req.account.username||req.account.role==="owner"||req.account.admin===true);
     res.json({tickets:mine});
   });
   app.post("/api/platform/tickets",auth,(req,res)=>{
@@ -197,13 +197,13 @@ module.exports = function setupMLDExtra({ app, client, auth, ownerOnly, adminOnl
   });
   app.post("/api/platform/tickets/:id/reply",auth,(req,res)=>{
     const t=data.tickets.find(x=>x.id===req.params.id); if(!t)return res.status(404).json({error:"التذكرة غير موجودة"});
-    if(t.owner!==req.account.username&&req.account.role!=="owner")return res.status(403).json({error:"لا تملك صلاحية هذه التذكرة"});
+    if(t.owner!==req.account.username&&req.account.role!=="owner"&&req.account.admin!==true)return res.status(403).json({error:"لا تملك صلاحية هذه التذكرة"});
     t.replies.push({id:id(),by:req.account.username,message:clean(req.body?.message,1000),at:new Date().toISOString()});
     save(); res.json({ticket:t});
   });
   app.post("/api/platform/tickets/:id/close",auth,(req,res)=>{
     const t=data.tickets.find(x=>x.id===req.params.id); if(!t)return res.status(404).json({error:"التذكرة غير موجودة"});
-    if(t.owner!==req.account.username&&req.account.role!=="owner")return res.status(403).json({error:"لا تملك صلاحية إغلاقها"});
+    if(t.owner!==req.account.username&&req.account.role!=="owner"&&req.account.admin!==true)return res.status(403).json({error:"لا تملك صلاحية إغلاقها"});
     t.status="closed"; save(); logPlatform("ticket_closed",req.account.id,t.id); res.json({ticket:t});
   });
 
