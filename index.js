@@ -1242,7 +1242,17 @@ app.delete("/api/platform/lobbies/:id", auth, (req, res) => {
   res.json({ ok:true });
 });
 
-app.get("/api/platform/logs", auth, adminOnly, (req, res) => res.json({ logs: req.account.role === "owner" ? platform.logs.slice(0, 100) : [] }));
+const ADMIN_VISIBLE_LOGS = new Set([
+  "general_chat_message","private_chat_created","private_chat_message","private_chat_member_added","private_chat_member_removed",
+  "ticket_created","ticket_closed","application_created","lobby_created","lobby_joined","lobby_left","lobby_spectated","lobby_closed",
+  "game_started","review_created","profile_updated"
+]);
+app.get("/api/platform/logs", auth, adminOnly, (req, res) => {
+  const logs = req.account.role === "owner"
+    ? platform.logs.slice(0, 150)
+    : platform.logs.filter(x => ADMIN_VISIBLE_LOGS.has(x.action)).slice(0, 100);
+  res.json({ logs, scope: req.account.role === "owner" ? "owner" : "admin" });
+});
 
 app.get("/api/platform/admin", auth, adminOnly, (req, res) => {
   res.json({
