@@ -53,19 +53,17 @@ module.exports = function setupMLDExtra({ app, client, auth, ownerOnly, adminOnl
     try{
       const nowIso=new Date().toISOString();
       const payload={
-        authToken:{
-          uses:1,
-          expireTime:new Date(Date.now()+30*60*1000).toISOString(),
-          newSessionExpireTime:new Date(Date.now()+60*1000).toISOString(),
-          liveConnectConstraints:{
-            model:"models/gemini-3.8-live",
-            config:{
-              responseModalities:["AUDIO"],
-              inputAudioTranscription:{},
-              outputAudioTranscription:{},
-              sessionResumption:{},
-              systemInstruction:{parts:[{text:"أنت مساعد MLD الصوتي. تحدث بالعربية السعودية بشكل طبيعي وودود ومختصر. اسمع المستخدم ورد عليه مباشرة بصوت. لا تقل إنك روبوت إلا إذا سُئلت. لا تستخدم مقدمات طويلة. اسمك مساعد MLD."}]}
-            }
+        uses:1,
+        expireTime:new Date(Date.now()+30*60*1000).toISOString(),
+        newSessionExpireTime:new Date(Date.now()+60*1000).toISOString(),
+        liveConnectConstraints:{
+          model:"models/gemini-3.8-live",
+          config:{
+            responseModalities:["AUDIO"],
+            inputAudioTranscription:{},
+            outputAudioTranscription:{},
+            sessionResumption:{},
+            systemInstruction:{parts:[{text:"أنت مساعد MLD الصوتي. تحدث بالعربية السعودية بشكل طبيعي وودود ومختصر. اسمع المستخدم ورد عليه مباشرة بصوت. لا تقل إنك روبوت إلا إذا سُئلت. لا تستخدم مقدمات طويلة. اسمك مساعد MLD."}]}
           }
         }
       };
