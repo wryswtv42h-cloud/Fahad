@@ -1,5 +1,5 @@
 "use strict";
-(()=>{const $=s=>document.querySelector(s),main=$("#appMain"),drawer=$("#drawer"),back=$("#backdrop"),menu=$("#menu"),toast=$("#toast");
+(()=>{const $=s=>document.querySelector(s),main=$("#content"),drawer=$("#drawer"),back=$("#backdrop"),menu=$("#menu"),toast=$("#toast");
 const S={me:null,server:null,games:[],page:"home"};
 const token=()=>localStorage.getItem("mld_token")||"";
 const esc=v=>String(v??"").replace(/[&<>"']/g,x=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[x]));
@@ -9,8 +9,55 @@ const close=()=>{drawer.classList.remove("open");back.classList.remove("open")};
 $("#menuButton").onclick=open;$("#closeMenu").onclick=close;back.onclick=close;
 const auth=()=>!!S.me, staff=()=>auth()&&["owner","admin"].includes(S.me.role), owner=()=>auth()&&S.me.role==="owner";
 const go=p=>{S.page=p;close();location.hash=p;render()};
-function shell(title,desc,body){main.innerHTML='<div class="section-title"><div><span class="eyebrow">MLD COMMUNITY</span><h1>'+esc(title)+'</h1><p class="muted">'+esc(desc||"")+'</p></div></div>'+body}
-function menus(){const items=[["home","الرئيسية"],["games","الألعاب والجلسات"],["groups","المجموعات"],["cinema","السينما"],["members","الأعضاء"],["roles","الرتب"],["top","TOP"],["reviews","الآراء"],["jokes","النكت"],["stories","القصص"]];if(auth())items.push(["chat","الشات العام"],["messages","الزاجل · الرسائل الخاصة"],["tickets","التذاكر"],["applications","التقديمات"],["profile","البروفايل"],["account","الحساب"]);if(S.me?.role==="admin")items.push(["admin","لوحة الإدارة"]);if(owner())items.push(["owner","لوحة الأونر"]);if(staff())items.push(["logs","السجلات"]);menu.innerHTML=items.map(x=>'<button class="'+(S.page===x[0]?"active":"")+'" data-go="'+x[0]+'">'+x[1]+'</button>').join("")+(auth()?'<button data-act="logout">تسجيل الخروج</button>':'<button data-go="login">تسجيل الدخول</button><button data-go="register">إنشاء حساب</button>');menu.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>go(b.dataset.go));const l=menu.querySelector("[data-act=logout]");if(l)l.onclick=logout;$("#menuUser").textContent=auth()?(S.me.profileName||S.me.username)+" · "+(S.me.role==="owner"?"الأونر":S.me.role==="admin"?"إداري":"عضو"):"زائر";$("#accountState").textContent=auth()?S.me.username:"زائر"}
+function shell(title,desc,body){const page=document.querySelector("#appMain .page");const head=page.querySelector(".page-head");head.innerHTML='<span class="eyebrow">MLD COMMUNITY</span><h1>'+esc(title)+'</h1><p>'+esc(desc||"")+'</p>';main.innerHTML=body}
+function menuItem(id,label,icon,color,desc){return '<button class="menu-item '+(S.page===id?"active":"")+'" style="--menu-c:'+(color||"var(--pink)")+'" data-go="'+id+'"><span class="menu-icon">'+(icon||"•")+'</span><span class="menu-copy"><b>'+esc(label)+'</b><small>'+esc(desc||"MLD Community")+'</small></span>'+(S.page===id?'<span class="menu-active">●</span>':"")+'</button>'}
+function menuSection(title,items,ownerSection){return '<section class="menu-section '+(ownerSection?"owner-menu-section":"")+'"><div class="menu-title-row"><div><div class="menu-title">'+esc(title)+'</div><small>MLD COMMUNITY</small></div><span>'+items.length+'</span></div><div class="menu-grid">'+items.join("")+'</div></section>'}
+function menus(){
+ const publicItems=[
+  menuItem("home","الرئيسية","⌂","#ff79c8","واجهة MLD الرئيسية"),
+  menuItem("games","الألعاب والجلسات","🎮","#8d7cff","الألعاب واللوبيات"),
+  menuItem("groups","المجموعات","👥","#66dcff","قروبات Discord"),
+  menuItem("cinema","السينما","◉","#ff79c8","غرف المشاهدة"),
+  menuItem("members","الأعضاء","♟","#63e6a0","أعضاء السيرفر"),
+  menuItem("roles","الرتب","◆","#8d7cff","الرتب والصلاحيات"),
+  menuItem("top","TOP","★","#ff79c8","إحصائيات النشاط"),
+  menuItem("reviews","الآراء","✦","#66dcff","آراء المجتمع"),
+  menuItem("jokes","النكت","☻","#63e6a0","نكت المجتمع"),
+  menuItem("stories","القصص","✎","#8d7cff","قصص MLD")
+ ];
+ let html='<div class="menu-intro"><div><span class="eyebrow">MLD · CONTROL</span><b>'+(auth()?esc(S.me.profileName||S.me.username):"مرحبًا بك في ملاذ")+'</b><small>'+(auth()?"حساب متصل — "+(owner()?"الأونر":S.me.role==="admin"?"إداري":"عضو"):"تصفح عام بدون تسجيل")+'</small></div><span class="menu-live"><i></i> LIVE</span></div>';
+ html+=menuSection("استكشاف المجتمع",publicItems);
+ if(auth()){
+  html+=menuSection("حسابك ومجتمعك",[
+   menuItem("chat","الشات العام","💬","#66dcff","بروفايلات ورتب الأعضاء"),
+   menuItem("messages","الزاجل · الرسائل الخاصة","✉","#ff79c8","محادثات خاصة متعددة"),
+   menuItem("tickets","التذاكر","🎫","#8d7cff","محادثة مباشرة داخل الموقع"),
+   menuItem("applications","التقديمات","✓","#63e6a0","طلبات الإدارة"),
+   menuItem("profile","البروفايل","◉","#66dcff","الاسم والصورة"),
+   menuItem("account","الحساب","⚙","#8d7cff","إعدادات الحساب")
+  ]);
+ }else{
+  html+=menuSection("الحساب",[
+   menuItem("login","تسجيل الدخول","→","#63e6a0","الدخول إلى حساب MLD"),
+   menuItem("register","إنشاء حساب","+","#ff79c8","إنشاء حساب مرتبط بـ Discord")
+  ]);
+ }
+ if(S.me?.role==="admin") html+=menuSection("الإدارة",[
+   menuItem("admin","لوحة الإدارة","◆","#66dcff","التذاكر والتقديمات")
+ ],true);
+ if(owner()) html+=menuSection("OWNER CONTROL",[
+   menuItem("owner","لوحة الأونر","♛","#ff79c8","التحكم الكامل بالمنصة"),
+   menuItem("logs","السجلات","▤","#8d7cff","سجلات الإدارة والمنصة")
+ ],true);
+ if(auth()) html+='<div class="menu-auth"><button class="danger-btn" data-act="logout">تسجيل الخروج</button></div>';
+ html+='<a id="inviteMenu" class="invite menu-login" target="_blank">انضم إلى سيرفر MLD</a>';
+ menu.innerHTML=html;
+ menu.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>go(b.dataset.go));
+ const l=menu.querySelector("[data-act=logout]");if(l)l.onclick=logout;
+ $("#menuUser").innerHTML='<i class="dot"></i><span>'+(auth()?esc(S.me.profileName||S.me.username)+" · "+(S.me.role==="owner"?"الأونر":S.me.role==="admin"?"إداري":"عضو"):"زائر")+'</span>';
+ $("#accountState").textContent=auth()?S.me.username:"زائر";
+ const inv=S.server?.invite||S.server?.discordInvite||S.server?.inviteUrl;if(inv)$("#inviteMenu").href=inv;
+}
 async function home(){shell("أهلاً بكم في ملاذ","واجهة MLD الجديدة — خفيفة ومتجاوبة ومتصلة ببيانات Discord.","<section class='hero'><span class='eyebrow'>MLD · COMMUNITY</span><h1>كل مجتمعك في مكان واحد.</h1><p>الألعاب والجلسات والمجموعات والشات والسينما وبيانات السيرفر في واجهة واحدة بدون تعقيد.</p><div class='actions'><button class='primary' data-go='games'>استكشف الألعاب</button><button class='secondary' data-go='members'>الأعضاء</button></div></section><div id='stats' class='grid'></div><div class='section-title'><h2>آخر الآراء</h2></div><div id='reviews' class='cards'></div>");bindGo();try{const [sv,rv]=await Promise.all([api("/api/public/server"),api("/api/platform/reviews")]);S.server=sv;const s=sv.server||sv;$("#stats").innerHTML=[["الأعضاء",s.memberCount||s.members||0],["المتصلون",s.online||s.onlineMembers||0],["الزيارات",s.visits||s.totalVisits||0],["الحالة",s.status||"Online"]].map(x=>'<div class="card stat"><span class="muted">'+esc(x[0])+'</span><b>'+esc(x[1])+'</b></div>').join("");$("#reviews").innerHTML=(rv.reviews||[]).slice(0,6).map(r=>'<article class="card"><span class="tag">'+esc(r.username||"عضو")+'</span><p>'+esc(r.text||r.review||"")+'</p></article>').join("")||'<div class="empty">لا توجد آراء حتى الآن</div>'}catch(e){note(e.message)}}
 function bindGo(){main.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>go(b.dataset.go))}
 async function games(){shell("الألعاب","استعرض الألعاب وأنشئ جلسة عندما تسجل الدخول.","<div id='gameList' class='cards'></div><div class='section-title'><h2>الجلسات الحالية</h2></div><div id='lobbies' class='list'></div>");try{const [g,l]=await Promise.all([api("/api/platform/games"),api("/api/platform/lobbies")]);S.games=g.games||[];$("#gameList").innerHTML=S.games.map(x=>'<article class="card"><span class="tag">'+esc(x.mode||"جماعية")+'</span><h3>'+esc(x.icon||"🎮")+" "+esc(x.name)+'</h3><p>'+esc(x.description||"")+'</p><small class="muted">اللاعبون: '+esc(x.players||"-")+'</small></article>').join("")||'<div class="empty">لا توجد ألعاب</div>';$("#lobbies").innerHTML=(l.lobbies||[]).map(x=>'<div class="row"><div><b>'+esc(x.name||x.gameName||"جلسة")+'</b><small class="muted"> · '+esc(x.gameName||x.game||"")+' · '+esc((x.players||[]).length)+' لاعب</small></div><div class="actions"><button class="secondary" data-join="'+esc(x.id)+'">انضمام</button></div></div>').join("")||'<div class="empty">لا توجد جلسات الآن</div>';main.querySelectorAll("[data-join]").forEach(b=>b.onclick=async()=>{if(!auth())return go("login");try{await api("/api/platform/lobbies/"+b.dataset.join+"/join",{method:"POST"});note("تم الانضمام");games()}catch(e){note(e.message)}})}catch(e){note(e.message)}}
