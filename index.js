@@ -265,23 +265,17 @@ app.get("/api/public/stats", async (req, res) => {
 app.get("/api/public/server", async (req, res) => {
   try {
     const guild = await getGuild();
-    res.json({
-      id: guild.id,
-      name: guild.name,
-      icon: guild.iconURL({ extension: "png", size: 256 }),
-      memberCount: guild.memberCount,
-      ownerName: process.env.SERVER_FOUNDER_NAME || "فهد المطيري",
-      invite: process.env.DISCORD_INVITE_URL || ""
-    });
-  } catch (error) {
-    console.error("Server endpoint:", error);
-    res.status(503).json({ error: "Discord server unavailable" });
-  }
-});
-
-app.get("/api/public/server", async (req, res) => {
-  try {
-    const guild = await getGuild();
+    const members = await getAllMembers(guild);
+    const visitorKey = crypto.createHash("sha256").update(String(req.ip || "") + "|" + String(req.headers["user-agent"] || "")).digest("hex");
+    const now = Date.now();
+    const last = Number(publicStats.recentVisitors[visitorKey] || 0);
+    if (now - last > 30 * 60 * 1000) {
+      publicStats.totalVisits = Number(publicStats.totalVisits || 0) + 1;
+      publicStats.recentVisitors[visitorKey] = now;
+      const cutoff = now - 24 * 60 * 60 * 1000;
+      for (const [key, value] of Object.entries(publicStats.recentVisitors)) if (Number(value) < cutoff) delete publicStats.recentVisitors[key];
+      savePublicStats();
+    }
     const configuredSupportId = /^\d{15,22}$/.test(String(process.env.OWNER_DISCORD_ID || "")) ? String(process.env.OWNER_DISCORD_ID) : "";
     const supportMember = configuredSupportId ? null : guild.members.cache.find(m =>
       String(m.user.username || "").toLowerCase() === String(process.env.OWNER_DISCORD_USERNAME || "w4px").toLowerCase() ||
@@ -290,7 +284,8 @@ app.get("/api/public/server", async (req, res) => {
     res.json({
       id: guild.id, name: guild.name, icon: guild.iconURL({ extension: "png", size: 256 }),
       memberCount: guild.memberCount, ownerName: process.env.SERVER_FOUNDER_NAME || "فهد المطيري",
-      invite: process.env.DISCORD_INVITE_URL || "", supportDiscordId: configuredSupportId || supportMember?.id || ""
+      invite: process.env.DISCORD_INVITE_URL || "", supportDiscordId: configuredSupportId || supportMember?.id || "",
+      botReady: client.isReady(), online: onlineMemberCount(members), totalVisits: Number(publicStats.totalVisits || 0)
     });
   } catch (error) { console.error("Server endpoint:", error); res.status(503).json({ error: "Discord server unavailable" }); }
 });
