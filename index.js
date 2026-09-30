@@ -805,27 +805,34 @@ const GAME_CATALOG = [
   { id:"uno", name:"UNO", icon:"🎴", minPlayers:2, maxPlayers:4, mode:"2-4 لاعبين", description:"سحب ولعب أوراق وألوان وفوز باليد." },
   { id:"jackaroo", name:"جاكارو", icon:"♟️", minPlayers:2, maxPlayers:4, mode:"2-4 لاعبين", description:"حركة أحجار بالدور مع رمية نرد." },
   { id:"ludo", name:"لودو", icon:"🎲", minPlayers:2, maxPlayers:4, mode:"2-4 لاعبين", description:"طاولة لودو بالدور ورمية نرد وتحريك القطع." },
-  { id:"monopoly", name:"مونوبولي", icon:"🏦", minPlayers:2, maxPlayers:6, mode:"2-6 لاعبين", description:"رمية وحركة وشراء عقارات ورصيد لكل لاعب." }
+  { id:"monopoly", name:"مونوبولي", icon:"🏦", minPlayers:2, maxPlayers:6, mode:"2-6 لاعبين", description:"رمية وحركة وشراء عقارات ورصيد لكل لاعب." },
+  { id:"maqsor", name:"مقوصر", icon:"🃏", minPlayers:2, maxPlayers:6, mode:"2-6 لاعبين", description:"٤ أوراق لكل لاعب؛ ٢ علوية معروفة و٢ سفلية مخفية، والهدف أقل مجموع." }
 ];
 
 function shuffle(arr){for(let i=arr.length-1;i>0;i--){const j=crypto.randomInt(i+1);[arr[i],arr[j]]=[arr[j],arr[i]];}return arr;}
 function unoDeck(){const colors=["أحمر","أزرق","أخضر","أصفر"],deck=[];colors.forEach(c=>{deck.push({color:c,value:"0"});for(let n=1;n<=9;n++){deck.push({color:c,value:String(n)});deck.push({color:c,value:String(n)});}["+2","عكس","تخطي"].forEach(v=>{deck.push({color:c,value:v});deck.push({color:c,value:v});});});for(let i=0;i<4;i++){deck.push({color:"wild",value:"وايلد"});deck.push({color:"wild",value:"+4"});}return shuffle(deck);}
 function balootDeck(){const suits=["♠","♥","♦","♣"],ranks=["7","8","9","10","J","Q","K","A"],d=[];suits.forEach(s=>ranks.forEach(r=>d.push({suit:s,rank:r,label:r+s})));return shuffle(d);}
+function maqsorDeck(){const suits=["♠","♥","♦","♣"],ranks=["7","8","9","10","J","Q","K","A"],d=[];suits.forEach(s=>ranks.forEach(r=>d.push({suit:s,rank:r,label:r+s,known:false})));d.push({suit:"JOKER",rank:"JOKER",label:"Joker",known:false},{suit:"JOKER",rank:"JOKER",label:"Joker",known:false});return shuffle(d);}
+function maqsorValue(c){if(!c)return 0;if(c.rank==="JOKER")return 20;if(c.rank==="J")return 11;if(c.rank==="Q")return 12;if(c.rank==="K")return 0;if(c.rank==="A")return 1;return Number(c.rank)||0;}
+function maqsorRed(c){return c&&["♥","♦"].includes(c.suit);}
+function maqsorCanBurn(a,b){return a&&b&&((a.rank==="JOKER"&&b.rank==="JOKER")||(a.rank!=="JOKER"&&b.rank!=="JOKER"&&a.rank===b.rank));}
 function initialGameState(game,players){
   const base={version:1,startedAt:new Date().toISOString(),turnIndex:0,lastRoll:null,lastAction:null,winner:null,round:1};
   if(game==="uno"){const deck=unoDeck(),hands={};players.forEach(p=>hands[p]=[]);players.forEach(p=>{for(let i=0;i<7;i++)hands[p].push(deck.pop());});let top=deck.pop();while(top.color==="wild"){deck.unshift(top);top=deck.pop();}return {...base,deck,discard:[top],hands,currentColor:top.color};}
   if(game==="baloot"){const deck=balootDeck(),hands={};players.forEach(p=>hands[p]=deck.splice(0,8));return {...base,hands,trick:[],trickSuit:null,scores:players.reduce((a,p)=>(a[p]=0,a),{})};}
+  if(game==="maqsor"){const deck=maqsorDeck(),hands={},scores={},zeros={};players.forEach(p=>{hands[p]=[deck.pop(),deck.pop(),deck.pop(),deck.pop()];hands[p][0].known=true;hands[p][1].known=true;scores[p]=0;zeros[p]=0;});return {...base,deck,discard:[deck.pop()],hands,scores,zeros,drawn:{},qawsarBy:null,publicReveals:[],roundResults:null,roundOver:false};}
   if(game==="monopoly")return {...base,money:players.reduce((a,p)=>(a[p]=1500,a),{}),positions:players.reduce((a,p)=>(a[p]=0,a),{}),properties:{},lastRoll:null};
   return {...base,pieces:players.reduce((a,p)=>(a[p]=[0,0,0,0],a),{})};
 }
 function publicGameState(lobby,username){
   const s=lobby.gameState||{},safe={...s};
-  if(safe.hands)safe.hands=Object.fromEntries(Object.keys(safe.hands).map(p=>[p,p===username?safe.hands[p]:safe.hands[p].map(()=>({hidden:true}))]));
-  safe.myHand=s.hands&&s.hands[username]?s.hands[username]:[];
+  if(safe.hands)safe.hands=Object.fromEntries(Object.keys(safe.hands).map(p=>[p,p===username?safe.hands[p]:safe.hands[p].map((card,i)=>safe.publicReveals&&safe.publicReveals.some(r=>r.player===p&&r.index===i&&r.until>Date.now())?card:card&&card.known?card:{hidden:true})]));
+  if(safe.game==="maqsor"&&safe.drawn){safe.drawn=Object.fromEntries(Object.keys(safe.drawn).map(p=>[p,p===username?safe.drawn[p]:null]));}
+  safe.myHand=s.hands&&s.hands[username]?s.hands[username].map(c=>c):[];
   return safe;
 }
 function lobbyFor(lobby,username){return {id:lobby.id,game:lobby.game,host:lobby.host,players:lobby.players,spectators:lobby.spectators,maxPlayers:lobby.maxPlayers,status:lobby.status,createdAt:lobby.createdAt,started:Boolean(lobby.gameState?.startedAt),turn:lobby.gameState?.turnIndex??null,currentPlayer:lobby.gameState?lobby.players[lobby.gameState.turnIndex]||null:null,gameState:lobby.gameState?publicGameState(lobby,username):null};}
-function advanceTurn(lobby){lobby.gameState.turnIndex=(lobby.gameState.turnIndex+1)%lobby.players.length;}
+function advanceTurn(lobby){const s=lobby.gameState;s.turnIndex=(s.turnIndex+1)%lobby.players.length;if(lobby.game==="maqsor"&&s.qawsarBy&&lobby.players[s.turnIndex]===s.qawsarBy){const totals={};lobby.players.forEach(p=>totals[p]=(s.hands[p]||[]).reduce((n,c)=>n+maqsorValue(c),0));const min=Math.min(...Object.values(totals));lobby.players.forEach(p=>{if(totals[p]===min){s.scores[p]=0;s.zeros[p]=(s.zeros[p]||0)+1;}else{s.scores[p]=(s.scores[p]||0)+totals[p];}if(s.scores[p]>=50){s.scores[p]=0;s.zeros[p]=(s.zeros[p]||0)+1;}});s.roundResults=totals;s.roundWinner=Object.keys(totals).find(p=>totals[p]===min)||null;s.playersOut=lobby.players.filter(p=>(s.zeros[p]||0)>=3);if(s.playersOut.length){s.winner="خرج: "+s.playersOut.join("، ");s.roundOver=true;}else{const deck=maqsorDeck();lobby.players.forEach(p=>{s.hands[p]=[deck.pop(),deck.pop(),deck.pop(),deck.pop()];s.hands[p][0].known=true;s.hands[p][1].known=true;});s.deck=deck;s.discard=[s.deck.pop()];s.drawn={};s.publicReveals=[];s.qawsarBy=null;s.round++;s.turnIndex=0;s.roundOver=false;}}}
 function drawUno(s){if(!s.deck.length){const top=s.discard.pop();s.deck=shuffle(s.discard.splice(0));if(top)s.discard=[top];}return s.deck.pop()||null;}
 function canControl(req,lobby){const cur=lobby.players[lobby.gameState.turnIndex];return cur===req.account.username||(cur&&cur.startsWith("__test_")&&lobby.host===req.account.username);}
 
@@ -893,7 +900,17 @@ app.post("/api/platform/accounts", async (req, res) => {
       new ButtonBuilder().setCustomId("mld_account_no:" + pendingId).setLabel("لا، إلغاء").setStyle(ButtonStyle.Danger)
     );
     await member.send({
-      content: "🔐 **تأكيد إنشاء حساب ملاذ**\\n\\nتم طلب إنشاء حساب باسم **@" + username + "** المرتبط بحساب Discord الخاص بك.\\nهل أنت من أنشأ هذا الحapp.get("/api/platform/lobbies",(req,res)=>{const username=req.account?.username||"";res.json({lobbies:platform.lobbies.filter(l=>l.status!=="closed").map(l=>lobbyFor(l,username))});});
+      content: "🔐 **تأكيد إنشاء حساب ملاذ**\\n\\nتم طلب إنشاء حساب باسم **@" + username + "** المرتبط بحساب Discord الخاص بك.\\nهل أنت من أنشأ هذا الحساب؟",
+      components: [row]
+    });
+    logPlatform("account_confirmation_sent", null, username + ":" + discordId);
+    res.status(202).json({ pending: true, pendingId, browserToken, expiresAt: pending.expiresAt, message: "تم إرسال رسالة تأكيد إلى الخاص في Discord" });
+  } catch (e) {
+    platform.pendingAccounts = platform.pendingAccounts.filter(p => p.id !== pendingId);
+    savePlatform();
+    res.status(400).json({ error: "تعذر إرسال رسالة التأكيد إلى الخاص. افتح رسائل Discord الخاصة ثم حاول مرة أخرى." });
+  }
+});
 
 app.post("/api/platform/lobbies",auth,(req,res)=>{
   const game=String(req.body?.game||""),rules=GAME_CATALOG.find(g=>g.id===game);
@@ -968,6 +985,19 @@ app.post("/api/platform/lobbies/:id/action",auth,(req,res)=>{
     hand.splice(idx,1);if(!s.trickSuit)s.trickSuit=card.suit;s.trick.push({player:actor,card});
     if(s.trick.length<4)advanceTurn(lobby);else{s.scores[s.trick[0].player]=(s.scores[s.trick[0].player]||0);const winner=s.trick.reduce((best,t)=>t.card.suit===s.trickSuit&&["7","8","Q","K","10","A","9","J"].indexOf(t.card.rank)>["7","8","Q","K","10","A","9","J"].indexOf(best.card.rank)?t:best,s.trick[0]);s.scores[winner.player]=(s.scores[winner.player]||0)+1;s.trick=[];s.trickSuit=null;s.turnIndex=lobby.players.indexOf(winner.player);if(Object.values(s.hands).every(h=>h.length===0))s.winner=Object.keys(s.scores).sort((a,b)=>s.scores[b]-s.scores[a])[0];}
     s.lastAction={by:actor,type:"play-card",card,at:new Date().toISOString()};savePlatform();return res.json({lobby:lobbyFor(lobby,req.account.username),message:"تم لعب الورقة"});
+  }
+  if(lobby.game==="maqsor"){
+    const hand=s.hands[actor]||[];
+    if(action==="draw"){if(s.drawn[actor])return res.status(409).json({error:"عندك ورقة مسحوبة بالفعل"});const card=s.deck.pop();if(!card)return res.status(409).json({error:"الخبيصة فارغة"});s.drawn[actor]=card;s.lastAction={by:actor,type:"draw",at:new Date().toISOString()};savePlatform();return res.json({lobby:lobbyFor(lobby,req.account.username),message:"سحبت من الخبيصة"});}
+    if(action==="take-discard"){if(s.drawn[actor])return res.status(409).json({error:"عندك ورقة مسحوبة بالفعل"});const card=s.discard.pop();if(!card)return res.status(409).json({error:"لا توجد مرمية"});s.drawn[actor]=card;s.lastAction={by:actor,type:"take-discard",at:new Date().toISOString()};savePlatform();return res.json({lobby:lobbyFor(lobby,req.account.username),message:"أخذت المرمية"});}
+    if(action==="replace"){const source=s.drawn[actor],i=Number(req.body?.index);if(!source)return res.status(409).json({error:"اسحب أو خذ المرمية أولًا"});if(i<0||i>3)return res.status(400).json({error:"اختر ورقة صحيحة"});const old=hand[i];hand[i]={...source,known:true};s.discard.push(old);delete s.drawn[actor];s.lastAction={by:actor,type:"replace",index:i,at:new Date().toISOString()};advanceTurn(lobby);savePlatform();return res.json({lobby:lobbyFor(lobby,req.account.username),message:"تم التبديل"});}
+    if(action==="discard-drawn"){const source=s.drawn[actor];if(!source)return res.status(409).json({error:"لا توجد ورقة مسحوبة"});s.discard.push(source);delete s.drawn[actor];s.lastAction={by:actor,type:"discard-drawn",at:new Date().toISOString()};advanceTurn(lobby);savePlatform();return res.json({lobby:lobbyFor(lobby,req.account.username),message:"تم الوطي"});}
+    if(action==="burn"){const i=Number(req.body?.index),card=hand[i],top=s.discard[s.discard.length-1];if(i<0||i>3||!maqsorCanBurn(card,top))return res.status(400).json({error:"الحرق يكون بنفس الرقم فقط، والجوكر يحرق جوكر"});hand.splice(i,1);const fresh=s.deck.pop();if(fresh)hand.push({...fresh,known:false});s.lastAction={by:actor,type:"burn",index:i,at:new Date().toISOString()};advanceTurn(lobby);savePlatform();return res.json({lobby:lobbyFor(lobby,req.account.username),message:"تم الحرق"});}
+    if(action==="reveal-self"){const i=Number(req.body?.cardIndex),target=Number(req.body?.targetIndex),card=hand[i];if(!card||!["8","9"].includes(card.rank))return res.status(400).json({error:"تحتاج 8 أو 9"});if(!hand[target]||hand[target].known)return res.status(400).json({error:"اختر ورقة مخفية"});hand[target].known=true;hand.splice(i,1);s.discard.push(card);s.lastAction={by:actor,type:"reveal-self",index:target,at:new Date().toISOString()};advanceTurn(lobby);savePlatform();return res.json({lobby:lobbyFor(lobby,req.account.username),message:"تم كشف ورقتك"});}
+    if(action==="reveal-any"){const i=Number(req.body?.cardIndex),targetPlayer=String(req.body?.player||""),targetIndex=Number(req.body?.index),card=hand[i];if(!card||card.rank!=="9"||!maqsorRed(card))return res.status(400).json({error:"تحتاج 9 أحمر"});const th=s.hands[targetPlayer]||[];if(!th[targetIndex])return res.status(400).json({error:"اختر ورقة صحيحة"});s.publicReveals=(s.publicReveals||[]).filter(r=>r.until>Date.now());s.publicReveals.push({player:targetPlayer,index:targetIndex,until:Date.now()+10000});hand.splice(i,1);s.discard.push(card);s.lastAction={by:actor,type:"reveal-any",player:targetPlayer,index:targetIndex,at:new Date().toISOString()};advanceTurn(lobby);savePlatform();return res.json({lobby:lobbyFor(lobby,req.account.username),message:"تم كشف الورقة مؤقتًا"});}
+    if(action==="swap"){const i=Number(req.body?.myIndex),p=String(req.body?.player||""),j=Number(req.body?.otherIndex),card=hand[i],other=s.hands[p]||[],jack=hand.find(c=>c.rank==="J"&&maqsorRed(c));if(!jack||!card||!other[j])return res.status(400).json({error:"تحتاج ولدًا أحمر واختر الورقتين"});const t=card;hand[i]=other[j];other[j]=t;hand[i].known=true;other[j].known=false;const ji=hand.indexOf(jack);if(ji>=0){hand.splice(ji,1);s.discard.push(jack);}s.lastAction={by:actor,type:"swap",player:p,at:new Date().toISOString()};advanceTurn(lobby);savePlatform();return res.json({lobby:lobbyFor(lobby,req.account.username),message:"تم التبديل"});}
+    if(action==="qawsar"){if(s.qawsarBy)return res.status(409).json({error:"تم إعلان قوصر بالفعل"});if(s.drawn[actor])return res.status(409).json({error:"أنهِ الورقة المسحوبة أولًا"});s.qawsarBy=actor;s.lastAction={by:actor,type:"qawsar",at:new Date().toISOString()};advanceTurn(lobby);savePlatform();return res.json({lobby:lobbyFor(lobby,req.account.username),message:"تم إعلان قوصر"});}
+    return res.status(400).json({error:"حركة مقوصر غير معروفة"});
   }
   if(lobby.game==="monopoly"){
     if(action!=="buy")return res.status(400).json({error:"بعد الرمية، إذا العقار متاح اضغط شراء"});
