@@ -84,7 +84,7 @@
       closeMenu();
     };
   }
-  document.querySelectorAll("[data-chat],[data-profile],[data-pigeon],[data-extra='bots'],[data-extra='tickets'],[data-extra='applications'],[data-extra='messages'],[data-extra='economy'],[data-extra='overview'],[data-logout]").forEach(wrapLogin);
+  document.querySelectorAll("[data-chat],[data-profile],[data-pigeon],[data-extra='tickets'],[data-extra='applications'],[data-extra='messages'],[data-extra='economy'],[data-extra='overview'],[data-logout]").forEach(wrapLogin);
 
   // Absolute fallback: handle login through event delegation even if another menu handler is missing.
   document.addEventListener("click",function(e){
