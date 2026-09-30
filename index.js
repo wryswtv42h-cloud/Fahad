@@ -905,32 +905,33 @@ app.post("/api/platform/logout", auth, (req, res) => {
 });
 
 app.get("/api/platform/groups", (req, res) => {
-  res.json({ groups: platform.groups.map(g => ({
-    id:g.id, name:g.name, description:g.description, owner:g.owner,
-    members:g.members.length, createdAt:g.createdAt
-  }))});
+  res.json({ groups: platform.groups.map(g => ({id:g.id,name:g.name,description:g.description,owner:g.owner,members:g.members.length,createdAt:g.createdAt,status:g.status||"open",discordUsername:g.discordUsername||""}))});
 });
-
-app.post("/api/platform/groups", auth, (req, res) => {
-  const name = String(req.body?.name || "").trim().slice(0, 40);
-  const description = String(req.body?.description || "").trim().slice(0, 200);
-  if (name.length < 2) return res.status(400).json({ error: "اسم المجموعة قصير" });
-  const group = {
-    id: crypto.randomUUID(), name, description, owner: req.account.username,
-    members: [req.account.username], createdAt: new Date().toISOString()
-  };
-  platform.groups.push(group);
-  logPlatform("group_created", req.account.id, name);
-  res.status(201).json({ group });
+app.post("/api/platform/groups", auth, async (req, res) => {
+  const name=String(req.body?.name||"").trim().slice(0,40),description=String(req.body?.description||"").trim().slice(0,300),discordUsername=String(req.body?.discordUsername||"").trim().replace(/^@/,"");
+  if(name.length<2)return res.status(400).json({error:"اسم المجموعة قصير"});
+  if(!discordUsername)return res.status(400).json({error:"اكتب يوزر Discord للقروب"});
+  const guild=await getGuild();const member=(await getAllMembers(guild)).find(m=>String(m.user.username).toLowerCase()===discordUsername.toLowerCase()||String(m.user.globalName||"").toLowerCase()===discordUsername.toLowerCase());
+  if(!member)return res.status(404).json({error:"لازم يكون يوزر Discord موجودًا في السيرفر"});
+  const group={id:crypto.randomUUID(),name,description,owner:req.account.username,discordUsername:member.user.username,members:[req.account.username],createdAt:new Date().toISOString(),status:"pending",discordCategoryId:null,discordTextId:null,discordVoiceId:null,discordRoleId:null};
+  platform.groups.push(group);savePlatform();logPlatform("group_created",req.account.id,name);
+  try{await member.send("👥 طلب إنشاء قروب MLD\n\nالقروب: **"+name+"**\nالوصف: "+(description||"بدون وصف")+"\n\nتم تسجيل الطلب وإرساله للأونر للمراجعة.");}catch(e){}
+  try{const ownerId=String(process.env.OWNER_DISCORD_ID||"");const owner=ownerId?await guild.members.fetch(ownerId).catch(()=>null):(await getAllMembers(guild)).find(m=>String(m.user.username).toLowerCase()===String(process.env.OWNER_DISCORD_USERNAME||"w4px").toLowerCase());if(owner)await owner.send("📥 طلب قروب جديد: **"+name+"** من @"+req.account.username+" (Discord: @"+member.user.username+")");}catch(e){}
+  res.status(201).json({group,message:"تم رفع طلب القروب للأونر"});
 });
-
-app.post("/api/platform/groups/:id/join", auth, (req, res) => {
-  const group = platform.groups.find(g => g.id === req.params.id);
-  if (!group) return res.status(404).json({ error: "المجموعة غير موجودة" });
-  if (!group.members.includes(req.account.username)) group.members.push(req.account.username);
-  savePlatform();
-  logPlatform("group_joined", req.account.id, group.name);
-  res.json({ ok: true, group });
+app.post("/api/platform/groups/:id/join", auth, async (req, res) => {
+  const group=platform.groups.find(g=>g.id===req.params.id);if(!group)return res.status(404).json({error:"المجموعة غير موجودة"});
+  if(group.status!=="approved"&&group.owner!==req.account.username)return res.status(409).json({error:"القروب بانتظار اعتماد الأونر"});
+  if(!group.members.includes(req.account.username))group.members.push(req.account.username);savePlatform();logPlatform("group_joined",req.account.id,group.name);
+  res.json({ok:true,group});
+});
+app.post("/api/platform/groups/:id/status",auth,ownerOnly,async(req,res)=>{
+  const group=platform.groups.find(g=>g.id===req.params.id);if(!group)return res.status(404).json({error:"المجموعة غير موجودة"});
+  const status=["approved","rejected","open"].includes(req.body?.status)?req.body.status:"approved";
+  if(status==="approved"&&!group.discordCategoryId){
+    const guild=await getGuild();const role=await guild.roles.create({name:"MLD · "+group.name,reason:"MLD group"});const category=await guild.channels.create({name:"MLD · "+group.name,type:4,reason:"MLD group"});const textCh=await guild.channels.create({name:"chat-"+group.name.toLowerCase().replace(/[^a-z0-9-_]/g,"").slice(0,80)||"group-chat",type:0,parent:category.id,reason:"MLD group"});const voice=await guild.channels.create({name:"Voice · "+group.name,type:2,parent:category.id,reason:"MLD group"});group.discordRoleId=role.id;group.discordCategoryId=category.id;group.discordTextId=textCh.id;group.discordVoiceId=voice.id;
+  }
+  group.status=status;savePlatform();logPlatform("group_status",req.account.id,group.id+":"+status);res.json({group});
 });
 
 const GAME_CATALOG = [
