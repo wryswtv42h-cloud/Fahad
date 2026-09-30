@@ -709,8 +709,13 @@ function logPlatform(action, accountId, details = "") {
 
 function safeAccount(a) {
   return {
-    id: a.id, username: a.username, discordId: a.discordId,
-    role: a.role, admin: a.role === "owner" || a.admin === true, createdAt: a.createdAt,
+    id: a.id,
+    username: a.username,
+    discordId: a.discordId || "",
+    discordUsername: a.discordUsername || "",
+    role: a.role,
+    admin: a.role === "owner" || a.admin === true,
+    createdAt: a.createdAt,
     profileName: a.profileName || a.username,
     avatar: a.avatar || "",
     bio: a.bio || ""
@@ -720,17 +725,38 @@ function safeAccount(a) {
 const adminRoleIds = new Set(["1521187079336362024","1531109479264026706","1548732297669255259","1548732341185155103","1548732606508703744"]);
 async function syncAccountAccess(account) {
   try {
-    const member = await (await getGuild()).members.fetch(account.discordId).catch(() => null);
-    const hasOwnerRole = Boolean(member && member.roles.cache.has("1530712642384040027"));
+    const guild = await getGuild();
+    let member = null;
+    const rawDiscordId = String(account.discordId || "").trim();
+    if (/^\d{15,22}$/.test(rawDiscordId)) member = await guild.members.fetch(rawDiscordId).catch(() => null);
+    if (!member) {
+      const wanted = String(account.discordUsername || "").trim().toLowerCase();
+      if (wanted) member = (await getAllMembers(guild)).find(m =>
+        String(m.user.username || "").toLowerCase() === wanted ||
+        String(m.user.globalName || "").toLowerCase() === wanted ||
+        String(m.displayName || "").toLowerCase() === wanted
+      ) || null;
+    }
+    if (!member) {
+      account.accessDisabled = true;
+      account.admin = false;
+      return false;
+    }
+    account.accessDisabled = false;
+    account.discordId = member.id;
+    account.discordUsername = member.user.username || member.user.globalName || account.discordUsername || "";
+    const hasOwnerRole = Boolean(member.roles.cache.has("1530712642384040027"));
     const linkedDiscord = String(account.discordUsername || "").trim().toLowerCase();
-    const isConfiguredOwner = linkedDiscord === OWNER_DISCORD_USERNAME || (OWNER_DISCORD_ID && String(account.discordId || "").toLowerCase() === OWNER_DISCORD_ID);
-    const hasAdminRole = Boolean(member && member.roles.cache.some(r => adminRoleIds.has(r.id)));
+    const isConfiguredOwner = linkedDiscord === OWNER_DISCORD_USERNAME || (OWNER_DISCORD_ID && String(member.id).toLowerCase() === OWNER_DISCORD_ID);
+    const hasAdminRole = Boolean(member.roles.cache.some(r => adminRoleIds.has(r.id)));
     const configuredUsername = String(process.env.OWNER_USERNAME || "").trim().toLowerCase();
     const isConfiguredOwnerAccount = configuredUsername && String(account.username || "").trim().toLowerCase() === configuredUsername;
-    account.role = isConfiguredOwner || isConfiguredOwnerAccount ? "owner" : (hasAdminRole || account.admin === true ? "admin" : "member");
+    account.role = isConfiguredOwner || isConfiguredOwnerAccount || hasOwnerRole ? "owner" : (hasAdminRole || account.admin === true ? "admin" : "member");
     account.admin = account.role === "owner" || account.role === "admin";
-  } catch {
-    account.admin = account.role === "owner" || account.admin === true;
+    return true;
+  } catch (error) {
+    console.error("Account access sync:", error.message);
+    return false;
   }
 }
 async function auth(req, res, next) {
@@ -739,7 +765,12 @@ async function auth(req, res, next) {
   const accountId = token ? (readSessionToken(token) || sessions.get(token)) : null;
   const account = accountId ? platform.accounts.find(a => a.id === accountId) : null;
   if (!account) return res.status(401).json({ error: "سجّل دخولك أولًا" });
-  await syncAccountAccess(account);
+  const allowed = await syncAccountAccess(account);
+  if (!allowed) {
+    sessions.delete(token);
+    savePlatform();
+    return res.status(403).json({ error: "تم تعطيل دخول الحساب لأن حساب Discord المرتبط ليس عضوًا في سيرفر ملاذ." });
+  }
   req.account = account;
   req.token = token;
   next();
@@ -898,7 +929,8 @@ app.post("/api/platform/login", async (req, res) => {
   const password = String(req.body?.password || "");
   const account = platform.accounts.find(a => a.username === username);
   if (!account || !passwordOk(password, account)) return res.status(401).json({ error: "بيانات الدخول غير صحيحة" });
-  await syncAccountAccess(account);
+  const allowed = await syncAccountAccess(account);
+  if (!allowed) return res.status(403).json({ error: "لا يمكنك الدخول لأن حساب Discord المرتبط ليس عضوًا في سيرفر ملاذ." });
   const token = createSessionToken(account.id);
   sessions.set(token, account.id);
   savePlatform();
@@ -1177,82 +1209,29 @@ app.delete("/api/platform/lobbies/:id",auth,(req,res)=>{
   const i=platform.lobbies.findIndex(l=>l.id===req.params.id);if(i<0)return res.status(404).json({error:"الجلسة غير موجودة"});if(platform.lobbies[i].host!==req.account.username&&req.account.role!=="owner")return res.status(403).json({error:"لا تملك صلاحية إغلاق الجلسة"});platform.lobbies[i].status="closed";savePlatform();logPlatform("lobby_closed",req.account.id,req.params.id);res.json({ok:true});
 });
 
+// Public lobby discovery. Private game state is only returned by the authenticated room endpoint.
 app.get("/api/platform/lobbies", (req, res) => {
-  // Public discovery must never expose raw gameState, decks, hands, tokens, or private cards.
-  // A sanitized summary is enough for the lobby directory; authenticated room responses use lobbyFor().
   res.json({
-    lobbies: platform.lobbies
-      .filter(l => l.status !== "closed")
-      .map(l => ({
-        id: l.id,
-        game: l.game,
-        host: l.host,
-        players: l.players.map(p => String(p).startsWith("__test_") ? "__test_" : p),
-        spectators: l.spectators,
-        maxPlayers: l.maxPlayers,
-        status: l.status,
-        started: Boolean(l.gameState?.startedAt),
-        turn: l.gameState?.turnIndex ?? null,
-        currentPlayer: l.gameState ? l.players[l.gameState.turnIndex] || null : null,
-        createdAt: l.createdAt
-      }))
+    lobbies: platform.lobbies.filter(l => l.status !== "closed").map(l => ({
+      id: l.id,
+      game: l.game,
+      host: l.host,
+      players: l.players.map(p => String(p).startsWith("__test_") ? "__test_" : p),
+      spectators: l.spectators,
+      maxPlayers: l.maxPlayers,
+      status: l.status,
+      started: Boolean(l.gameState?.startedAt),
+      turn: l.gameState?.turnIndex ?? null,
+      currentPlayer: l.gameState ? l.players[l.gameState.turnIndex] || null : null,
+      createdAt: l.createdAt
+    }))
   });
 });
 
-app.post("/api/platform/lobbies", auth, (req, res) => {
-  const game = String(req.body?.game || "");
-  const rules = GAME_CATALOG.find(g => g.id === game);
-  if (!rules) return res.status(400).json({ error: "اللعبة غير متاحة" });
-  const existing = platform.lobbies.find(l => l.status !== "closed" && l.host === req.account.username);
-  if (existing) return res.status(409).json({ error: "عندك جلسة ألعاب موجودة بالفعل. ادخل جلستك بدل إنشاء جلسة ثانية." , lobby: existing });
-  const maxPlayers = Number(req.body?.maxPlayers || rules.maxPlayers);
-  if (!Number.isInteger(maxPlayers) || maxPlayers < rules.minPlayers || maxPlayers > rules.maxPlayers) {
-    return res.status(400).json({ error: "عدد اللاعبين غير مناسب لهذه اللعبة" });
-  }
-  const lobby = {
-    id: crypto.randomUUID(), game, host:req.account.username,
-    players:[req.account.username], spectators:[], maxPlayers,
-    status:"open", createdAt:new Date().toISOString(), gameState:null
-  };
-  platform.lobbies.push(lobby);
-  savePlatform();
-  logPlatform("lobby_created", req.account.id, game);
-  res.status(201).json({ lobby });
-});
-
-app.post("/api/platform/lobbies/:id/join", auth, (req, res) => {
-  const lobby = platform.lobbies.find(l => l.id === req.params.id);
-  if (!lobby || lobby.status === "closed") return res.status(404).json({ error: "الجلسة غير متاحة" });
-  if (!lobby.players.includes(req.account.username)) {
-    if (lobby.players.length >= lobby.maxPlayers) return res.status(409).json({ error: "المقاعد مكتملة" });
-    lobby.players.push(req.account.username);
-  }
-  if (lobby.players.length >= lobby.maxPlayers) lobby.status = "ready";
-  savePlatform();
-  logPlatform("lobby_joined", req.account.id, lobby.game);
-  res.json({ lobby });
-});
-
-app.post("/api/platform/lobbies/:id/spectate", auth, (req, res) => {
-  const lobby = platform.lobbies.find(l => l.id === req.params.id);
+app.get("/api/platform/lobbies/:id", auth, (req, res) => {
+  const lobby = platform.lobbies.find(l => l.id === req.params.id && l.status !== "closed");
   if (!lobby) return res.status(404).json({ error: "الجلسة غير موجودة" });
-  if (!lobby.spectators.includes(req.account.username) && !lobby.players.includes(req.account.username)) {
-    lobby.spectators.push(req.account.username);
-  }
-  savePlatform();
-  logPlatform("lobby_spectated", req.account.id, lobby.game);
-  res.json({ lobby });
-});
-
-app.delete("/api/platform/lobbies/:id", auth, (req, res) => {
-  const i = platform.lobbies.findIndex(l => l.id === req.params.id);
-  if (i < 0) return res.status(404).json({ error: "الجلسة غير موجودة" });
-  if (platform.lobbies[i].host !== req.account.username && req.account.role !== "owner") {
-    return res.status(403).json({ error: "لا تملك صلاحية إغلاق الجلسة" });
-  }
-  platform.lobbies.splice(i, 1);
-  logPlatform("lobby_closed", req.account.id, req.params.id);
-  res.json({ ok:true });
+  res.json({ lobby: lobbyFor(lobby, req.account.username) });
 });
 
 const ADMIN_VISIBLE_LOGS = new Set([
