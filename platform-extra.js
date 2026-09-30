@@ -21,6 +21,7 @@ module.exports = function setupMLDExtra({ app, client, auth, ownerOnly, adminOnl
     jokes: [],
     jokeRatings: {},
     stories: [],
+    storyRatings: {},
     announcement: { enabled: false, text: "", color: "", updatedAt: null },
     ticketSettings: { questions: ["عنوان المشكلة","التفاصيل"] },
     cinemaRooms: [],
@@ -400,9 +401,22 @@ app.post("/api/platform/tickets/:id/close",auth,(req,res)=>{
     j[rating==="like"?"likes":"dislikes"]=(j[rating==="like"?"likes":"dislikes"]||0)+1;
     data.jokeRatings[req.account.username][j.id]=rating; save(); res.json({joke:j});
   });
+  app.post("/api/platform/stories/:id/rate",auth,(req,res)=>{
+    const s=data.stories.find(x=>x.id===req.params.id); if(!s)return res.status(404).json({error:"القصة غير موجودة"});
+    const rating=req.body?.rating==="like"||req.body?.rating==="dislike"?req.body.rating:null;
+    if(!rating)return res.status(400).json({error:"تقييم غير صالح"});
+    if(!data.storyRatings[req.account.username])data.storyRatings[req.account.username]={};
+    const previous=data.storyRatings[req.account.username][s.id];
+    if(previous===rating)return res.json({story:s});
+    s.likes=s.likes||0;s.dislikes=s.dislikes||0;
+    if(previous==="like")s.likes=Math.max(0,s.likes-1);
+    if(previous==="dislike")s.dislikes=Math.max(0,s.dislikes-1);
+    s[rating==="like"?"likes":"dislikes"]=(s[rating==="like"?"likes":"dislikes"]||0)+1;
+    data.storyRatings[req.account.username][s.id]=rating; save(); res.json({story:s});
+  });
   app.get("/api/platform/stories",(req,res)=>{
     if(!data.stories.length){DEFAULT_STORIES.forEach((s,i)=>data.stories.push({id:"story-"+(i+1),title:s[0],text:s[1],author:"MLD",createdAt:new Date().toISOString()}));save();}
-    res.json({stories:data.stories.slice(0,100)});
+    res.json({stories:data.stories.slice(0,100).map(s=>Object.assign({likes:0,dislikes:0},s))});
   });
   app.post("/api/platform/stories",auth,(req,res)=>{
     const title=clean(req.body?.title,100), text=clean(req.body?.text,3000);
