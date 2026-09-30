@@ -264,6 +264,11 @@ app.get("/api/public/stats", async (req, res) => {
 app.get("/api/public/server", async (req, res) => {
   try {
     const guild = await getGuild();
+    const configuredSupportId = /^\d{15,22}$/.test(String(process.env.OWNER_DISCORD_ID || "")) ? String(process.env.OWNER_DISCORD_ID) : "";
+    const supportMember = configuredSupportId ? null : guild.members.cache.find(m =>
+      String(m.user.username || "").toLowerCase() === String(process.env.OWNER_DISCORD_USERNAME || "w4px").toLowerCase() ||
+      String(m.user.globalName || "").toLowerCase() === String(process.env.OWNER_DISCORD_USERNAME || "w4px").toLowerCase()
+    );
     res.json({
       id: guild.id,
       name: guild.name,
@@ -271,7 +276,7 @@ app.get("/api/public/server", async (req, res) => {
       memberCount: guild.memberCount,
       ownerName: process.env.SERVER_FOUNDER_NAME || "فهد المطيري",
       invite: process.env.DISCORD_INVITE_URL || "",
-      supportDiscordId: /^\d{15,22}$/.test(String(process.env.OWNER_DISCORD_ID || "")) ? String(process.env.OWNER_DISCORD_ID) : ""
+      supportDiscordId: configuredSupportId || supportMember?.id || ""
     });
   } catch (error) {
     console.error("Server endpoint:", error);
