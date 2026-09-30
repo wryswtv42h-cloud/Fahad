@@ -584,7 +584,10 @@ function logPlatform(action, accountId, details = "") {
 function safeAccount(a) {
   return {
     id: a.id, username: a.username, discordId: a.discordId,
-    role: a.role, createdAt: a.createdAt
+    role: a.role, createdAt: a.createdAt,
+    profileName: a.profileName || a.username,
+    avatar: a.avatar || "",
+    bio: a.bio || ""
   };
 }
 
