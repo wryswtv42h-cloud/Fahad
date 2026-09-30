@@ -9,7 +9,7 @@
   if(!panel)return;
   function esc(v){return String(v==null?"":v).replace(/[&<>\"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]})}
   function api(url,opt){opt=opt||{};opt.headers=Object.assign({"Content-Type":"application/json"},opt.headers||{});if(token)opt.headers.Authorization="Bearer "+token;return fetch(url,opt).then(function(r){return r.json().then(function(d){if(!r.ok)throw Error(d.error||"حدث خطأ");return d})})}
-  function show(title,html){panel.className=panel.className.replace(/\bhidden\b/g,"").trim();$("#directory").className+=" hidden";$("#view-title").textContent=title;$("#subtitle").textContent="منصة MLD";panel.innerHTML=html;requestAnimationFrame(function(){panel.scrollIntoView({behavior:"smooth",block:"start"});});}
+  function show(title,html){document.body.classList.add("mld-page-mode");panel.className=panel.className.replace(/\bhidden\b/g,"").trim();$("#directory").className+=" hidden";$("#view-title").textContent=title;$("#subtitle").textContent="منصة MLD";panel.innerHTML=html;window.scrollTo({top:0,left:0,behavior:"auto"});}
   function badge(){return account?"<span class='platform-chip "+(account.role==="owner"?"owner":"")+"'>@"+esc(account.username)+" · "+(account.role==="owner"?"OWNER":"عضو")+"</span>":"<span class='platform-chip'>زائر</span>"}
   function need(){if(account)return true;loginView();return false}
   function accountView(){
@@ -246,7 +246,7 @@
     $("#pigeon-anon").onchange=function(){var a=$("#pigeon-anon").checked;$("#pigeon-name").classList.toggle("hidden",a);};
     $("#pigeon-send").onclick=function(){var st=$("#pigeon-status"),btn=$("#pigeon-send"),msg=$("#pigeon-text").value.trim(),anon=$("#pigeon-anon").checked,name=$("#pigeon-name").value.trim();if(!selected){st.textContent="اختر عضوًا أولًا";return;}if(!msg){st.textContent="اكتب الرسالة أولًا";return;}if(!anon&&!name){st.textContent="اكتب اسم المرسل أو فعّل الإرسال كمجهول";return;}btn.disabled=true;api("/api/public/message",{method:"POST",body:JSON.stringify({memberId:selected.id,title:"زاجل من MLD",message:anon?"مرسل مجهول\n\n"+msg:"من: "+name+"\n\n"+msg})}).then(function(){st.textContent="تم إرسال الزاجل بنجاح ✓";$("#pigeon-text").value="";}).catch(function(e){st.textContent=e.message;}).finally(function(){btn.disabled=false;});};
   }
-  document.querySelectorAll("[data-pigeon]").forEach(function(b){b.onclick=function(){pigeonView();var m=$("#mobile-menu");if(m)m.className=m.className.replace(/\bopen\b/g,"").trim();};});
+  document.querySelectorAll("[data-pigeon]").forEach(function(b){b.onclick=function(){pigeonView();if(window.MLDMenu)window.MLDMenu.close();else{var m=$("#mobile-menu");if(m)m.className=m.className.replace(/\bopen\b/g,"").trim()};};});
   document.querySelectorAll("[data-logout]").forEach(function(b){b.onclick=function(){if(account)logoutView();else{loginView();var m=$("#mobile-menu");if(m)m.classList.remove("open");}}});
   document.querySelectorAll("[data-login]").forEach(function(b){b.onclick=function(){loginView();var m=$("#mobile-menu");if(m)m.classList.remove("open");}});
   document.querySelectorAll("[data-owner]").forEach(function(b){b.onclick=function(){if(!need())return;ownerView();var m=$("#mobile-menu");if(m)m.classList.remove("open");};});
@@ -255,7 +255,7 @@
     var isOwner=logged && account.role==="owner";
     var isAdmin=logged && (account.role==="owner" || account.admin===true);
     document.querySelectorAll(".logged-only").forEach(function(b){b.classList.toggle("hidden",!logged);});
-    document.querySelectorAll(".guest-only,[data-login]").forEach(function(b){b.classList.toggle("guest-hidden",logged);});
+    document.querySelectorAll(".guest-only,[data-login]").forEach(function(b){b.classList.toggle("hidden",logged);b.style.display=logged?"none":"";});
     document.querySelectorAll(".auth-only").forEach(function(b){
       if(logged){b.classList.remove("hidden");b.classList.add("access-visible");b.style.removeProperty("display");}
       else{b.classList.add("hidden");b.classList.remove("access-visible");b.style.setProperty("display","none","important");}
@@ -271,6 +271,9 @@
       else{b.classList.add("hidden");b.classList.remove("access-visible");b.style.setProperty("display","none","important");b.setAttribute("aria-hidden","true");}
     });
   }
+  document.querySelectorAll("[data-home]").forEach(function(b){b.onclick=function(e){e.preventDefault();document.body.classList.remove("mld-page-mode");window.scrollTo({top:0,left:0,behavior:"auto"});if(window.MLDMenu)window.MLDMenu.close();};});
+  document.querySelectorAll("[data-chat]").forEach(function(b){b.onclick=function(){if(need())chatView();if(window.MLDMenu)window.MLDMenu.close();};});
+  document.querySelectorAll("[data-profile]").forEach(function(b){b.onclick=function(){if(need())profileView();if(window.MLDMenu)window.MLDMenu.close();};});
   document.querySelectorAll("[data-platform]").forEach(function(b){b.onclick=function(){if(b.dataset.platform==="account"&&!need())return;if(b.dataset.platform==="account")accountView();if(b.dataset.platform==="games")gamesView();if(b.dataset.platform==="groups")groupsView();if(b.dataset.platform==="admin"){if(!need())return;adminView();}var m=$("#mobile-menu");if(m)m.className=m.className.replace(/\bopen\b/g,"").trim()}});
   updateOwnerMenu();
   if(token)api("/api/platform/me").then(function(d){
@@ -286,4 +289,5 @@
   });
   updateOwnerMenu();
   window.MLDPlatform={accountView:accountView,loginView:loginView,gamesView:gamesView,groupsView:groupsView,adminView:adminView,ownerView:ownerView,profileView:profileView,chatView:chatView,refreshMenu:updateOwnerMenu};
+  document.querySelectorAll("[data-owner]").forEach(function(b){b.onclick=function(e){e.preventDefault();if(account&&account.role==="owner")ownerView();else loginView();if(window.MLDMenu)window.MLDMenu.close();};});
 })();
