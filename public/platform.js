@@ -174,11 +174,21 @@
   }
   function adminView(){
     if(!need())return;
-    api("/api/platform/admin").then(function(d){return api("/api/platform/logs").then(function(l){
+    if(!account || !(account.role==="owner" || account.admin===true)){alert("هذه اللوحة للإدارة فقط");return;}
+    api("/api/platform/admin").then(function(d){
       var stats=Object.keys(d).map(function(k){return "<div><b>"+esc(d[k])+"</b><small>"+esc(k)+"</small></div>"}).join("");
-      var logs=l.logs.map(function(x){return "<div><b>"+esc(x.action)+"</b><span>"+esc(x.details)+"</span><small>"+new Date(x.at).toLocaleString("ar-SA")+"</small></div>"}).join("");
-      show("الإدارة","<div class='platform-head'><div><span class='eyebrow'>OWNER CONTROL</span><h2>لوحة الأونر</h2><p class='muted'>إحصاءات المنصة والسجل.</p></div>"+badge()+"</div><div class='admin-stats'>"+stats+"</div><div class='log-list'>"+(logs||"<div class='empty'>لا توجد سجلات.</div>")+"</div>");
-    })}).catch(function(e){alert(e.message)});
+      show("الإدارة","<div class='platform-head'><div><span class='eyebrow'>STAFF CONTROL</span><h2>لوحة الإدارة</h2><p class='muted'>إحصاءات التشغيل وإدارة المنصة.</p></div>"+badge()+"</div><div class='admin-stats'>"+stats+"</div><div class='account-card'><b>صلاحيات الإدارة</b><p class='muted'>لوحة الأونر الخاصة منفصلة ولا تظهر إلا للحساب المصرح له.</p></div>");
+    }).catch(function(e){alert(e.message)});
+  }
+  function ownerView(){
+    if(!need())return;
+    if(!account || account.role!=="owner"){alert("هذا القسم للأونر فقط");return;}
+    Promise.all([api("/api/platform/admin"),api("/api/platform/logs")]).then(function(x){
+      var d=x[0], l=x[1];
+      var stats=Object.keys(d).map(function(k){return "<div><b>"+esc(d[k])+"</b><small>"+esc(k)+"</small></div>"}).join("");
+      var logs=(l.logs||[]).map(function(v){return "<div><b>"+esc(v.action)+"</b><span>"+esc(v.details)+"</span><small>"+new Date(v.at).toLocaleString("ar-SA")+"</small></div>"}).join("");
+      show("الأونر","<div class='platform-head'><div><span class='eyebrow'>OWNER CONTROL</span><h2>لوحة الأونر</h2><p class='muted'>تحكم كامل وسجل المنصة.</p></div>"+badge()+"</div><div class='admin-stats'>"+stats+"</div><div class='log-list'>"+(logs||"<div class='empty'>لا توجد سجلات.</div>")+"</div>");
+    }).catch(function(e){alert(e.message)});
   }
   function profileView(){
     if(!need())return;
