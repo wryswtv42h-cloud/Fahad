@@ -575,8 +575,11 @@ let platform = loadPlatform();
 for (const session of platform.sessions || []) {
   if (session?.token && session?.accountId && platform.accounts.some(a => a.id === session.accountId)) sessions.set(session.token, session.accountId);
 }
-// Owner identity requested for the existing MLD account: Discord username w4px / site username 305.
-for (const a of platform.accounts) { if (a.username === "305" || String(a.discordUsername || "").toLowerCase() === OWNER_DISCORD_USERNAME) a.role = "owner"; }
+// OWNER is tied ONLY to the Discord account w4px. A Discord server role or site username must never grant OWNER.
+for (const a of platform.accounts) {
+  const linkedDiscord = String(a.discordUsername || "").trim().toLowerCase();
+  a.role = linkedDiscord === OWNER_DISCORD_USERNAME ? "owner" : (a.role === "owner" ? "member" : (a.role || "member"));
+}
 savePlatform();
 
 function savePlatform() {
@@ -614,9 +617,10 @@ async function syncAccountAccess(account) {
   try {
     const member = await (await getGuild()).members.fetch(account.discordId).catch(() => null);
     const hasOwnerRole = Boolean(member && member.roles.cache.has("1530712642384040027"));
-    const isConfiguredOwner = account.username === "305" || String(account.discordUsername || "").toLowerCase() === OWNER_DISCORD_USERNAME || String(account.discordId || "").toLowerCase() === OWNER_DISCORD_ID;
+    const linkedDiscord = String(account.discordUsername || "").trim().toLowerCase();
+    const isConfiguredOwner = linkedDiscord === OWNER_DISCORD_USERNAME;
     const hasAdminRole = Boolean(member && member.roles.cache.some(r => adminRoleIds.has(r.id)));
-    if (account.role === "owner" || hasOwnerRole || isConfiguredOwner) account.role = "owner";
+    account.role = isConfiguredOwner ? "owner" : "member";
     account.admin = account.role === "owner" || hasAdminRole || account.admin === true;
   } catch {
     account.admin = account.role === "owner" || account.admin === true;
@@ -702,7 +706,7 @@ app.post("/api/platform/accounts", async (req, res) => {
   const member = await guild.members.fetch(discordId).catch(() => null);
   if (!member) return res.status(404).json({ error: "لازم تكون موجودًا في سيرفر ملاذ لإنشاء الحساب" });
 
-  const owner = discordId.toLowerCase() === OWNER_DISCORD_ID || String(member.user.username || "").toLowerCase() === OWNER_DISCORD_USERNAME || String(member.user.globalName || "").toLowerCase() === OWNER_DISCORD_USERNAME;
+  const owner = String(member.user.username || "").trim().toLowerCase() === OWNER_DISCORD_USERNAME;
   const pass = hashPassword(password);
   const pendingId = crypto.randomUUID();
   const browserToken = crypto.randomBytes(32).toString("hex");
