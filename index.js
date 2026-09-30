@@ -842,7 +842,7 @@ app.delete("/api/platform/lobbies/:id", auth, (req, res) => {
   res.json({ ok:true });
 });
 
-app.get("/api/platform/logs", auth, ownerOnly, (req, res) => res.json({ logs: platform.logs.slice(0, 100) }));
+app.get("/api/platform/logs", auth, adminOnly, (req, res) => res.json({ logs: req.account.role === "owner" ? platform.logs.slice(0, 100) : [] }));
 
 app.get("/api/platform/admin", auth, adminOnly, (req, res) => {
   res.json({
