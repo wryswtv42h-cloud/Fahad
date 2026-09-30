@@ -1,3 +1,4 @@
+// MLD boot repair: keep this file on the verified group/game route path.
 "use strict";
 require("dotenv").config();
 
