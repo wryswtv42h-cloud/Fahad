@@ -63,7 +63,7 @@
   document.querySelectorAll("[data-extra]").forEach(function(b){b.onclick=function(){if(map[b.dataset.extra])map[b.dataset.extra]();nav();};});
   window.MLDExtra={bots:bots,tickets:tickets,applications:applications,reviews:reviews,messages:messages,economy:economy,giveaways:giveaways,overview:overview};
 
-  function closeMenu(){var m=$("#mobile-menu");if(m)m.className=m.className.replace(/\\bopen\\b/g,"").trim();}
+  function closeMenu(){var m=$("#mobile-menu");if(m)m.className=m.className.replace(/\bopen\b/g,"").trim();}
   function wrapLogin(button){
     if(!button)return;
     var original=button.onclick;
