@@ -780,6 +780,8 @@ app.post("/api/platform/lobbies", auth, (req, res) => {
   const game = String(req.body?.game || "");
   const allowed = new Set(["baloot","uno","jackaroo","ludo","monopoly"]);
   if (!allowed.has(game)) return res.status(400).json({ error: "اللعبة غير متاحة" });
+  const existing = platform.lobbies.find(l => l.status !== "closed" && l.host === req.account.username);
+  if (existing) return res.status(409).json({ error: "عندك جلسة ألعاب موجودة بالفعل. ادخل جلستك بدل إنشاء جلسة ثانية." , lobby: existing });
   const maxPlayers = Math.max(2, Math.min(6, Number(req.body?.maxPlayers || 4)));
   const lobby = {
     id: crypto.randomUUID(), game, host:req.account.username,
@@ -787,6 +789,7 @@ app.post("/api/platform/lobbies", auth, (req, res) => {
     status:"open", createdAt:new Date().toISOString()
   };
   platform.lobbies.push(lobby);
+  savePlatform();
   logPlatform("lobby_created", req.account.id, game);
   res.status(201).json({ lobby });
 });

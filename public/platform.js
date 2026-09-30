@@ -55,17 +55,26 @@
     $("#login").onclick=function(){api("/api/platform/login",{method:"POST",body:JSON.stringify({username:$("#login-user").value,password:$("#login-pass").value})}).then(function(d){token=d.token;account=d.account;localStorage.setItem("mld_token",token);updateOwnerMenu();accountView()}).catch(function(e){alert(e.message)})};
     $("#new-account").onclick=accountView;
   }
+  function gameRoom(lobby){
+    var players=(lobby.players||[]).map(function(u){return "<span class='platform-chip'>@"+esc(u)+"</span>"}).join("");
+    var spectators=(lobby.spectators||[]).map(function(u){return "<span class='platform-chip'>👀 @"+esc(u)+"</span>"}).join("");
+    show(names[lobby.game]||"غرفة اللعبة","<div class='platform-head'><div><span class='eyebrow'>MLD GAME ROOM</span><h2>"+esc(names[lobby.game]||lobby.game)+"</h2><p class='muted'>الغرفة مفتوحة · المضيف @"+esc(lobby.host)+"</p></div><button class='platform-link' id='back-games'>رجوع للألعاب</button></div><div class='account-card'><h3>اللاعبون</h3><div class='roles'>"+players+"</div><h3>المشاهدون</h3><div class='roles'>"+(spectators||"<span class='muted'>لا يوجد مشاهدون</span>")+"</div><p class='muted'>عدد المقاعد: "+lobby.players.length+"/"+lobby.maxPlayers+"</p><button class='primary wide' id='refresh-room'>تحديث الغرفة</button></div>");
+    $("#back-games").onclick=gamesView;
+    $("#refresh-room").onclick=function(){api("/api/platform/lobbies").then(function(d){var found=d.lobbies.find(function(x){return x.id===lobby.id});if(found)gameRoom(found);else gamesView()}).catch(function(e){alert(e.message)})};
+  }
   function gamesView(){
+    if(!need())return;
     Promise.all([api("/api/platform/games"),api("/api/platform/lobbies")]).then(function(x){
-      var g=x[0],l=x[1];
+      var g=x[0],l=x[1],mine=(l.lobbies||[]).find(function(a){return a.host===account.username||a.players.indexOf(account.username)>=0||a.spectators.indexOf(account.username)>=0});
       var cards=g.games.map(function(a){return "<article class='game-card'><div class='game-icon'>"+a.icon+"</div><h3>"+a.name+"</h3><p>"+a.mode+" · "+a.players+" لاعبين</p><button class='primary game-create' data-game='"+a.id+"'>إنشاء جلسة</button></article>"}).join("");
-      var ls=l.lobbies.length?l.lobbies.map(function(a){return "<article class='lobby-card'><span class='platform-chip'>"+names[a.game]+"</span><h3>جلسة @"+esc(a.host)+"</h3><p>👥 "+a.players.length+"/"+a.maxPlayers+" لاعبين · 👀 "+a.spectators.length+" مشاهد</p><button class='primary' data-join='"+a.id+"'>دخول لاعب</button> <button class='platform-link' data-watch='"+a.id+"'>مشاهدة</button></article>"}).join(""):"<div class='empty'>لا توجد جلسات الآن.</div>";
-      show("الألعاب والجلسات","<div class='platform-head'><div><span class='eyebrow'>MLD GAME HUB</span><h2>الألعاب الجماعية</h2><p class='muted'>بلوت، UNO، جاكارو، لودو، ومونوبولي.</p></div><div>"+badge()+(g.botReady?"<span class='platform-chip online'>BOT متصل</span>":"<span class='platform-chip'>BOT غير متصل</span>")+"</div></div><div class='game-grid'>"+cards+"</div><div class='lobby-area'><div class='section-mini'><h3>الجلسات الحالية</h3><button class='platform-link' id='refresh-lobbies'>تحديث</button></div><div class='lobby-grid'>"+ls+"</div></div>");
-      document.querySelectorAll(".game-create").forEach(function(b){b.onclick=function(){if(!need())return;api("/api/platform/lobbies",{method:"POST",body:JSON.stringify({game:b.dataset.game,maxPlayers:4})}).then(gamesView).catch(function(e){alert(e.message)})}});
-      document.querySelectorAll("[data-join]").forEach(function(b){b.onclick=function(){if(!need())return;api("/api/platform/lobbies/"+b.dataset.join+"/join",{method:"POST"}).then(gamesView).catch(function(e){alert(e.message)})}});
-      document.querySelectorAll("[data-watch]").forEach(function(b){b.onclick=function(){if(!need())return;api("/api/platform/lobbies/"+b.dataset.watch+"/spectate",{method:"POST"}).then(gamesView).catch(function(e){alert(e.message)})}});
+      var ls=l.lobbies.length?l.lobbies.map(function(a){return "<article class='lobby-card'><span class='platform-chip'>"+esc(names[a.game]||a.game)+"</span><h3>جلسة @"+esc(a.host)+"</h3><p>👥 "+a.players.length+"/"+a.maxPlayers+" لاعبين · 👀 "+a.spectators.length+" مشاهد</p><button class='primary' data-join='"+a.id+"'>دخول لاعب</button> <button class='platform-link' data-watch='"+a.id+"'>مشاهدة</button></article>"}).join(""):"<div class='empty'>لا توجد جلسات الآن.</div>";
+      show("الألعاب والجلسات","<div class='platform-head'><div><span class='eyebrow'>MLD GAME HUB</span><h2>الألعاب الجماعية</h2><p class='muted'>بلوت، UNO، جاكارو، لودو، ومونوبولي.</p></div><div>"+badge()+"</div></div>"+(mine?"<div class='account-card'><b>جلستك الحالية</b><p class='muted'>"+esc(names[mine.game]||mine.game)+" · "+mine.players.length+"/"+mine.maxPlayers+"</p><button class='primary' id='open-my-room'>دخول جلستي الآن</button></div>":"")+"<div class='game-grid'>"+cards+"</div><div class='lobby-area'><div class='section-mini'><h3>الجلسات الحالية</h3><button class='platform-link' id='refresh-lobbies'>تحديث</button></div><div class='lobby-grid'>"+ls+"</div></div>");
+      document.querySelectorAll(".game-create").forEach(function(b){b.onclick=function(){api("/api/platform/lobbies",{method:"POST",body:JSON.stringify({game:b.dataset.game,maxPlayers:4})}).then(function(d){gameRoom(d.lobby)}).catch(function(e){if(e&&e.lobby)gameRoom(e.lobby);else alert(e.message)})}});
+      document.querySelectorAll("[data-join]").forEach(function(b){b.onclick=function(){api("/api/platform/lobbies/"+b.dataset.join+"/join",{method:"POST"}).then(function(d){gameRoom(d.lobby)}).catch(function(e){alert(e.message)})}});
+      document.querySelectorAll("[data-watch]").forEach(function(b){b.onclick=function(){api("/api/platform/lobbies/"+b.dataset.watch+"/spectate",{method:"POST"}).then(function(d){gameRoom(d.lobby)}).catch(function(e){alert(e.message)})}});
+      var om=$("#open-my-room");if(om)om.onclick=function(){gameRoom(mine)};
       $("#refresh-lobbies").onclick=gamesView;
-    });
+    }).catch(function(e){alert(e.message)});
   }
   function groupsView(){
     api("/api/platform/groups").then(function(d){
@@ -106,7 +115,15 @@
   document.querySelectorAll("[data-home]").forEach(function(b){b.onclick=homeView});
   document.querySelectorAll("[data-profile]").forEach(function(b){b.onclick=profileView});
   document.querySelectorAll("[data-chat]").forEach(function(b){b.onclick=chatView});
-  document.querySelectorAll("[data-pigeon]").forEach(function(b){b.onclick=function(){messageView();$("#view-title").textContent="الزاجل";$("#subtitle").textContent="أرسل رسالة لعضو من السيرفر باسمك أو كمجهول.";};});
+  function pigeonView(){
+    show("الزاجل","<div class='message-box'><div class='message-icon'>✦</div><h3>الزاجل</h3><p class='muted'>ابحث عن عضو من سيرفر MLD، اختره، ثم أرسل رسالتك باسمك أو كمجهول.</p><input id='pigeon-search' class='full' placeholder='ابحث باسم العضو أو اليوزر...' autocomplete='off'><div id='pigeon-results' class='recipient-results'></div><div id='pigeon-selected' class='muted small'>لم يتم اختيار مستلم.</div><label class='check'><input id='pigeon-anon' type='checkbox'> إرسال كمجهول</label><input id='pigeon-name' class='full' maxlength='60' placeholder='اسم المرسل إذا اخترت الاسم الظاهر'><textarea id='pigeon-text' class='full' maxlength='2000' placeholder='اكتب رسالتك...'></textarea><p id='pigeon-status'></p><button class='primary wide' id='pigeon-send'>إرسال الزاجل</button></div>");
+    var selected=null, timer;
+    var ps=$("#pigeon-search");
+    ps.oninput=function(){clearTimeout(timer);var q=ps.value.trim();selected=null;$("#pigeon-selected").textContent="جاري البحث...";if(q.length<2){$("#pigeon-results").innerHTML="";$("#pigeon-selected").textContent="اكتب حرفين على الأقل";return;}timer=setTimeout(function(){api("/api/public/members?q="+encodeURIComponent(q)).then(function(d){$("#pigeon-results").innerHTML=(d.members||[]).slice(0,8).map(function(m){return "<button class='recipient' data-pigeon-id='"+esc(m.id)+"'><img src='"+esc(m.avatar||"/logo.svg.JPG")+"'><span>"+esc(m.name)+"<small>@"+esc(m.username||"")+"</small></span></button>"}).join("")||"<span class='muted'>لا يوجد عضو مطابق</span>";document.querySelectorAll("[data-pigeon-id]").forEach(function(x){x.onclick=function(){selected={id:x.dataset.pigeonId,name:x.textContent};ps.value=x.textContent;$("#pigeon-results").innerHTML="<b class='selected'>تم اختيار المستلم ✓</b>";$("#pigeon-selected").textContent="المستلم: "+x.textContent;};});}).catch(function(e){$("#pigeon-status").textContent=e.message;});},250);};
+    $("#pigeon-anon").onchange=function(){var a=$("#pigeon-anon").checked;$("#pigeon-name").classList.toggle("hidden",a);};
+    $("#pigeon-send").onclick=function(){var st=$("#pigeon-status"),btn=$("#pigeon-send"),msg=$("#pigeon-text").value.trim(),anon=$("#pigeon-anon").checked,name=$("#pigeon-name").value.trim();if(!selected){st.textContent="اختر عضوًا أولًا";return;}if(!msg){st.textContent="اكتب الرسالة أولًا";return;}if(!anon&&!name){st.textContent="اكتب اسم المرسل أو فعّل الإرسال كمجهول";return;}btn.disabled=true;api("/api/public/message",{method:"POST",body:JSON.stringify({memberId:selected.id,title:"زاجل من MLD",message:anon?"مرسل مجهول\n\n"+msg:"من: "+name+"\n\n"+msg})}).then(function(){st.textContent="تم إرسال الزاجل بنجاح ✓";$("#pigeon-text").value="";}).catch(function(e){st.textContent=e.message;}).finally(function(){btn.disabled=false;});};
+  }
+  document.querySelectorAll("[data-pigeon]").forEach(function(b){b.onclick=function(){pigeonView();var m=$("#mobile-menu");if(m)m.className=m.className.replace(/\bopen\b/g,"").trim();};});
   document.querySelectorAll("[data-logout]").forEach(function(b){b.onclick=logoutView});
   document.querySelectorAll("[data-owner]").forEach(function(b){b.onclick=function(){adminView();var m=$("#mobile-menu");if(m)m.className=m.className.replace(/\\bopen\\b/g,"").trim();};});
   function updateOwnerMenu(){document.querySelectorAll("[data-owner]").forEach(function(b){if(account&&account.role==="owner")b.classList.remove("hidden");else b.classList.add("hidden");});}
