@@ -33,7 +33,16 @@ const app = express();
 app.disable("x-powered-by");
 app.use(cors());
 app.use(express.json({ limit: "20kb" }));
-app.use(express.static(path.join(__dirname, "public")));
+// Always revalidate frontend assets so an old mobile/browser cache cannot keep a broken build.
+app.use((req, res, next) => {
+  if (req.path === "/" || req.path === "/index.html" || /\\.(?:css|js|html|svg|png|jpg|jpeg|webp|ico)$/i.test(req.path)) {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+  }
+  next();
+});
+app.use(express.static(path.join(__dirname, "public"), { etag: false, maxAge: 0 }));
 
 const leadershipRoleIds = [
   "1530712642384040027", // Owner
