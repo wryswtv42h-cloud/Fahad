@@ -17,3 +17,56 @@
 @media(max-width:390px){.mobile-menu{width:calc(100vw - 10px);inset-inline-end:5px}.mobile-menu button,.mobile-menu .invite{font-size:12px;padding-inline:6px}}
 /* Access defaults: never expose privileged controls before role sync. */
 .auth-only,.admin-only,.owner-only,.owner-menu{display:none!important}.guest-only{display:flex!important}.auth-only.access-visible{display:flex!important}.admin-only.access-visible{display:flex!important}.owner-only.access-visible,.owner-menu.access-visible{display:flex!important}.guest-only.guest-hidden{display:none!important}.auth-only.hidden,.admin-only.hidden,.owner-only.hidden,.owner-menu.hidden{display:none!important}
+
+/* MLD premium navigation refresh */
+.menu{
+  position:relative;overflow:hidden;width:48px;height:48px;border-radius:16px;
+  border:1px solid #ffc4ed55;background:linear-gradient(145deg,#ffffff14,#ff9cdc08);
+  box-shadow:0 10px 30px #0005,inset 0 1px 0 #fff2;
+  font-size:0;transition:transform .22s ease,border-color .22s ease,box-shadow .22s ease;
+}
+.menu::before,.menu::after{content:"";position:absolute;left:12px;width:23px;height:2px;border-radius:99px;background:currentColor;transition:transform .22s ease,top .22s ease,opacity .16s ease}
+.menu::before{top:16px}.menu::after{top:29px}
+.menu{color:var(--text)}
+.menu:focus-visible{outline:2px solid var(--pink);outline-offset:3px}
+.menu:hover{transform:translateY(-1px);border-color:#ffc4edaa;box-shadow:0 14px 34px #0007,inset 0 1px 0 #fff3}
+.mobile-menu{
+  position:absolute;top:calc(100% + 14px);inset-inline-end:0;inset-inline-start:auto;
+  width:min(410px,calc(100vw - 24px));padding:12px;
+  display:none;grid-template-columns:1fr;gap:10px;
+  background:linear-gradient(145deg,rgba(27,15,34,.96),rgba(10,7,16,.985));
+  border:1px solid #ffc9ed3f;border-radius:26px;
+  box-shadow:0 30px 90px #000c,0 0 0 1px #ffffff06,inset 0 1px 0 #fff2;
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  max-height:min(78vh,700px);overflow-y:auto;overflow-x:hidden;z-index:100;
+}
+.mobile-menu.open{display:grid;animation:menuPremiumIn .2s cubic-bezier(.2,.8,.2,1)}
+.mobile-menu::before{content:"";position:fixed;inset:0;z-index:-1;background:#0503088c;backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);pointer-events:none}
+.mobile-menu .menu-section{
+  position:relative;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;
+  padding:11px;border:1px solid #ffffff0c;border-radius:19px;
+  background:linear-gradient(145deg,#ffffff08,#ffffff03);
+}
+.mobile-menu .menu-title{
+  grid-column:1/-1;display:flex;align-items:center;gap:8px;margin:0 2px 2px;
+  color:#ffd9f2;font-size:11px;font-weight:950;letter-spacing:.7px;
+}
+.mobile-menu .menu-title::before{content:"";width:5px;height:17px;border-radius:99px;background:linear-gradient(#ffb5e4,#ff75ca);box-shadow:0 0 14px #ff8bd655}
+.mobile-menu button,.mobile-menu .invite{
+  position:relative;width:100%;min-height:45px;margin:0;
+  display:flex;align-items:center;justify-content:center;text-align:center;
+  padding:10px 9px;border:1px solid #ffffff0d;border-radius:13px;
+  background:#ffffff06;color:var(--text);font-size:13px;font-weight:800;
+  box-shadow:inset 0 1px 0 #fff1;transition:transform .16s ease,background .16s ease,border-color .16s ease;
+}
+.mobile-menu button:hover,.mobile-menu .invite:hover{transform:translateY(-1px);background:#ff9cdc12;border-color:#ffbde755;color:var(--text)}
+.mobile-menu button:active,.mobile-menu .invite:active{transform:scale(.98)}
+.mobile-menu .invite{grid-column:1/-1;background:linear-gradient(135deg,#ff9cdc1c,#ffffff06);border-color:#ffbde733}
+.mobile-menu .admin-menu{background:linear-gradient(145deg,#ff9cdc08,#ffffff02);border-color:#ff9cdc18}
+@keyframes menuPremiumIn{from{opacity:0;transform:translateY(-8px) scale(.98)}to{opacity:1;transform:none}}
+@media(max-width:560px){
+  .menu{width:46px;height:46px;border-radius:15px}
+  .mobile-menu{top:calc(100% + 10px);inset-inline-end:-2px;width:calc(100vw - 18px);padding:10px;border-radius:23px;max-height:calc(100vh - 78px)}
+  .mobile-menu .menu-section{padding:9px;gap:6px;border-radius:17px}
+  .mobile-menu button,.mobile-menu .invite{min-height:44px;font-size:12.5px;border-radius:12px}
+}
