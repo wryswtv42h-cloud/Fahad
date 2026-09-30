@@ -55,21 +55,72 @@
     $("#login").onclick=function(){api("/api/platform/login",{method:"POST",body:JSON.stringify({username:$("#login-user").value,password:$("#login-pass").value})}).then(function(d){token=d.token;account=d.account;localStorage.setItem("mld_token",token);updateOwnerMenu();accountView()}).catch(function(e){alert(e.message)})};
     $("#new-account").onclick=accountView;
   }
+  var gamePoll=null;
+  function stopGamePoll(){if(gamePoll){clearInterval(gamePoll);gamePoll=null;}}
+  function gameLabel(g){return names[g]||g}
+  function seatName(p){return String(p||"").startsWith("__test_")?"🤖 مقعد اختبار":p?"@"+p:"المقعد فارغ"}
+  function gameAction(id,action,extra){
+    var body=Object.assign({action:action},extra||{});
+    return api("/api/platform/lobbies/"+id+"/action",{method:"POST",body:JSON.stringify(body)});
+  }
   function gameRoom(lobby){
-    var players=(lobby.players||[]).map(function(u){return "<span class='platform-chip'>@"+esc(u)+"</span>"}).join("");
-    var spectators=(lobby.spectators||[]).map(function(u){return "<span class='platform-chip'>👀 @"+esc(u)+"</span>"}).join("");
-    show(names[lobby.game]||"غرفة اللعبة","<div class='platform-head'><div><span class='eyebrow'>MLD GAME ROOM</span><h2>"+esc(names[lobby.game]||lobby.game)+"</h2><p class='muted'>الغرفة مفتوحة · المضيف @"+esc(lobby.host)+"</p></div><button class='platform-link' id='back-games'>رجوع للألعاب</button></div><div class='account-card'><h3>اللاعبون</h3><div class='roles'>"+players+"</div><h3>المشاهدون</h3><div class='roles'>"+(spectators||"<span class='muted'>لا يوجد مشاهدون</span>")+"</div><p class='muted'>عدد المقاعد: "+lobby.players.length+"/"+lobby.maxPlayers+"</p><button class='primary wide' id='refresh-room'>تحديث الغرفة</button></div>");
-    $("#back-games").onclick=gamesView;
-    $("#refresh-room").onclick=function(){api("/api/platform/lobbies").then(function(d){var found=d.lobbies.find(function(x){return x.id===lobby.id});if(found)gameRoom(found);else gamesView()}).catch(function(e){alert(e.message)})};
+    stopGamePoll();
+    function render(room){
+      lobby=room;
+      var started=!!lobby.started, state=lobby.gameState||{}, my=account&&account.username;
+      var seats="";
+      for(var i=0;i<lobby.maxPlayers;i++){
+        var p=lobby.players[i]||"";
+        seats+="<article class='mld-seat "+(p?"occupied":"empty-seat")+"'><span class='seat-no'>مقعد "+(i+1)+"</span><div class='seat-avatar'>"+(p?"◉":"＋")+"</div><h3>"+esc(seatName(p))+"</h3><small>"+(p===lobby.host?"👑 المضيف":p&&String(p).startsWith("__test_")?"اختبار":"لاعب")+"</small>"+(!p&&!started?"<button class='platform-link seat-join' data-seat='"+i+"'>أخذ المقعد</button>":"")+"</article>";
+      }
+      var isMyTurn=lobby.currentPlayer===my || (lobby.currentPlayer&&String(lobby.currentPlayer).startsWith("__test_")&&lobby.host===my);
+      var controls="";
+      if(started){
+        if(state.winner)controls="<div class='game-result'><b>🏆 الفائز: "+esc(seatName(state.winner))+"</b><button class='primary' id='new-from-table'>العودة للألعاب</button></div>";
+        else if(lobby.game==="uno"){
+          var hand=state.myHand||[];
+          controls="<div class='game-controls'><div class='turn-box "+(isMyTurn?"my-turn":"")+"'>الدور الآن: <b>"+esc(seatName(lobby.currentPlayer))+"</b></div><p class='muted'>اللون الحالي: <b>"+esc(state.currentColor||"-")+"</b> · الأوراق: "+hand.length+"</p><div class='card-hand'>"+hand.map(function(card,i){return "<button class='uno-card' data-card='"+i+"'><b>"+esc(card.value)+"</b><small>"+esc(card.color)+"</small></button>"}).join("")+"</div><button class='primary' id='uno-draw' "+(!isMyTurn?"disabled":"")+">سحب ورقة</button></div>";
+        }else if(lobby.game==="baloot"){
+          var bh=state.myHand||[];
+          controls="<div class='game-controls'><div class='turn-box "+(isMyTurn?"my-turn":"")+"'>الدور الآن: <b>"+esc(seatName(lobby.currentPlayer))+"</b></div><p class='muted'>النوع المفتوح: "+esc(state.trickSuit||"لم يبدأ")+"</p><div class='card-hand'>"+bh.map(function(card,i){return "<button class='uno-card' data-baloot-card='"+i+"'><b>"+esc(card.label)+"</b></button>"}).join("")+"</div><p class='muted'>عدد الأكلات: "+Object.keys(state.scores||{}).map(function(k){return "@"+esc(k)+": "+state.scores[k]}).join(" · ")+"</p></div>";
+        }else{
+          var pieces=(state.pieces&&state.pieces[my])||[];
+          var extra=lobby.game==="monopoly"?"<p class='muted'>رصيدك: 💰 "+(state.money&&state.money[my]||0)+" · موقعك: "+(state.positions&&state.positions[my]||0)+"</p>":"<p class='muted'>رمية النرد: "+(state.lastRoll||"—")+"</p>";
+          controls="<div class='game-controls'><div class='turn-box "+(isMyTurn?"my-turn":"")+"'>الدور الآن: <b>"+esc(seatName(lobby.currentPlayer))+"</b></div>"+extra+"<button class='primary' id='roll-game' "+(!isMyTurn?"disabled":"")+">🎲 رمي النرد</button>"+(lobby.game==="monopoly"?"<button class='platform-link' id='buy-property' "+(!isMyTurn?"disabled":"")+">شراء العقار</button>":"")+"<div class='piece-row'>"+pieces.map(function(pos,i){return "<button class='platform-link move-piece' data-piece='"+i+"' "+(!isMyTurn?"disabled":"")+">قطعة "+(i+1)+" · "+pos+"</button>"}).join("")+"</div></div>";
+        }
+      }else{
+        controls="<div class='game-controls'><div class='turn-box'>"+(lobby.players.length+"/"+lobby.maxPlayers)+" مقاعد مشغولة</div><p class='muted'>اضغط «اختبار المقاعد» لملء المقاعد مؤقتًا، أو دع اللاعبين يدخلون بأنفسهم.</p></div>";
+      }
+      show(gameLabel(lobby.game)," <div class='mld-table-page'><div class='platform-head'><div><span class='eyebrow'>MLD PRIVATE TABLE</span><h2>طاولة ملاذ · "+esc(gameLabel(lobby.game))+"</h2><p class='muted'>كل لاعب له مقعد ودور وصلاحيات مستقلة.</p></div><button class='platform-link' id='back-games'>رجوع للألعاب</button></div><div class='mld-table'><div class='table-badge'>"+(started?"🎮 اللعب بدأ":"🪑 انتظار اللاعبين")+"</div><div class='table-top'><span>المضيف: @"+esc(lobby.host)+"</span><span>الحالة: "+esc(lobby.status)+"</span><span>"+lobby.players.length+"/"+lobby.maxPlayers+" لاعبين</span></div><div class='seat-grid'>"+seats+"</div><div class='table-center'>"+(started?"دور "+esc(seatName(lobby.currentPlayer)):"طاولة ملاذ الخاصة")+"<small>"+(state.lastAction?esc(state.lastAction.by)+" · "+esc(state.lastAction.type):"جاهزة للبدء")+"</small></div></div>"+controls+"<div class='table-actions'>"+(!started&&lobby.host===my?"<button class='platform-link' id='test-seats'>🧪 اختبار المقاعد</button><button class='primary' id='start-game' "+(lobby.players.length<2?"disabled":"")+">▶ بدء اللعبة</button>":"")+"<button class='platform-link' id='refresh-room'>تحديث</button>"+(!started?"<button class='platform-link danger-link' id='leave-table'>مغادرة الطاولة</button>":"")+"<button class='platform-link danger-link' id='close-table'>إغلاق الطاولة</button></div><div class='spectators'><h3>المشاهدون</h3><p class='muted'>"+((lobby.spectators||[]).map(function(x){return "👀 @"+esc(x)}).join(" · ")||"لا يوجد مشاهدون")+"</p></div></div>");
+      $("#back-games").onclick=gamesView;
+      $("#refresh-room").onclick=function(){api("/api/platform/lobbies/"+lobby.id).catch(function(){}) ; api("/api/platform/lobbies").then(function(d){var found=d.lobbies.find(function(x){return x.id===lobby.id});if(found)render(found);else gamesView();}).catch(function(e){alert(e.message)})};
+      var test=$("#test-seats");if(test)test.onclick=function(){api("/api/platform/lobbies/"+lobby.id+"/test-seats",{method:"POST",body:JSON.stringify({count:lobby.maxPlayers-1})}).then(function(d){render(d.lobby)}).catch(function(e){alert(e.message)})};
+      var start=$("#start-game");if(start)start.onclick=function(){api("/api/platform/lobbies/"+lobby.id+"/start",{method:"POST"}).then(function(d){render(d.lobby)}).catch(function(e){alert(e.message)})};
+      var leave=$("#leave-table");if(leave)leave.onclick=function(){api("/api/platform/lobbies/"+lobby.id+"/leave",{method:"POST"}).then(gamesView).catch(function(e){alert(e.message)})};
+      var close=$("#close-table");if(close)close.onclick=function(){if(confirm("إغلاق الطاولة؟"))api("/api/platform/lobbies/"+lobby.id,{method:"DELETE"}).then(gamesView).catch(function(e){alert(e.message)})};
+      document.querySelectorAll(".seat-join").forEach(function(b){b.onclick=function(){api("/api/platform/lobbies/"+lobby.id+"/join",{method:"POST"}).then(function(d){render(d.lobby)}).catch(function(e){alert(e.message)})}});
+      if(started&&isMyTurn&&!state.winner){
+        var roll=$("#roll-game");if(roll)roll.onclick=function(){gameAction(lobby.id,"roll").then(function(d){render(d.lobby)}).catch(function(e){alert(e.message)})};
+        document.querySelectorAll(".move-piece").forEach(function(b){b.onclick=function(){gameAction(lobby.id,"move",{piece:Number(b.dataset.piece)}).then(function(d){render(d.lobby)}).catch(function(e){alert(e.message)})}});
+        var buy=$("#buy-property");if(buy)buy.onclick=function(){gameAction(lobby.id,"buy").then(function(d){render(d.lobby)}).catch(function(e){alert(e.message)})};
+        document.querySelectorAll("[data-card]").forEach(function(b){b.onclick=function(){var color="";var card=(state.myHand||[])[Number(b.dataset.card)];if(card&&card.color==="wild")color=prompt("اختر اللون: أحمر / أزرق / أخضر / أصفر","أحمر")||"أحمر";gameAction(lobby.id,"play",{cardIndex:Number(b.dataset.card),color:color}).then(function(d){render(d.lobby)}).catch(function(e){alert(e.message)})}});
+        document.querySelectorAll("[data-baloot-card]").forEach(function(b){b.onclick=function(){gameAction(lobby.id,"play-card",{cardIndex:Number(b.dataset.balootCard)}).then(function(d){render(d.lobby)}).catch(function(e){alert(e.message)})}});
+        var draw=$("#uno-draw");if(draw)draw.onclick=function(){gameAction(lobby.id,"draw").then(function(d){render(d.lobby)}).catch(function(e){alert(e.message)})};
+      }
+      var nr=$("#new-from-table");if(nr)nr.onclick=gamesView;
+    }
+    render(lobby);
+    gamePoll=setInterval(function(){api("/api/platform/lobbies").then(function(d){var found=d.lobbies.find(function(x){return x.id===lobby.id});if(found)render(found);else{stopGamePoll();gamesView();}}).catch(function(){})},2500);
   }
   function gamesView(){
     if(!need())return;
+    stopGamePoll();
     Promise.all([api("/api/platform/games"),api("/api/platform/lobbies")]).then(function(x){
       var g=x[0],l=x[1],mine=(l.lobbies||[]).find(function(a){return a.host===account.username||a.players.indexOf(account.username)>=0||a.spectators.indexOf(account.username)>=0});
-      var cards=g.games.map(function(a){return "<article class='game-card'><div class='game-icon'>"+a.icon+"</div><h3>"+a.name+"</h3><p>"+a.mode+" · "+a.players+" لاعبين</p><button class='primary game-create' data-game='"+a.id+"'>إنشاء جلسة</button></article>"}).join("");
-      var ls=l.lobbies.length?l.lobbies.map(function(a){return "<article class='lobby-card'><span class='platform-chip'>"+esc(names[a.game]||a.game)+"</span><h3>جلسة @"+esc(a.host)+"</h3><p>👥 "+a.players.length+"/"+a.maxPlayers+" لاعبين · 👀 "+a.spectators.length+" مشاهد</p><button class='primary' data-join='"+a.id+"'>دخول لاعب</button> <button class='platform-link' data-watch='"+a.id+"'>مشاهدة</button></article>"}).join(""):"<div class='empty'>لا توجد جلسات الآن.</div>";
-      show("الألعاب والجلسات","<div class='platform-head'><div><span class='eyebrow'>MLD GAME HUB</span><h2>الألعاب الجماعية</h2><p class='muted'>بلوت، UNO، جاكارو، لودو، ومونوبولي.</p></div><div>"+badge()+"</div></div>"+(mine?"<div class='account-card'><b>جلستك الحالية</b><p class='muted'>"+esc(names[mine.game]||mine.game)+" · "+mine.players.length+"/"+mine.maxPlayers+"</p><button class='primary' id='open-my-room'>دخول جلستي الآن</button></div>":"")+"<div class='game-grid'>"+cards+"</div><div class='lobby-area'><div class='section-mini'><h3>الجلسات الحالية</h3><button class='platform-link' id='refresh-lobbies'>تحديث</button></div><div class='lobby-grid'>"+ls+"</div></div>");
-      document.querySelectorAll(".game-create").forEach(function(b){b.onclick=function(){api("/api/platform/lobbies",{method:"POST",body:JSON.stringify({game:b.dataset.game,maxPlayers:4})}).then(function(d){gameRoom(d.lobby)}).catch(function(e){if(e&&e.lobby)gameRoom(e.lobby);else alert(e.message)})}});
+      var cards=g.games.map(function(a){return "<article class='game-card'><div class='game-icon'>"+a.icon+"</div><h3>"+a.name+"</h3><p>"+a.mode+"</p><p class='muted small'>"+esc(a.description||"")+" </p><button class='primary game-create' data-game='"+a.id+"'>إنشاء طاولة</button></article>"}).join("");
+      var ls=l.lobbies.length?l.lobbies.map(function(a){return "<article class='lobby-card'><span class='platform-chip'>"+esc(gameLabel(a.game))+"</span><h3>طاولة @"+esc(a.host)+"</h3><p>🪑 "+a.players.length+"/"+a.maxPlayers+" · 👀 "+a.spectators.length+" · "+(a.started?"بدأت":"انتظار")+"</p><button class='primary' data-join='"+a.id+"' "+(a.started?"disabled":"")+">دخول لاعب</button> <button class='platform-link' data-watch='"+a.id+"'>مشاهدة</button></article>"}).join(""):"<div class='empty'>لا توجد طاولات الآن.</div>";
+      show("الألعاب","<div class='platform-head'><div><span class='eyebrow'>MLD GAME TABLES</span><h2>الألعاب الجماعية</h2><p class='muted'>كل لاعب له طاولة ومقعد ودور. لا أحد يأخذ مكان لاعب آخر.</p></div>"+badge()+"</div>"+(mine?"<div class='account-card'><b>طاولتك الحالية</b><p class='muted'>"+esc(gameLabel(mine.game))+" · "+mine.players.length+"/"+mine.maxPlayers+"</p><button class='primary' id='open-my-room'>دخول الطاولة</button></div>":"")+"<div class='game-grid'>"+cards+"</div><div class='lobby-area'><div class='section-mini'><h3>الطاولات الحالية</h3><button class='platform-link' id='refresh-lobbies'>تحديث</button></div><div class='lobby-grid'>"+ls+"</div></div>");
+      document.querySelectorAll(".game-create").forEach(function(b){b.onclick=function(){api("/api/platform/lobbies",{method:"POST",body:JSON.stringify({game:b.dataset.game})}).then(function(d){gameRoom(d.lobby)}).catch(function(e){if(e.lobby)gameRoom(e.lobby);else alert(e.message)})}});
       document.querySelectorAll("[data-join]").forEach(function(b){b.onclick=function(){api("/api/platform/lobbies/"+b.dataset.join+"/join",{method:"POST"}).then(function(d){gameRoom(d.lobby)}).catch(function(e){alert(e.message)})}});
       document.querySelectorAll("[data-watch]").forEach(function(b){b.onclick=function(){api("/api/platform/lobbies/"+b.dataset.watch+"/spectate",{method:"POST"}).then(function(d){gameRoom(d.lobby)}).catch(function(e){alert(e.message)})}});
       var om=$("#open-my-room");if(om)om.onclick=function(){gameRoom(mine)};
