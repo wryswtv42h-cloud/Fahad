@@ -43,6 +43,38 @@ jobs:
               await page.goto(base+'/#top', {waitUntil:'domcontentloaded'});
               await page.waitForTimeout(1500);
               if (!(await page.locator('#platform').count())) throw new Error('platform panel missing');
+              // Role matrix: render the same menu as four personas without bypassing backend auth.
+              const personas = [
+                {name:'guest', account:null},
+                {name:'member', account:{id:'ci-member',username:'member',role:'member',admin:false}},
+                {name:'admin', account:{id:'ci-admin',username:'admin',role:'member',admin:true}},
+                {name:'owner', account:{id:'ci-owner',username:'owner',role:'owner',admin:true}}
+              ];
+              for (const persona of personas) {
+                await page.route(base+'/api/platform/me', async route => {
+                  if (!persona.account) return route.fulfill({status:401,contentType:'application/json',body:JSON.stringify({error:'سجّل دخولك أولًا'})});
+                  return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({account:persona.account})});
+                });
+                await page.evaluate((hasToken) => {
+                  if (hasToken) localStorage.setItem('mld_token','ci-persona-token');
+                  else localStorage.removeItem('mld_token');
+                }, !!persona.account);
+                await page.reload({waitUntil:'domcontentloaded'});
+                await page.waitForTimeout(250);
+                await page.locator('#menu').click();
+                const adminHidden=await page.locator('#mobile-menu [data-platform="admin"]').evaluate(el=>el.classList.contains('hidden'));
+                const ownerHidden=await page.locator('#mobile-menu [data-owner]').evaluate(el=>el.classList.contains('hidden'));
+                const botHidden=await page.locator('#mobile-menu [data-extra="bots"]').evaluate(el=>el.classList.contains('hidden'));
+                if (persona.name==='owner') {
+                  if (adminHidden||ownerHidden||botHidden) throw new Error('owner menu matrix failed');
+                } else if (persona.name==='admin') {
+                  if (adminHidden||!ownerHidden||!botHidden) throw new Error('admin menu matrix failed');
+                } else {
+                  if (!adminHidden||!ownerHidden||!botHidden) throw new Error(persona.name+' menu matrix failed');
+                }
+                await page.locator('#menu').click();
+              }
+              await page.unroute(base+'/api/platform/me');
               // The platform uses one navigation system on mobile and desktop.
               await page.locator('#menu').click();
               if (!(await page.locator('#mobile-menu.open').count())) throw new Error('unified menu did not open');
