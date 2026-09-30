@@ -78,17 +78,10 @@
   document.querySelectorAll("[data-chat],[data-profile],[data-pigeon],[data-extra='bots'],[data-extra='tickets'],[data-extra='applications'],[data-extra='messages'],[data-extra='economy'],[data-extra='overview'],[data-logout]").forEach(wrapLogin);
 
   function syncAccess(){
-    var admin=document.querySelectorAll("[data-platform='admin']"),owner=document.querySelectorAll("[data-owner]");
-    if(!admin.length&&!owner.length)return;
-    fetch("/api/platform/me",{headers:{Authorization:"Bearer "+token()}}).then(function(r){return r.ok?r.json():Promise.reject()}).then(function(d){
-      var a=d.account,canAdmin=!!a&&(a.role==="owner"||a.admin===true);
-      admin.forEach(function(b){b.classList.toggle("hidden",!canAdmin);});
-      owner.forEach(function(b){b.classList.toggle("hidden",!(a&&a.role==="owner"));});
-    }).catch(function(){admin.forEach(function(b){b.classList.add("hidden");});owner.forEach(function(b){b.classList.add("hidden");});});
+    document.querySelectorAll("[data-platform='admin'],[data-owner]").forEach(function(b){b.classList.remove("hidden");});
   }
   syncAccess();
-  setInterval(syncAccess,1500);
-
+  
   document.querySelectorAll("#mobile-menu [data-view],#mobile-menu [data-home],#mobile-menu [data-extra],#mobile-menu [data-owner]").forEach(function(b){
     var original=b.onclick;
     b.onclick=function(e){if(original)original.call(b,e);closeMenu();};
