@@ -10,20 +10,23 @@
   function login(){if(token())return true;if(window.MLDPlatform&&window.MLDPlatform.loginView){window.MLDPlatform.loginView();}var m=$("#mobile-menu");if(m)m.classList.remove("open");return false;}
   function nav(){var m=$("#mobile-menu");if(m)m.className=m.className.replace(/\bopen\b/g,"").trim();}
   function bots(){
-    if(!login())return;
     function statusText(s){return s==="online"?"● يعمل":s==="starting"?"◌ جاري التشغيل":s==="error"?"⚠ خطأ":"○ متوقف";}
     function load(){
-      Promise.all([api("/api/platform/bot-catalog"),api("/api/platform/discord/status")]).then(function(x){
-        var d=x[0],ds=x[1],linked=ds.linked;
+      api("/api/platform/bot-catalog").then(function(d){
+        var logged=!!token();
         var cards=(d.bots||[]).map(function(b){
-          return "<article class='game-card bot-manager-card'><div class='game-icon'>🤖</div><h3>"+esc(b.name)+"</h3><p>"+esc(b.botUsername||"بوت Discord")+"</p><span class='platform-chip "+(b.status==="online"?"online":"")+"'>"+statusText(b.status)+"</span><p class='small'>"+esc(b.guildName||"السيرفر غير محدد")+"</p>"+(b.lastError?"<p class='small danger-link'>"+esc(b.lastError)+"</p>":"")+"<div class='bot-actions'><button class='primary' data-openbot='"+b.id+"'>لوحة التحكم</button><button class='platform-link' data-stopbot='"+b.id+"'>"+(b.status==="online"?"إيقاف":"تشغيل")+"</button><button class='platform-link danger-link' data-delbot='"+b.id+"'>حذف البوت</button></div></article>";
+          var actions=logged
+            ? "<div class='bot-actions'><button class='primary' data-openbot='"+b.id+"'>لوحة التحكم</button><button class='platform-link' data-stopbot='"+b.id+"'>"+(b.status==="online"?"إيقاف":"تشغيل")+"</button><button class='platform-link danger-link' data-delbot='"+b.id+"'>حذف البوت</button></div>"
+            : "<button class='primary full-btn' data-login-bot>سجل دخول للتحكم بالبوت</button>";
+          return "<article class='game-card bot-manager-card'><div class='game-icon'>🤖</div><h3>"+esc(b.name)+"</h3><p>"+esc(b.botUsername||"بوت Discord")+"</p><span class='platform-chip "+(b.status==="online"?"online":"")+"'>"+statusText(b.status)+"</span><p class='small'>"+esc(b.guildName||"السيرفر غير محدد")+"</p>"+(b.lastError?"<p class='small danger-link'>"+esc(b.lastError)+"</p>":"")+actions+"</article>";
         }).join("");
-        if(!cards)cards="<div class='empty'>ما عندك بوتات مضافة. اضغط «+ إضافة بوت» لبدء الاستضافة.</div>";
-        var head="<div class='platform-head'><div><span class='eyebrow'>MLD BOT HOSTING</span><h2>بوتاتي</h2><p class='muted'>أضف بوتات Discord الخاصة بك، اختر السيرفر، وأدخل التوكن. كل بوت مستقل عن الآخر.</p></div>"+(linked?"<span class='platform-chip online'>Discord مربوط</span>":"<button class='primary' id='link-discord'>ربط حساب Discord</button>")+"</div>";
-        var note=!linked?"<div class='account-card bot-note'><b>اربط Discord أولًا</b><p>نحتاج حساب Discord لمعرفة السيرفرات التي تملك صلاحية إدارتها.</p></div>":"<div class='account-card bot-note'><div><b>"+esc(ds.username||"Discord")+"</b><p class='muted'>السيرفرات المتاحة: "+ds.guilds.length+"</p></div><button class='primary' id='add-bot'>+ إضافة بوت</button></div>";
-        show("بوتاتي",head+note+"<div class='game-grid'>"+cards+"</div><div id='bot-workspace'></div>");
-        var link=$("#link-discord");if(link)link.onclick=function(){api("/api/platform/discord/oauth/start").then(function(v){location.href=v.url}).catch(function(e){alert(e.message)})};
-        var add=$("#add-bot");if(add)add.onclick=function(){addBot(ds)};
+        if(!cards)cards="<div class='empty'>لا توجد بوتات مضافة حاليًا.</div>";
+        var head="<div class='platform-head'><div><span class='eyebrow'>MLD BOT</span><h2>البوتات</h2><p class='muted'>شاهد البوتات المتاحة. إنشاء بوت أو تشغيله أو التحكم فيه يتطلب تسجيل الدخول.</p></div></div>";
+        var note=logged?"<div class='account-card bot-note'><b>تقدر الآن التحكم بالبوتات</b><p class='muted'>يمكنك إنشاء بوت جديد أو تشغيل وإيقاف وإدارة البوتات من هنا.</p><button class='primary' id='add-bot'>+ إضافة بوت</button></div>":"<div class='account-card bot-note'><b>تصفح البوتات متاح للجميع</b><p class='muted'>لتنشئ بوت أو تختار بوت وتتحكم فيه، سجل دخول أولًا.</p><button class='primary' id='login-bots'>تسجيل الدخول</button></div>";
+        show("البوتات",head+note+"<div class='game-grid'>"+cards+"</div><div id='bot-workspace'></div>");
+        var lb=$("#login-bots");if(lb)lb.onclick=login;
+        document.querySelectorAll("[data-login-bot]").forEach(function(b){b.onclick=login});
+        var add=$("#add-bot");if(add)add.onclick=function(){api("/api/platform/discord/status").then(addBot).catch(function(e){alert(e.message)})};
         document.querySelectorAll("[data-stopbot]").forEach(function(b){b.onclick=function(){var mine=d.bots.find(function(z){return z.id===b.dataset.stopbot;});var url="/api/platform/my-bots/"+b.dataset.stopbot+(mine&&mine.status==="online"?"/stop":"/start");api(url,{method:"POST"}).then(load).catch(function(e){alert(e.message)})}});
         document.querySelectorAll("[data-delbot]").forEach(function(b){b.onclick=function(){if(confirm("حذف البوت وإيقاف استضافته؟"))api("/api/platform/my-bots/"+b.dataset.delbot,{method:"DELETE"}).then(load).catch(function(e){alert(e.message)})}});
         document.querySelectorAll("[data-openbot]").forEach(function(b){b.onclick=function(){commandPanel(b.dataset.openbot)}});
@@ -102,6 +105,15 @@
     if(window.MLDPlatform&&window.MLDPlatform.refreshMenu)window.MLDPlatform.refreshMenu();
   }
   syncAccess();
+
+  (function setupDiscordSupport(){
+    var a=document.getElementById("discord-support");
+    if(!a)return;
+    fetch("/api/public/members?q="+encodeURIComponent("w4px")).then(function(r){return r.json()}).then(function(d){
+      var m=(d.members||[]).find(function(x){return String(x.username||"").toLowerCase()==="w4px";}) || (d.members||[])[0];
+      if(m&&m.id)a.href="https://discord.com/users/"+encodeURIComponent(m.id);
+    }).catch(function(){});
+  })();
   
   document.querySelectorAll("#mobile-menu [data-view],#mobile-menu [data-home],#mobile-menu [data-extra],#mobile-menu [data-owner]").forEach(function(b){
     var original=b.onclick;
