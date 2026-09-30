@@ -166,3 +166,5 @@ body.menu-open{position:static!important;left:auto!important;right:auto!importan
  .game-board{padding:8px}.pile{width:58px;height:76px}
  .game-maximized{padding:10px!important}
 }
+
+.bot-features{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}.bot-features span{border:1px solid #fbcff355;border-radius:999px;padding:5px 8px;color:var(--accent);background:#ff9cdc0d;font-size:10px}.bot-description{line-height:1.7}
