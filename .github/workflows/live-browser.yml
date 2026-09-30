@@ -1,0 +1,71 @@
+name: Live browser regression
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Wait for Railway deployment
+        run: sleep 60
+      - name: Install browser test runner
+        run: |
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+      - name: Test live site
+        env:
+          SITE_URL: https://fahad-production-012e.up.railway.app
+        run: |
+          node <<'NODE'
+          const { chromium } = require('playwright');
+          const base = process.env.SITE_URL;
+          const failures = [];
+          (async () => {
+            for (const viewport of [{width:390,height:844,name:'mobile'},{width:1440,height:900,name:'desktop'}]) {
+              const browser = await chromium.launch({headless:true});
+              const page = await browser.newPage({viewport:{width:viewport.width,height:viewport.height}, locale:'ar-SA'});
+              page.on('pageerror', e => failures.push(viewport.name+' pageerror: '+e.message));
+              page.on('console', m => { if (m.type()==='error') failures.push(viewport.name+' console: '+m.text()); });
+              const health = await page.request.get(base+'/health');
+              if (!health.ok()) throw new Error('health '+health.status());
+              const gamesApi = await page.request.get(base+'/api/platform/games');
+              if (!gamesApi.ok()) throw new Error('games api '+gamesApi.status());
+              const games = await gamesApi.json();
+              if (!Array.isArray(games.games) || games.games.length < 6) throw new Error('game catalog incomplete');
+              await page.goto(base+'/#top', {waitUntil:'domcontentloaded'});
+              await page.waitForTimeout(1500);
+              if (!(await page.locator('#platform').count())) throw new Error('platform panel missing');
+              if (viewport.width < 800) {
+                await page.locator('#menu').click();
+                if (!(await page.locator('#mobile-menu.open').count())) throw new Error('mobile menu did not open');
+                if (await page.locator('#mobile-menu [data-login].hidden').count()) throw new Error('guest login hidden');
+                if (!(await page.locator('#mobile-menu [data-platform="admin"].hidden').count())) throw new Error('admin menu visible to guest');
+                if (!(await page.locator('#mobile-menu [data-owner].hidden').count())) throw new Error('owner menu visible to guest');
+                await page.locator('#mobile-menu [data-platform="games"]').click();
+              } else {
+                await page.locator('.desktop-nav [data-platform="games"]').click();
+              }
+              await page.waitForTimeout(800);
+              if (!(await page.locator('.game-create').count())) throw new Error('game create buttons missing');
+              await page.locator('.game-create').first().click();
+              await page.waitForTimeout(200);
+              if (!(await page.locator('#table-player-count').count())) throw new Error('player-count chooser missing');
+              const options = await page.locator('#table-player-count option').count();
+              if (!options) throw new Error('player-count options empty');
+              if (await page.locator('#confirm-create-table').count() === 0) throw new Error('create-table confirm missing');
+              await page.locator('#cancel-create-table').click();
+              await page.waitForTimeout(150);
+              await browser.close();
+            }
+            if (failures.length) throw new Error(failures.join('\n'));
+            console.log('LIVE_BROWSER_REGRESSION_OK');
+          })().catch(e => { console.error(e.stack || e); process.exit(1); });
+          NODE
