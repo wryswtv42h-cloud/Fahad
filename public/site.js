@@ -14,7 +14,33 @@ function renderReviews(){const box=$("#reviews-list");if(!box)return;if(!reviewI
 async function refresh(){try{const [sr,rr]=await Promise.all([fetch("/api/public/server"),fetch("/api/public/roles")]);const s=await sr.json(),rd=await rr.json();roles=rd.roles||[];if(s.invite){$("#invite").href=s.invite;$("#invite-mobile").href=s.invite}else{$("#invite").style.display="none";$("#invite-mobile").style.display="none"}if(view==="members"&&!search.value){const d=await fetch("/api/public/members").then(r=>r.json());all=d.members||[];renderMembers(all);setStatus(`${num(all.length)} عضو في السيرفر`)}else if(view==="roles")renderRoles();else if(view==="top")renderTop(await fetch("/api/public/top").then(r=>r.json()))}catch(e){setStatus("تعذر تحديث البيانات")}}
 async function searchMembers(){clearTimeout(timer);const q=search.value.trim();if(!q){renderMembers(all);setStatus(`${num(all.length)} عضو`);return}setStatus("جاري البحث...");timer=setTimeout(async()=>{const d=await fetch(`/api/public/members?q=${encodeURIComponent(q)}`).then(r=>r.json());renderMembers(d.members||[]);setStatus(`${num((d.members||[]).length)} نتيجة`)},250)}
 async function change(v){view=v;mobile.classList.remove("open");const rev=document.querySelector(".reviews-section"),dir=$("#directory");if(rev)rev.style.display="none";if(dir)dir.classList.remove("hidden");requestAnimationFrame(function(){dir&&dir.scrollIntoView({behavior:"smooth",block:"start"});});if(v==="message")return messageView();searchWrap.style.display=v==="members"?"flex":"none";title.textContent=v==="members"?"أعضاء المجتمع":v==="roles"?"الرتب القيادية الست":"لوحة TOP";if(v==="members")return refresh();if(v==="roles")return refresh();renderTop(await fetch("/api/public/top").then(r=>r.json()));setStatus("تحديث مباشر للنشاط")}
-document.querySelectorAll("[data-view]").forEach(b=>b.onclick=()=>change(b.dataset.view));search.oninput=()=>{if(view!=="members")change("members");searchMembers()};function positionMenu(){if(!mobile||!mobile.classList.contains("open"))return;var r=$("#menu").getBoundingClientRect();var w=Math.min(430,window.innerWidth-20);var left=Math.max(10,Math.min(Math.round(r.right-w),window.innerWidth-w-10));mobile.style.position="fixed";mobile.style.top=Math.round(r.bottom+8)+"px";mobile.style.left=left+"px";mobile.style.right="auto";mobile.style.width=w+"px";} function setMenuOpen(open){mobile.classList.toggle("open",!!open);document.body.classList.toggle("menu-open",!!open);document.documentElement.classList.toggle("menu-open",!!open);$("#menu").setAttribute("aria-expanded",String(!!open));if(open){mobile.style.zIndex="10000";requestAnimationFrame(positionMenu);}else{mobile.style.removeProperty("top");mobile.style.removeProperty("left");mobile.style.removeProperty("right");mobile.style.removeProperty("width");}}window.MLDMenu={open:function(){setMenuOpen(true)},close:function(){setMenuOpen(false)}};$("#menu").onclick=()=>setMenuOpen(!mobile.classList.contains("open"));window.addEventListener("resize",positionMenu,{passive:true});window.addEventListener("scroll",positionMenu,{passive:true});mobile.addEventListener("click",e=>{const b=e.target.closest("button,a");if(b)setTimeout(()=>setMenuOpen(false),80)});document.addEventListener("click",e=>{if(!mobile.contains(e.target)&&e.target!==$("#menu"))setMenuOpen(false)});$("#close").onclick=closeModal;modal.onclick=e=>{if(e.target===modal)closeModal()};document.onkeydown=e=>{if(e.key==="Escape")closeModal()};$("#year").textContent=new Date().getFullYear();
+document.querySelectorAll("[data-view]").forEach(function(b){b.onclick=function(e){e.preventDefault();change(b.dataset.view);if(window.MLDMenu)window.MLDMenu.close();};});
+search.oninput=()=>{if(view!=="members")change("members");searchMembers()};
+(function(){
+  var trigger=$("#menu"),drawer=$("#mobile-menu");
+  if(!trigger||!drawer)return;
+  var overlay=document.getElementById("menu-overlay");
+  if(!overlay){overlay=document.createElement("div");overlay.id="menu-overlay";overlay.setAttribute("aria-hidden","true");document.body.appendChild(overlay);}
+  function place(){
+    if(!drawer.classList.contains("open"))return;
+    var r=trigger.getBoundingClientRect(),w=Math.min(430,window.innerWidth-20);
+    drawer.style.top=Math.max(8,Math.round(r.bottom+8))+"px";
+    drawer.style.right=Math.max(10,Math.round(window.innerWidth-r.right))+"px";
+    drawer.style.left="auto";drawer.style.width=w+"px";
+  }
+  function close(){drawer.classList.remove("open");overlay.classList.remove("open");document.body.classList.remove("menu-open");document.documentElement.classList.remove("menu-open");trigger.setAttribute("aria-expanded","false");drawer.setAttribute("aria-hidden","true");}
+  function open(){drawer.classList.add("open");overlay.classList.add("open");document.body.classList.add("menu-open");document.documentElement.classList.add("menu-open");trigger.setAttribute("aria-expanded","true");drawer.setAttribute("aria-hidden","false");requestAnimationFrame(place);}
+  function toggle(){drawer.classList.contains("open")?close():open();}
+  trigger.setAttribute("aria-expanded","false");trigger.setAttribute("aria-controls","mobile-menu");drawer.setAttribute("aria-hidden","true");
+  trigger.onclick=function(e){e.preventDefault();e.stopPropagation();toggle();};
+  overlay.onclick=close;
+  drawer.addEventListener("click",function(e){var b=e.target.closest("button,a");if(!b)return;setTimeout(close,0);});
+  document.addEventListener("click",function(e){if(!drawer.contains(e.target)&&e.target!==trigger)close();},true);
+  document.addEventListener("keydown",function(e){if(e.key==="Escape")close();});
+  window.addEventListener("resize",place,{passive:true});
+  window.addEventListener("scroll",place,{passive:true});
+  window.MLDMenu={open:open,close:close,toggle:toggle};
+})();
 async function loadAnnouncement(){try{const d=await fetch("/api/platform/announcement").then(r=>r.json()),a=d.announcement||{},bar=$("#announcement-bar"),text=$("#announcement-text");if(!bar||!text)return;if(a.enabled&&a.text){text.textContent=a.text;bar.classList.remove("hidden");if(a.color)bar.style.setProperty("--announcement-color",a.color);else bar.style.removeProperty("--announcement-color")}else bar.classList.add("hidden")}catch(e){}}
 loadAnnouncement();
 loadReviews();
