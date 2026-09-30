@@ -119,3 +119,50 @@ html.menu-open,body.menu-open{overflow:auto!important;touch-action:auto!importan
 body.menu-open{position:static!important;left:auto!important;right:auto!important;width:auto!important}
 @media(max-width:820px){.mobile-menu{top:72px!important;right:10px!important;width:calc(100vw - 20px)!important;max-height:calc(100dvh - 84px)!important}}
 @media(max-width:560px){.mobile-menu{top:68px!important;right:10px!important;width:calc(100vw - 20px)!important;max-height:calc(100dvh - 78px)!important;border-radius:18px!important}.menu{width:46px!important;height:46px!important}}
+
+/* MLD game table: real tabletop layout + fullscreen */
+.table-head-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.table-layout{position:relative;min-height:520px;display:grid;place-items:center}
+.table-layout:before{content:"";position:absolute;inset:78px 10%;border-radius:42%;background:radial-gradient(circle,#6d3e73 0,#40254c 48%,#2a1734 100%);border:2px solid #dca0d966;box-shadow:inset 0 0 70px #120817,0 20px 50px #0008;pointer-events:none}
+.table-layout .seat-grid{position:relative;z-index:2;width:100%;height:100%;min-height:520px;display:grid;grid-template-columns:repeat(4,minmax(120px,1fr));grid-template-rows:1fr 1fr 1fr;gap:12px;align-items:center}
+.table-layout .mld-seat{background:linear-gradient(145deg,#170d20ee,#2b1736e8);backdrop-filter:blur(8px);box-shadow:0 10px 28px #0008}
+.table-layout .mld-seat:nth-child(1){grid-column:1;grid-row:1}
+.table-layout .mld-seat:nth-child(2){grid-column:4;grid-row:1}
+.table-layout .mld-seat:nth-child(3){grid-column:1;grid-row:3}
+.table-layout .mld-seat:nth-child(4){grid-column:4;grid-row:3}
+.table-layout .mld-seat:nth-child(5){grid-column:2;grid-row:3}
+.table-layout .mld-seat:nth-child(6){grid-column:3;grid-row:3}
+.table-layout .table-center{position:absolute;z-index:3;width:min(430px,48%);min-height:230px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;border:1px solid #ffc4ed55;border-radius:34px;background:#100918cc;box-shadow:inset 0 0 40px #0008,0 18px 50px #0007}
+.table-turn{font-size:18px;font-weight:900;color:var(--accent)}
+.game-board{width:min(360px,100%);border:1px solid #f7c8ee44;border-radius:22px;padding:12px;background:#ffffff08}
+.board-status{display:flex;justify-content:space-between;gap:8px;color:var(--muted);font-size:12px;margin-bottom:12px}
+.board-status b{color:var(--text);font-size:16px}
+.board-piles{display:flex;justify-content:center;gap:20px}
+.pile{width:72px;height:92px;border:1px solid #fbcff366;border-radius:14px;display:grid;place-items:center;background:#25152f;font-size:25px;font-weight:900}
+.pile small{display:block;font-size:9px;color:var(--muted);font-weight:600}
+.board-track,.property-ring{display:grid;grid-template-columns:repeat(8,1fr);gap:5px}
+.board-track i,.property-ring i{display:grid;place-items:center;aspect-ratio:1;border:1px solid #fbcff344;border-radius:8px;background:#ffffff0a;color:#dcbce1;font-size:10px;font-style:normal}
+.property-ring{grid-template-columns:repeat(5,1fr)}
+.game-maximized{position:fixed!important;inset:0!important;z-index:9999!important;width:100vw!important;height:100vh!important;max-width:none!important;border-radius:0!important;overflow:auto!important;background:#120a19!important;padding:24px!important}
+.game-maximized .table-layout{min-height:calc(100vh - 150px)}
+@media(max-width:820px){
+ .table-layout{min-height:610px}
+ .table-layout .seat-grid{min-height:610px;grid-template-columns:repeat(2,1fr);grid-template-rows:repeat(3,1fr)}
+ .table-layout .mld-seat:nth-child(1){grid-column:1;grid-row:1}
+ .table-layout .mld-seat:nth-child(2){grid-column:2;grid-row:1}
+ .table-layout .mld-seat:nth-child(3){grid-column:1;grid-row:3}
+ .table-layout .mld-seat:nth-child(4){grid-column:2;grid-row:3}
+ .table-layout .mld-seat:nth-child(5){grid-column:1;grid-row:2}
+ .table-layout .mld-seat:nth-child(6){grid-column:2;grid-row:2}
+ .table-layout .table-center{width:56%;min-height:200px}
+}
+@media(max-width:560px){
+ .table-head-actions{justify-content:stretch}.table-head-actions button{flex:1}
+ .table-layout{min-height:600px}.table-layout:before{inset:65px 2%}
+ .table-layout .seat-grid{min-height:600px;gap:7px}
+ .table-layout .mld-seat{min-height:115px;border-radius:18px;padding:8px}
+ .table-layout .seat-avatar{width:42px;height:42px}.table-layout .mld-seat h3{font-size:12px}
+ .table-layout .table-center{width:62%;min-height:180px;border-radius:25px}
+ .game-board{padding:8px}.pile{width:58px;height:76px}
+ .game-maximized{padding:10px!important}
+}
