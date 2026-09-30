@@ -137,7 +137,8 @@
   }
   function gamesView(){
     stopGamePoll();
-    Promise.all([api("/api/platform/games"),api("/api/platform/lobbies")]).then(function(x){
+    function publicApi(url){return fetch(url,{headers:{"Content-Type":"application/json"}}).then(function(r){return r.json().then(function(d){if(!r.ok)throw Error(d.error||"حدث خطأ");return d})})}
+    Promise.all([publicApi("/api/platform/games"),publicApi("/api/platform/lobbies")]).then(function(x){
       var g=x[0],l=x[1],my=account&&account.username,mine=my?(l.lobbies||[]).find(function(a){return a.host===my||a.players.indexOf(my)>=0||a.spectators.indexOf(my)>=0}):null;
       var cards=g.games.map(function(a){return "<article class='game-card'><div class='game-icon'>"+a.icon+"</div><h3>"+a.name+"</h3><p>"+a.mode+"</p><p class='muted small'>"+esc(a.description||"")+" </p><button class='primary game-create' data-game='"+a.id+"'>إنشاء طاولة</button></article>"}).join("");
       var ls=l.lobbies.length?l.lobbies.map(function(a){return "<article class='lobby-card'><span class='platform-chip'>"+esc(gameLabel(a.game))+"</span><h3>طاولة @"+esc(a.host)+"</h3><p>🪑 "+a.players.length+"/"+a.maxPlayers+" · 👀 "+a.spectators.length+" · "+(a.started?"بدأت":"انتظار")+"</p><button class='primary' data-join='"+a.id+"' "+(a.started?"disabled":"")+">دخول لاعب</button> <button class='platform-link' data-watch='"+a.id+"'>مشاهدة</button></article>"}).join(""):"<div class='empty'>لا توجد طاولات الآن.</div>";
@@ -150,8 +151,8 @@
     }).catch(function(e){alert(e.message)});
   }
   function groupsView(){
-    
-    api("/api/platform/groups").then(function(d){
+    function publicApi(url){return fetch(url,{headers:{"Content-Type":"application/json"}}).then(function(r){return r.json().then(function(d){if(!r.ok)throw Error(d.error||"حدث خطأ");return d})})}
+    publicApi("/api/platform/groups").then(function(d){
       var list=d.groups.length?d.groups.map(function(g){return "<article class='group-card'><h3>"+esc(g.name)+"</h3><p>"+esc(g.description||"بدون وصف")+"</p><small>👥 "+g.members+" · @"+esc(g.owner)+"</small>"+(account?"<button class='platform-link' data-group='"+g.id+"'>انضمام</button>":"")+"</article>"}).join(""):"<div class='empty'>لا توجد مجموعات بعد.</div>";
       show("المجموعات","<div class='platform-head'><div><span class='eyebrow'>MLD GROUPS</span><h2>المجموعات</h2><p class='muted'>مجتمعات صغيرة داخل MLD.</p></div>"+(account?"<button class='primary' id='new-group'>+ مجموعة</button>":"")+"</div><div id='group-create' class='account-card hidden'><input id='group-name' class='full' placeholder='اسم المجموعة'><input id='group-desc' class='full' placeholder='وصف مختصر'><button class='primary' id='save-group'>إنشاء</button></div><div class='group-grid'>"+list+"</div>");
       var ng=$("#new-group");if(ng)ng.onclick=function(){$("#group-create").className=$("#group-create").className.indexOf("hidden")>=0?$("#group-create").className.replace(/\bhidden\b/g,"").trim():$("#group-create").className+" hidden"};
