@@ -889,7 +889,25 @@ const GAME_CATALOG = [
 ];
 
 function shuffle(arr){for(let i=arr.length-1;i>0;i--){const j=crypto.randomInt(i+1);[arr[i],arr[j]]=[arr[j],arr[i]];}return arr;}
-function unoDeck(){const colors=["أحمر","أزرق","أخضر","أصفر"],deck=[];colors.forEach(c=>{deck.push({color:c,value:"0"});for(let n=1;n<=9;n++){deck.push({color:c,value:String(n)});deck.push({color:c,value:String(n)});}["+2","عكس","تخطي"].forEach(v=>{deck.push({color:c,value:v});deck.push({color:c,value:v});});});for(let i=0;i<4;i++){deck.push({color:"wild",value:"وايلد"});deck.push({color:"wild",value:"+4"});}return shuffle(deck);}
+function unoDeck(){const colors=["أحمر","أزرق","أخضر","أصفر"],deck=[];colors.forEach(c=>{deck.push({color:c,value:"0"});for(let n=1;n<=9;n++){deck.push({color:c,value:String(n)},{color:c,value:String(n)});}["+2","عكس","تخطي"].forEach(v=>deck.push({color:c,value:v},{color:c,value:v}));});for(let i=0;i<4;i++)deck.push({color:"wild",value:"وايلد"},{color:"wild",value:"+4"});return shuffle(deck);}
+const UNO_COLORS=["أحمر","أزرق","أخضر","أصفر"];
+const MONOPOLY_BOARD=[
+{name:"GO",type:"go"},{name:"Mediterranean Avenue",type:"property",price:60,rent:[2,10,30,90,160,250],group:"brown",house:50},
+{name:"Community Chest",type:"chest"},{name:"Baltic Avenue",type:"property",price:60,rent:[4,20,60,180,320,450],group:"brown",house:50},
+{name:"Income Tax",type:"tax",amount:200},{name:"Reading Railroad",type:"railroad",price:200},{name:"Oriental Avenue",type:"property",price:100,rent:[6,30,90,270,400,550],group:"lightblue",house:50},
+{name:"Chance",type:"chance"},{name:"Vermont Avenue",type:"property",price:100,rent:[6,30,90,270,400,550],group:"lightblue",house:50},
+{name:"Connecticut Avenue",type:"property",price:120,rent:[8,40,100,300,450,600],group:"lightblue",house:50},{name:"Jail",type:"jail"},
+{name:"St. Charles Place",type:"property",price:140,rent:[10,50,150,450,625,750],group:"pink",house:100},{name:"Electric Company",type:"utility",price:150},{name:"States Avenue",type:"property",price:140,rent:[10,50,150,450,625,750],group:"pink",house:100},
+{name:"Virginia Avenue",type:"property",price:160,rent:[12,60,180,500,700,900],group:"pink",house:100},{name:"Pennsylvania Railroad",type:"railroad",price:200},{name:"St. James Place",type:"property",price:180,rent:[14,70,200,550,750,950],group:"orange",house:100},
+{name:"Community Chest",type:"chest"},{name:"Tennessee Avenue",type:"property",price:180,rent:[14,70,200,550,750,950],group:"orange",house:100},{name:"New York Avenue",type:"property",price:200,rent:[16,80,220,600,800,1000],group:"orange",house:100},
+{name:"Free Parking",type:"free"},{name:"Kentucky Avenue",type:"property",price:220,rent:[18,90,250,700,875,1050],group:"red",house:150},{name:"Chance",type:"chance"},{name:"Indiana Avenue",type:"property",price:220,rent:[18,90,250,700,875,1050],group:"red",house:150},
+{name:"Illinois Avenue",type:"property",price:240,rent:[20,100,300,750,925,1100],group:"red",house:150},{name:"B&O Railroad",type:"railroad",price:200},{name:"Atlantic Avenue",type:"property",price:260,rent:[22,110,330,800,975,1150],group:"yellow",house:150},
+{name:"Ventnor Avenue",type:"property",price:260,rent:[22,110,330,800,975,1150],group:"yellow",house:150},{name:"Water Works",type:"utility",price:150},{name:"Marvin Gardens",type:"property",price:280,rent:[24,120,360,850,1025,1200],group:"yellow",house:150},
+{name:"Go To Jail",type:"gotojail"},{name:"Pacific Avenue",type:"property",price:300,rent:[26,130,390,900,1100,1275],group:"green",house:200},{name:"North Carolina Avenue",type:"property",price:300,rent:[26,130,390,900,1100,1275],group:"green",house:200},
+{name:"Community Chest",type:"chest"},{name:"Pennsylvania Avenue",type:"property",price:320,rent:[28,150,450,1000,1200,1400],group:"green",house:200},{name:"Short Line",type:"railroad",price:200},{name:"Chance",type:"chance"},
+{name:"Park Place",type:"property",price:350,rent:[35,175,500,1100,1300,1500],group:"darkblue",house:200},{name:"Luxury Tax",type:"tax",amount:100},{name:"Boardwalk",type:"property",price:400,rent:[50,200,600,1400,1700,2000],group:"darkblue",house:200}
+];
+
 function balootDeck(){const suits=["♠","♥","♦","♣"],ranks=["7","8","9","10","J","Q","K","A"],d=[];suits.forEach(s=>ranks.forEach(r=>d.push({suit:s,rank:r,label:r+s})));return shuffle(d);}
 function maqsorDeck(){const suits=["♠","♥","♦","♣"],ranks=["7","8","9","10","J","Q","K","A"],d=[];suits.forEach(s=>ranks.forEach(r=>d.push({suit:s,rank:r,label:r+s,known:false})));d.push({suit:"JOKER",rank:"JOKER",label:"Joker",known:false},{suit:"JOKER",rank:"JOKER",label:"Joker",known:false});return shuffle(d);}
 function maqsorValue(c){if(!c)return 0;if(c.rank==="JOKER")return 20;if(c.rank==="J")return 11;if(c.rank==="Q")return 12;if(c.rank==="K")return 0;if(c.rank==="A")return 1;return Number(c.rank)||0;}
@@ -897,10 +915,10 @@ function maqsorRed(c){return c&&["♥","♦"].includes(c.suit);}
 function maqsorCanBurn(a,b){return a&&b&&((a.rank==="JOKER"&&b.rank==="JOKER")||(a.rank!=="JOKER"&&b.rank!=="JOKER"&&a.rank===b.rank));}
 function initialGameState(game,players){
   const base={version:1,startedAt:new Date().toISOString(),turnIndex:0,lastRoll:null,lastAction:null,winner:null,round:1};
-  if(game==="uno"){const deck=unoDeck(),hands={};players.forEach(p=>hands[p]=[]);players.forEach(p=>{for(let i=0;i<7;i++)hands[p].push(deck.pop());});let top=deck.pop();while(top.color==="wild"){deck.unshift(top);top=deck.pop();}return {...base,deck,discard:[top],hands,currentColor:top.color};}
+  if(game==="uno"){const deck=unoDeck(),hands={};players.forEach(p=>hands[p]=[]);players.forEach(p=>{for(let i=0;i<7;i++)hands[p].push(deck.pop());});let top=deck.pop();while(top.color==="wild"||top.value==="+4"){deck.unshift(top);top=deck.pop();}return {...base,deck,discard:[top],hands,currentColor:top.color,direction:1,pendingDraw:0,pendingDrawType:null,pendingChallenge:null,unoCalled:{},scores:players.reduce((a,p)=>(a[p]=0,a),{}),targetScore:500};}
   if(game==="baloot"){const deck=balootDeck(),hands={};players.forEach(p=>hands[p]=deck.splice(0,8));return {...base,hands,trick:[],trickSuit:null,scores:players.reduce((a,p)=>(a[p]=0,a),{})};}
   if(game==="maqsor"){const deck=maqsorDeck(),hands={},scores={},zeros={};players.forEach(p=>{hands[p]=[deck.pop(),deck.pop(),deck.pop(),deck.pop()];hands[p][0].known=true;hands[p][1].known=true;scores[p]=0;zeros[p]=0;});return {...base,deck,discard:[deck.pop()],hands,scores,zeros,drawn:{},qawsarBy:null,publicReveals:[],roundResults:null,roundOver:false};}
-  if(game==="monopoly")return {...base,money:players.reduce((a,p)=>(a[p]=1500,a),{}),positions:players.reduce((a,p)=>(a[p]=0,a),{}),properties:{},lastRoll:null};
+  if(game==="monopoly")return {...base,money:players.reduce((a,p)=>(a[p]=1500,a),{}),positions:players.reduce((a,p)=>(a[p]=0,a),{}),properties:{},houses:{},mortgages:{},railroads:{},utilities:{},jailTurns:{},doubles:0,awaitingBuy:false,awaitingRent:false,bankFreeParking:0,bankrupt:{},chance:shuffle([{type:"money",amount:50},{type:"money",amount:-50},{type:"move",to:0},{type:"jail"}]),chest:shuffle([{type:"money",amount:200},{type:"money",amount:-50},{type:"money",amount:100},{type:"jail"}]),board:MONOPOLY_BOARD};
   return {...base,pieces:players.reduce((a,p)=>(a[p]=[0,0,0,0],a),{})};
 }
 function publicGameState(lobby,username){
