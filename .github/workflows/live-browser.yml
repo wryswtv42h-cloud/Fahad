@@ -75,6 +75,10 @@ jobs:
                 await page.locator('#menu').click();
               }
               await page.unroute(base+'/api/platform/me');
+              // Reset to a real guest before the public-menu checks below.
+              await page.evaluate(() => localStorage.removeItem('mld_token'));
+              await page.goto(base+'/#top', {waitUntil:'domcontentloaded'});
+              await page.waitForTimeout(300);
               // The platform uses one navigation system on mobile and desktop.
               await page.locator('#menu').click();
               if (!(await page.locator('#mobile-menu.open').count())) throw new Error('unified menu did not open');
