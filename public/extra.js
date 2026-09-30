@@ -7,8 +7,8 @@
   function esc(v){return String(v==null?"":v).replace(/[&<>\"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c];});}
   function api(url,opt){opt=opt||{};opt.headers=Object.assign({"Content-Type":"application/json"},opt.headers||{});if(token())opt.headers.Authorization="Bearer "+token();return fetch(url,opt).then(function(r){return r.json().then(function(d){if(!r.ok)throw Error(d.error||"حدث خطأ");return d;});});}
   function show(title,body){panel.className=panel.className.replace(/\bhidden\b/g,"").trim();$("#directory").className+=" hidden";$("#view-title").textContent=title;$("#subtitle").textContent="منصة MLD";panel.innerHTML=body;}
-  function login(){if(token())return true;if(window.MLDPlatform&&window.MLDPlatform.loginView){window.MLDPlatform.loginView();}var m=$("#mobile-menu");if(m)m.classList.remove("open");return false;}
-  function nav(){var m=$("#mobile-menu");if(m)m.className=m.className.replace(/\bopen\b/g,"").trim();}
+  function login(){if(token())return true;if(window.MLDPlatform&&window.MLDPlatform.loginView){window.MLDPlatform.loginView();}if(window.MLDMenu)window.MLDMenu.close();else{var m=$("#mobile-menu");if(m)m.classList.remove("open");}return false;}
+  function nav(){if(window.MLDMenu)window.MLDMenu.close();else{var m=$("#mobile-menu");if(m)m.className=m.className.replace(/\bopen\b/g,"").trim();}}
   function bots(){
     function statusText(s){return s==="online"?"● يعمل":s==="starting"?"◌ جاري التشغيل":s==="error"?"⚠ خطأ":"○ متوقف";}
     function load(){
@@ -68,7 +68,7 @@
   document.querySelectorAll("[data-extra]").forEach(function(b){b.onclick=function(){if(map[b.dataset.extra])map[b.dataset.extra]();nav();};});
   window.MLDExtra={bots:bots,tickets:tickets,applications:applications,reviews:reviews,messages:messages,economy:economy,giveaways:giveaways,overview:overview,jokes:jokes,stories:stories};
 
-  function closeMenu(){var m=$("#mobile-menu");if(m)m.className=m.className.replace(/\bopen\b/g,"").trim();}
+  function closeMenu(){if(window.MLDMenu)window.MLDMenu.close();else{var m=$("#mobile-menu");if(m)m.className=m.className.replace(/\bopen\b/g,"").trim();}}
   function wrapLogin(button){
     if(!button)return;
     var original=button.onclick;
