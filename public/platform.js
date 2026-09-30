@@ -4,7 +4,7 @@
   var $=function(s){return document.querySelector(s)};
   var panel=$("#platform");
   var token=localStorage.getItem("mld_token")||"";
-  var account=null;
+  var account=null;try{account=JSON.parse(localStorage.getItem("mld_account")||"null")}catch(e){account=null;}
   var names={"baloot":"بلوت","uno":"UNO","jackaroo":"جاكارو","ludo":"لودو","monopoly":"مونوبولي","maqsor":"مقوصر"};
   if(!panel)return;
   function esc(v){return String(v==null?"":v).replace(/[&<>\"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]})}
