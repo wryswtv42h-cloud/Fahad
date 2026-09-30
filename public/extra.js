@@ -38,14 +38,24 @@
         }});
       }).catch(function(e){alert(e.message)});
     }
-    function addBot(ds){
-      if(!ds.linked){alert("اربط حساب Discord أولًا");return;}
-      var options=ds.guilds.map(function(g){return "<option value='"+esc(g.id)+"'>"+esc(g.name)+"</option>"}).join("");
-      show("إضافة بوت","<div class='platform-head'><div><span class='eyebrow'>NEW DISCORD BOT</span><h2>إضافة بوتك</h2><p class='muted'>اختر السيرفر، ثم ضع بيانات بوت Discord الخاص بك.</p></div><button class='platform-link' id='back-bots'>رجوع</button></div><div class='account-card bot-form'><label>اسم البوت داخل لوحة MLD (اختياري)</label><input id='bot-name' class='full' maxlength='80' placeholder='مثال: بوت الحماية'><label>السيرفر</label><select id='bot-guild' class='full'>"+options+"</select><label>Prefix الأوامر</label><input id='bot-prefix' class='full' maxlength='5' value='!' placeholder='!'><label>توكن البوت</label><input id='bot-token' class='full' type='password' autocomplete='new-password' placeholder='ألصق توكن البوت هنا'><small class='muted'>التوكن لا يظهر في الواجهة بعد الحفظ ويُحفظ مشفرًا. يجب أن يكون البوت مضافًا مسبقًا إلى السيرفر المحدد.</small><button class='primary full-btn' id='save-bot'>تحقق وتشغيل البوت</button></div>");
+    function addBot(ds,selectedSystems){
+      if(!ds.oauthLinked){
+        show("ربط Discord","<div class='platform-head'><div><span class='eyebrow'>DISCORD AUTH</span><h2>اربط Discord</h2><p class='muted'>نحتاج مصادقة Discord حتى نعرض السيرفرات التي تملكها أو تملك صلاحية إدارة البوتات فيها.</p></div><button class='platform-link' id='back-bots'>رجوع</button></div><div class='account-card'><h3>مصادقة ثم اختيار السيرفر</h3><p class='muted'>بعد الموافقة سترجع تلقائيًا إلى MLD وتظهر لك قائمة سيرفراتك.</p><button class='primary wide' id='discord-connect'>تسجيل الدخول بـ Discord</button></div>");
+        $("#back-bots").onclick=bots;
+        $("#discord-connect").onclick=function(){api("/api/platform/discord/oauth/start").then(function(v){location.href=v.url}).catch(function(e){alert(e.message)})};
+        return;
+      }
+      var options=(ds.guilds||[]).map(function(g){return "<option value='"+esc(g.id)+"'>"+esc(g.name)+(g.owner?" · المالك":" · إدارة السيرفر")+"</option>"}).join("");
+      var modules=["protection","games","bank","streak","tickets","applications","broadcast","giveaways"];
+      var labels={"protection":"حماية كاملة","games":"ألعاب كاملة","bank":"بنك كامل","streak":"ستريك كامل","tickets":"تيكت كامل","applications":"تقديم كامل","broadcast":"برودكاست كامل","giveaways":"قيفاوي كامل"};
+      var checks=modules.map(function(id){return "<label class='check'><input type='checkbox' class='bot-module' value='"+id+"' "+((selectedSystems||modules).indexOf(id)>=0?"checked":"")+"> <b>"+labels[id]+"</b></label>"}).join("");
+      show("إضافة بوت","<div class='platform-head'><div><span class='eyebrow'>MLD BOT BUILDER</span><h2>ابنِ بوتك</h2><p class='muted'>اختر الأنظمة، ثم السيرفر، ثم أدخل توكن البوت الذي تملكه.</p></div><button class='platform-link' id='back-bots'>رجوع</button></div><div class='account-card bot-form'><h3>الأنظمة</h3><div class='bot-system-grid'>"+checks+"</div><label>اسم البوت</label><input id='bot-name' class='full' maxlength='80' placeholder='مثال: MLD Security'><label>السيرفر</label><select id='bot-guild' class='full'>"+options+"</select><label>Prefix</label><input id='bot-prefix' class='full' maxlength='5' value='!' placeholder='!'><label>توكن البوت</label><input id='bot-token' class='full' type='password' autocomplete='new-password' placeholder='توكن البوت'><small class='muted'>يُحفظ التوكن مشفرًا ولا يظهر مرة أخرى. البوت يجب أن يكون مضافًا إلى السيرفر المختار.</small><button class='primary full-btn' id='save-bot'>تحقق وتشغيل البوت</button></div>");
       $("#back-bots").onclick=bots;
       $("#save-bot").onclick=function(){
         var btn=$("#save-bot");btn.disabled=true;btn.textContent="جاري التحقق والتشغيل...";
-        api("/api/platform/my-bots",{method:"POST",body:JSON.stringify({name:$("#bot-name").value,guildId:$("#bot-guild").value,prefix:$("#bot-prefix").value,token:$("#bot-token").value})}).then(function(v){alert("تمت إضافة البوت وتشغيله.");commandPanel(v.bot.id)}).catch(function(e){alert(e.message);btn.disabled=false;btn.textContent="تحقق وتشغيل البوت"});
+        var chosen=[];document.querySelectorAll(".bot-module:checked").forEach(function(x){chosen.push(x.value)});
+        if(!chosen.length){alert("اختر نظامًا واحدًا على الأقل");btn.disabled=false;btn.textContent="تحقق وتشغيل البوت";return;}
+        api("/api/platform/my-bots",{method:"POST",body:JSON.stringify({name:$("#bot-name").value,guildId:$("#bot-guild").value,prefix:$("#bot-prefix").value,token:$("#bot-token").value,modules:chosen})}).then(function(v){alert("تمت إضافة البوت وتشغيل الأنظمة المختارة.");commandPanel(v.bot.id)}).catch(function(e){alert(e.message);btn.disabled=false;btn.textContent="تحقق وتشغيل البوت"});
       };
     }
     function commandPanel(id){
