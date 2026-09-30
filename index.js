@@ -513,7 +513,7 @@ client.on("messageCreate", async (message) => {
   protectionLastMessage.set(key, { text, at: now });
 
   if (protectionEnabled && !privileged) {
-    const hasInvite = /(?:discord\\.gg|discord(?:app)?\\.com\\/invite)\\/[^\\s]+/i.test(text);
+    const hasInvite = /(?:discord\.gg|discord(?:app)?\.com\/invite)\/[^\s]+/i.test(text);
     const mentionRaid = message.mentions.users.size >= 8;
     const spam = recent.length >= 6 || (repeated && recent.length >= 4);
     if (hasInvite || mentionRaid || spam) {
