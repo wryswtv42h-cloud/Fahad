@@ -225,6 +225,22 @@ module.exports = function setupBotManager({ app, auth, logPlatform, platform, sa
 
         const content = String(message.content || "").trim();
         const prefix = String(record.prefix || "!").slice(0, 5);
+        record.data = record.data || {wallets:{},streaks:{},tickets:{},applications:{},giveaways:{}};
+        record.data.wallets = record.data.wallets || {};
+        record.data.streaks = record.data.streaks || {};
+        record.data.tickets = record.data.tickets || {};
+        record.data.applications = record.data.applications || {};
+        record.data.giveaways = record.data.giveaways || {};
+        const enabled = id => !Array.isArray(record.modules) || record.modules.length===0 || record.modules.includes(id);
+        const wallet = id => { if(!record.data.wallets[id]) record.data.wallets[id]={coins:100}; return record.data.wallets[id]; };
+        const durationMs = value => { const m=String(value||"").match(/^(\\d+)(s|m|h|d)$/i); if(!m)return 600000; const n=Number(m[1]); return n*({s:1000,m:60000,h:3600000,d:86400000})[m[2].toLowerCase()]; };
+        const memberName = m => m?.displayName || m?.user?.globalName || m?.user?.username || "عضو";
+        if(enabled("protection") && !message.member?.permissions?.has("Administrator")){
+          const rt=runtime.get(record.id); rt.spam=rt.spam||new Map(); const key=message.author.id; const now=Date.now();
+          const arr=(rt.spam.get(key)||[]).filter(t=>now-t<8000); arr.push(now); rt.spam.set(key,arr);
+          const invite=/(?:discord\\.gg|discord(?:app)?\\.com\\/invite)\\/\\S+/i.test(content);
+          if(invite || arr.length>=7){try{await message.delete();}catch{} if(message.member?.moderatable){try{await message.member.timeout(60000,"MLD Protection");}catch{}} return;}
+        }
         if (!content.startsWith(prefix)) return;
 
         const raw = content.slice(prefix.length).trim();
@@ -235,6 +251,63 @@ module.exports = function setupBotManager({ app, auth, logPlatform, platform, sa
         try {
           if (command === "ping") {
             await message.reply("🏓 Pong! " + Math.max(0, Math.round(c.ws.ping)) + "ms");
+          } else if (command === "balance" && enabled("bank")) {
+            const w=wallet(message.author.id); await message.reply("💰 رصيدك: **"+w.coins+"**");
+          } else if (command === "daily" && (enabled("bank") || enabled("streak"))) {
+            const w=wallet(message.author.id), now=Date.now(), day=86400000, last=Number(w.daily||0);
+            if(now-last<day)return message.reply("⏳ أخذت اليومية بالفعل. ارجع بعد "+Math.ceil((day-(now-last))/3600000)+" ساعة.");
+            w.coins+=100; w.daily=now; const st=record.data.streaks[message.author.id]||{days:0,last:0};
+            st.days=(now-st.last<=48*3600000)?st.days+1:1; st.last=now; record.data.streaks[message.author.id]=st; save();
+            await message.reply("🎁 اليومية: **+100** عملة · 🔥 الستريك: **"+st.days+"** يوم");
+          } else if (command === "streak" && enabled("streak")) {
+            const st=record.data.streaks[message.author.id]||{days:0}; await message.reply("🔥 ستريكك: **"+st.days+"** يوم");
+          } else if (command === "pay" && enabled("bank")) {
+            const target=message.mentions.users.first(), amount=Math.floor(Number(args.find(x=>/^\\d+$/.test(x))||0));
+            if(!target||amount<=0)return message.reply("استخدم: "+prefix+"pay @عضو 100");
+            const from=wallet(message.author.id); if(from.coins<amount)return message.reply("رصيدك لا يكفي.");
+            from.coins-=amount; wallet(target.id).coins+=amount; save(); await message.reply("💸 تم تحويل **"+amount+"** عملة إلى @"+target.username);
+          } else if (command === "top" && enabled("bank")) {
+            const top=Object.entries(record.data.wallets).sort((a,b)=>b[1].coins-a[1].coins).slice(0,10).map((x,i)=>(i+1)+". <@"+x[0]+"> — "+x[1].coins).join("\\n");
+            await message.reply("🏆 **توب البنك**\\n"+(top||"لا يوجد رصيد بعد."));
+          } else if (command === "coin" && enabled("games")) {
+            await message.reply("🪙 **"+(Math.random()<0.5?"وجه":"كتابة")+"**");
+          } else if (command === "dice" && enabled("games")) {
+            await message.reply("🎲 النتيجة: **"+(Math.floor(Math.random()*6)+1)+"**");
+          } else if (command === "ticket" && enabled("tickets")) {
+            const existing=Object.values(record.data.tickets).find(t=>t.userId===message.author.id&&t.open);
+            if(existing)return message.reply("🎫 عندك تيكت مفتوح بالفعل: <#"+existing.channelId+">");
+            const ch=await message.guild.channels.create({name:"ticket-"+message.author.username.toLowerCase().replace(/[^a-z0-9-]/g,"").slice(0,20),type:0,permissionOverwrites:[{id:message.guild.roles.everyone.id,deny:["ViewChannel"]},{id:message.author.id,allow:["ViewChannel","SendMessages","ReadMessageHistory"]},{id:c.user.id,allow:["ViewChannel","SendMessages","ReadMessageHistory","ManageChannels"]}]});
+            record.data.tickets[ch.id]={userId:message.author.id,channelId:ch.id,open:true,createdAt:new Date().toISOString()}; save();
+            await ch.send("🎫 **تيكت جديد**\\n@"+memberName(message.member)+" سيتم الرد عليك هنا. استخدم "+prefix+"ticket-close عند انتهاء الطلب.");
+          } else if (command === "ticket-close" && enabled("tickets")) {
+            const t=record.data.tickets[message.channel.id]; if(!t)return message.reply("هذه القناة ليست تيكت لهذا البوت.");
+            t.open=false;t.closedAt=new Date().toISOString();save(); await message.channel.send("🔒 سيتم إغلاق التيكت."); setTimeout(()=>message.channel.delete().catch(()=>{}),1500);
+          } else if (command === "apply" && enabled("applications")) {
+            const ch=await message.guild.channels.create({name:"application-"+message.author.username.toLowerCase().replace(/[^a-z0-9-]/g,"").slice(0,18),type:0,permissionOverwrites:[{id:message.guild.roles.everyone.id,deny:["ViewChannel"]},{id:message.author.id,allow:["ViewChannel","SendMessages","ReadMessageHistory"]},{id:c.user.id,allow:["ViewChannel","SendMessages","ReadMessageHistory","ManageChannels"]}]});
+            record.data.applications[ch.id]={userId:message.author.id,channelId:ch.id,status:"pending",createdAt:new Date().toISOString()};save();
+            await ch.send("📝 **تقديم جديد**\\nاكتب إجاباتك هنا، وسيتم حفظ التقديم حتى يراجعه المسؤولون.");
+          } else if (command === "broadcast" && enabled("broadcast")) {
+            const channel=message.mentions.channels.first(), text=args.filter(x=>!/^<#[0-9]+>$/.test(x)).join(" ");
+            if(!channel||!text)return message.reply("استخدم: "+prefix+"broadcast #القناة الرسالة");
+            if(!message.member.permissions.has("ManageGuild"))return message.reply("تحتاج صلاحية إدارة السيرفر.");
+            await channel.send("📢 **إعلان**\\n"+text); await message.reply("✅ تم نشر البرودكاست.");
+          } else if (command === "giveaway" && enabled("giveaways")) {
+            const channel=message.channel, ms=durationMs(args[0]), prize=args.slice(1).join(" ")||"جائزة";
+            const end=Date.now()+ms; const msg=await channel.send("🎉 **قيفاوي**\\n🎁 الجائزة: **"+prize+"**\\nاضغط 🎉 للمشاركة.\\nينتهي: <t:" + Math.floor(end/1000) + ":R>");
+            await msg.react("🎉").catch(()=>{});
+            record.data.giveaways[msg.id]={messageId:msg.id,channelId:channel.id,prize,endsAt:end,entries:[]};save();
+            setTimeout(async()=>{const g=record.data.giveaways[msg.id];if(!g||g.finished)return;const m=await channel.messages.fetch(msg.id).catch(()=>null);const users=m?await m.reactions.cache.get("🎉")?.users.fetch().catch(()=>null):null;const candidates=users?[...users.values()].filter(u=>!u.bot):[];const winner=candidates[Math.floor(Math.random()*candidates.length)];g.finished=true;g.winnerId=winner?.id||null;save();await channel.send(winner?"🏆 الفائز: <@"+winner.id+"> — "+prize:"❌ انتهى القيفاوي بدون مشاركين.");},ms);
+          } else if (command === "enter" && enabled("giveaways")) {
+            const g=Object.values(record.data.giveaways).find(x=>x.channelId===message.channel.id&&!x.finished); if(!g)return message.reply("لا يوجد قيفاوي مفتوح هنا."); if(!g.entries.includes(message.author.id))g.entries.push(message.author.id);save(); await message.reply("🎉 تم تسجيل مشاركتك.");
+          } else if (command === "lock" && enabled("protection")) {
+            if(!message.member.permissions.has("ManageChannels"))return message.reply("تحتاج صلاحية إدارة القنوات.");
+            await message.channel.permissionOverwrites.edit(message.guild.roles.everyone,{SendMessages:false}); await message.reply("🔒 تم قفل القناة.");
+          } else if (command === "unlock" && enabled("protection")) {
+            if(!message.member.permissions.has("ManageChannels"))return message.reply("تحتاج صلاحية إدارة القنوات.");
+            await message.channel.permissionOverwrites.edit(message.guild.roles.everyone,{SendMessages:null}); await message.reply("🔓 تم فتح القناة.");
+          } else if (command === "clear" && enabled("protection")) {
+            if(!message.member.permissions.has("ManageMessages"))return message.reply("تحتاج صلاحية إدارة الرسائل.");
+            const n=Math.max(1,Math.min(100,Number(args[0]||10))); const msgs=await message.channel.messages.fetch({limit:n}); await message.channel.bulkDelete(msgs,true); await message.reply("🧹 تم حذف "+msgs.size+" رسالة.").then(x=>setTimeout(()=>x.delete().catch(()=>{}),1800));
           } else if (command === "help") {
             await message.reply([
               "🤖 أوامر البوت:",
