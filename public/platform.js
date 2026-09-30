@@ -267,7 +267,18 @@
   }
   document.querySelectorAll("[data-platform]").forEach(function(b){b.onclick=function(){if(b.dataset.platform==="account"&&!need())return;if(b.dataset.platform==="account")accountView();if(b.dataset.platform==="games")gamesView();if(b.dataset.platform==="groups")groupsView();if(b.dataset.platform==="admin"){if(!need())return;adminView();}var m=$("#mobile-menu");if(m)m.className=m.className.replace(/\bopen\b/g,"").trim()}});
   updateOwnerMenu();
-  if(token)api("/api/platform/me").then(function(d){account=d.account;localStorage.setItem("mld_account",JSON.stringify(account));updateOwnerMenu();}).catch(function(){updateOwnerMenu();});
+  if(token)api("/api/platform/me").then(function(d){
+    account=d.account;
+    localStorage.setItem("mld_account",JSON.stringify(account));
+    updateOwnerMenu();
+  }).catch(function(){
+    token="";
+    account=null;
+    localStorage.removeItem("mld_token");
+    localStorage.removeItem("mld_account");
+    updateOwnerMenu();
+  });
+  updateOwnerMenu();
   updateOwnerMenu();
   window.MLDPlatform={accountView:accountView,loginView:loginView,gamesView:gamesView,groupsView:groupsView,adminView:adminView,ownerView:ownerView,profileView:profileView,chatView:chatView,refreshMenu:updateOwnerMenu};
 })();
