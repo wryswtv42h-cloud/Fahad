@@ -202,10 +202,40 @@ module.exports = function setupBotManager({ app, auth, logPlatform, platform, sa
         rt.status="error";
         save();
       });
-      c.on("messageCreate", message => {
+      c.on("messageCreate", async message => {
         if (message.author.bot || !message.guild || message.guild.id !== record.guildId) return;
         record.lastActivityAt = new Date().toISOString();
         save();
+
+        const content = String(message.content || "").trim();
+        const prefix = String(record.prefix || "!").slice(0, 5);
+        if (!content.startsWith(prefix)) return;
+
+        const raw = content.slice(prefix.length).trim();
+        const parts = raw ? raw.split(/\\s+/) : [];
+        const command = String(parts.shift() || "").toLowerCase();
+        const args = parts;
+
+        try {
+          if (command === "ping") {
+            await message.reply("🏓 Pong! " + Math.max(0, Math.round(c.ws.ping)) + "ms");
+          } else if (command === "help") {
+            await message.reply([
+              "🤖 أوامر البوت:",
+              prefix + "ping — فحص الاتصال",
+              prefix + "help — عرض الأوامر",
+              prefix + "server — معلومات السيرفر",
+              prefix + "bot — معلومات البوت"
+            ].join("\\n"));
+          } else if (command === "server") {
+            await message.reply("🏠 " + message.guild.name + " • الأعضاء: " + message.guild.memberCount);
+          } else if (command === "bot") {
+            await message.reply("🤖 " + (c.user?.tag || c.user?.username || "Bot") + " • متصل ✓");
+          }
+        } catch (e) {
+          record.lastError = String(e.message || e);
+          save();
+        }
       });
       await c.login(token);
       return rt;
