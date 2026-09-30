@@ -55,13 +55,41 @@ jobs:
               }
               await page.waitForTimeout(800);
               if (!(await page.locator('.game-create').count())) throw new Error('game create buttons missing');
-              await page.locator('.game-create').first().click();
-              await page.waitForTimeout(200);
-              if (!(await page.locator('#table-player-count').count())) throw new Error('player-count chooser missing');
-              const options = await page.locator('#table-player-count option').count();
-              if (!options) throw new Error('player-count options empty');
-              if (await page.locator('#confirm-create-table').count() === 0) throw new Error('create-table confirm missing');
-              await page.locator('#cancel-create-table').click();
+              // Guest must be blocked from creating a table and routed to login.
+              const createButtons = page.locator('.game-create');
+              const count = await createButtons.count();
+              if (count !== games.games.length) throw new Error('not every catalog game has a create button');
+              for (let i = 0; i < count; i++) {
+                await createButtons.nth(i).click();
+                await page.waitForTimeout(100);
+                if (!(await page.locator('#login-user').count())) throw new Error('guest create did not require login for game '+games.games[i].id);
+                await page.locator('#new-account').click();
+                await page.waitForTimeout(50);
+                if (!(await page.locator('#acc-user').count())) throw new Error('account view did not open');
+                // Return to games for the next catalog entry.
+                await page.locator('#show-login').click().catch(()=>{});
+                await page.waitForTimeout(50);
+                await page.goto(base+'/#top', {waitUntil:'domcontentloaded'});
+                await page.waitForTimeout(500);
+                if (viewport.width < 800) {
+                  await page.locator('#menu').click();
+                  await page.locator('#mobile-menu [data-platform="games"]').click();
+                } else {
+                  await page.locator('.desktop-nav [data-platform="games"]').click();
+                }
+                await page.waitForTimeout(300);
+              }
+              const lobbyApi = await page.request.get(base+'/api/platform/lobbies');
+              if (!lobbyApi.ok()) throw new Error('lobbies api '+lobbyApi.status());
+              const lobbyData = await lobbyApi.json();
+              if (!Array.isArray(lobbyData.lobbies)) throw new Error('lobbies response invalid');
+              for (const lobby of lobbyData.lobbies) {
+                if ('gameState' in lobby || 'deck' in lobby || 'hands' in lobby || 'token' in lobby) {
+                  throw new Error('public lobby response leaks private game state');
+                }
+              }
+              const unauthCreate = await page.request.post(base+'/api/platform/lobbies', {data:{game:games.games[0].id,maxPlayers:games.games[0].minPlayers}});
+              if (unauthCreate.status() !== 401) throw new Error('unauthenticated lobby creation was not rejected');
               await page.waitForTimeout(150);
               await browser.close();
             }
