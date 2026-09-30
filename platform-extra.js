@@ -284,7 +284,7 @@ app.post("/api/platform/tickets/:id/close",auth,(req,res)=>{
     if(a.answers.length<5)return res.status(400).json({error:"اكتب إجابتك"});
     data.applications.unshift(a); save(); logPlatform("application_created",req.account.id,a.role); res.status(201).json({application:a});
   });
-  app.post("/api/platform/applications/:id/status",auth,ownerOnly,(req,res)=>{
+  app.post("/api/platform/applications/:id/status",auth,ownerOnly,async(req,res)=>{
     const a=data.applications.find(x=>x.id===req.params.id); if(!a)return res.status(404).json({error:"التقديم غير موجود"});
     a.status=["accepted","rejected","open"].includes(req.body?.status)?req.body.status:"open";
     if(a.status==="accepted"){try{const guild=await getGuild();const member=await guild.members.fetch(a.discordId||"").catch(()=>null);const role=guild.roles.cache.get(String(process.env.LOWEST_ADMIN_ROLE_ID||"1548732606508703744"));if(member&&role&&!member.roles.cache.has(role.id))await member.roles.add(role,"MLD website admin application accepted");a.discordRoleId=role?.id||null;a.discordRoleName=role?.name||null;if(member)await member.send("🎉 تم قبول تقديمك في إدارة ملاذ، وتم منحك رتبة "+(role?.name||"الإدارة")+".").catch(()=>{});}catch(err){console.error("Application Discord role:",err.message);}}
