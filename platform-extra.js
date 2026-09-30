@@ -17,7 +17,10 @@ module.exports = function setupMLDExtra({ app, client, auth, ownerOnly, adminOnl
     chats: { general: [], rooms: {} },
     wallets: {},
     streaks: {},
-    giveaways: []
+    giveaways: [],
+    jokes: [],
+    jokeRatings: {},
+    stories: []
   };
 
   function load() {
@@ -131,11 +134,88 @@ module.exports = function setupMLDExtra({ app, client, auth, ownerOnly, adminOnl
     a.status=["accepted","rejected","open"].includes(req.body?.status)?req.body.status:"open"; save(); logPlatform("application_status",req.account.id,a.id+":"+a.status); res.json({application:a});
   });
 
+  const DEMO_REVIEW_NAMES=["سارة","راكان","نوف","عبدالعزيز","ليان","تركي","جود","مشعل","ريم","خالد","شهد","ناصر","دانة","سلطان","هيا","وليد","لينا","فيصل","غلا","مازن","رهف","بندر","لمى","زياد","تالا","أنس","مها","عمر","جنى","سلمان"];
+  const DEMO_REVIEW_TEXTS=[
+    "الموقع مرتب وسريع، خصوصًا قسم الألعاب 😂","التصميم فخم والنكت رهيبة","فكرة المجتمع جميلة وتحتاج استمرار","دخلت أتصفح وجلست وقت طويل 😭","قسم القصص حلو جدًا","واجهة الموقع مريحة على الجوال","الألعاب والجلسات فكرة ممتازة","أحببت تنوع الأقسام في الموقع","الشات والمجتمع يعطيان جو حلو","تجربة ممتعة وأتمنى إضافة ألعاب أكثر"
+  ];
+  function seedDemoReviews(){
+    if(data.reviews.some(r=>r.demo)) return;
+    for(let i=0;i<30;i++){
+      data.reviews.push({id:"demo-review-"+(i+1),username:DEMO_REVIEW_NAMES[i%DEMO_REVIEW_NAMES.length],rating:1+(i*7)%5,text:DEMO_REVIEW_TEXTS[i%DEMO_REVIEW_TEXTS.length],createdAt:new Date(Date.now()-i*86400000).toISOString(),demo:true});
+    }
+    data.reviews=data.reviews.slice(0,200);
+    save();
+  }
+  seedDemoReviews();
   app.get("/api/platform/reviews",(req,res)=>res.json({reviews:data.reviews.slice(0,100)}));
   app.post("/api/platform/reviews",(req,res)=>{
     const r={id:id(),username:req.account?.username||"زائر",rating:Math.max(1,Math.min(5,Number(req.body?.rating||5))),text:clean(req.body?.text,500),createdAt:new Date().toISOString()};
     if(r.text.length<2)return res.status(400).json({error:"اكتب رأيك"});
     data.reviews.unshift(r); data.reviews=data.reviews.slice(0,200); save(); logPlatform("review_created",req.account?.id||null,r.username+":"+r.rating); res.status(201).json({review:r});
+  });
+
+  const DEFAULT_JOKES=[
+    "واحد راح للدكتور وقال له: كل ما أشرب شاي عيني توجعني. قاله الدكتور: جرّب تشيل الملعقة من الكوب 😂",
+    "واحد سأل صاحبه: ليه الكمبيوتر زعلان؟ قاله: عنده مشاكل في الويندوز 😂",
+    "واحد بخيل جدًا، إذا عطس قال: الحمد لله بدون صوت عشان ما يضيّع الأجر 😂",
+    "واحد دخل اختبار ذكاء، طلع منه وقال: الحمد لله نجحت في الخروج 😂",
+    "واحد نذل راح يعزي صاحبه وقال له: مبروك على الصبر مقدمًا 😂",
+    "واحد قال لصاحبه: أنا سريع بالحساب. قاله: كم 7×8؟ قال: بسرعة ولا عادي؟ 😂",
+    "واحد نام متأخر وصحى بدري، اكتشف أن المشكلة مو في النوم… المشكلة في الحياة 😂",
+    "واحد فتح الثلاجة بالليل، الثلاجة قالت له: رجعت؟ 😂",
+    "واحد اشترى ساعة ذكية، صارت كل شوي تقول له: قم تحرك… باعها من كثر الإزعاج 😂",
+    "واحد دخل مطعم وقال: عندكم شيء خفيف؟ قالوا: نعم، الفاتورة 😂"
+  ];
+  const DEFAULT_STORIES=[
+    ["ليلة مختلفة","في ليلة هادئة وصلته رسالة قصيرة: لا تنام قبل أن تنظر خلف الباب. تردد، ثم فتحه، فلم يجد أحدًا… فقط ظرفًا صغيرًا فيه مفتاح ورسالة: بعض الأبواب لا تُفتح إلا عندما تتوقف عن الخوف."],
+    ["المقعد الفاضي","كان يترك دائمًا مقعدًا فارغًا بجانبه. سألوه لماذا، فقال: ربما يأتي شخص يحتاج جلسة بدون أسئلة. بعد أيام صار المقعد مكانًا يبدأ منه الغرباء صداقات جديدة."],
+    ["الرسالة الأخيرة","قبل أن يغادر المدينة كتب لصديقه: إذا ضاقت بك الدنيا اتصل بي. مرّت سنوات، وفي يوم صعب فتح هاتفه واتصل. جاءه الرد فورًا: كنت أنتظر اتصالك."],
+    ["المصعد","دخل المصعد وضغط الطابق السابع. توقف عند السادس وفتح بابه، لكنه لم يجد طابقًا هناك. ظهرت ورقة على الأرض مكتوب عليها: لا تنزل. ضغط زر الإغلاق، وعندما وصل السابع اختفت الورقة."],
+    ["النجمة","كل ليلة كان طفل ينظر إلى نجمة واحدة ويطلب أمنية. في يوم سأله والده عن أمنيته، فقال: أتمنى أن أبقى أتذكر أن الأشياء الصغيرة تقدر تفرحنا."],
+    ["الكرسي","وجد كرسيًا قديمًا أمام بيت مهجور. جلس عليه لدقائق، فسمع ضحكة أطفال من داخل البيت. ابتسم، ثم أدرك أن بعض الأماكن تحفظ أصوات من مرّوا بها أكثر مما تحفظ الجدران."],
+    ["الموعد","كتب لها: سأنتظرك عند المكان القديم. لم تأتِ. بعد ساعة وجد رسالة تحت الطاولة: وصلت قبلك، لكنني كنت أعرف أنك ستبحث عني هنا."],
+    ["الباب الأزرق","كان في آخر الممر باب أزرق لم يره أحد من قبل. فتحه فوجد غرفة مليئة بصور لحظاته الجميلة. على الجدار الأخير صورة لمستقبله، وتحتها جملة: لا تنسَ أن تصنع المزيد."]
+  ];
+  if(!Array.isArray(data.jokes)) data.jokes=[];
+  if(!Array.isArray(data.stories)) data.stories=[];
+  function ensureJokes(){
+    if(data.jokes.length) return;
+    DEFAULT_JOKES.forEach((text,i)=>data.jokes.push({id:"joke-"+(i+1),text,author:"MLD",likes:0,dislikes:0,createdAt:new Date().toISOString()}));
+    save();
+  }
+  ensureJokes();
+  app.get("/api/platform/jokes",(req,res)=>{
+    const list=data.jokes.slice(0,200).map(j=>({id:j.id,text:j.text,author:j.author,likes:j.likes||0,dislikes:j.dislikes||0,createdAt:j.createdAt}));
+    res.json({jokes:list});
+  });
+  app.post("/api/platform/jokes",auth,(req,res)=>{
+    const text=clean(req.body?.text,500);
+    if(text.length<3)return res.status(400).json({error:"اكتب النكتة"});
+    const j={id:id(),text,author:req.account.username,likes:0,dislikes:0,createdAt:new Date().toISOString()};
+    data.jokes.unshift(j); data.jokes=data.jokes.slice(0,200); save(); logPlatform("joke_created",req.account.id,j.id);
+    res.status(201).json({joke:j});
+  });
+  app.post("/api/platform/jokes/:id/rate",auth,(req,res)=>{
+    const j=data.jokes.find(x=>x.id===req.params.id); if(!j)return res.status(404).json({error:"النكتة غير موجودة"});
+    const rating=req.body?.rating==="like"||req.body?.rating==="dislike"?req.body.rating:null;
+    if(!rating)return res.status(400).json({error:"تقييم غير صالح"});
+    if(!data.jokeRatings[req.account.username])data.jokeRatings[req.account.username]={};
+    const previous=data.jokeRatings[req.account.username][j.id];
+    if(previous===rating)return res.json({joke:j});
+    if(previous==="like")j.likes=Math.max(0,(j.likes||0)-1);
+    if(previous==="dislike")j.dislikes=Math.max(0,(j.dislikes||0)-1);
+    j[rating==="like"?"likes":"dislikes"]=(j[rating==="like"?"likes":"dislikes"]||0)+1;
+    data.jokeRatings[req.account.username][j.id]=rating; save(); res.json({joke:j});
+  });
+  app.get("/api/platform/stories",(req,res)=>{
+    if(!data.stories.length){DEFAULT_STORIES.forEach((s,i)=>data.stories.push({id:"story-"+(i+1),title:s[0],text:s[1],author:"MLD",createdAt:new Date().toISOString()}));save();}
+    res.json({stories:data.stories.slice(0,100)});
+  });
+  app.post("/api/platform/stories",auth,(req,res)=>{
+    const title=clean(req.body?.title,100), text=clean(req.body?.text,3000);
+    if(text.length<20)return res.status(400).json({error:"اكتب قصة أطول قليلًا"});
+    const s={id:id(),title:title||"قصة جديدة",text,author:req.account.username,createdAt:new Date().toISOString()};
+    data.stories.unshift(s);data.stories=data.stories.slice(0,100);save();logPlatform("story_created",req.account.id,s.id);res.status(201).json({story:s});
   });
 
   app.get("/api/platform/messages",auth,(req,res)=>res.json({messages:data.privateMessages.filter(m=>m.to===req.account.username||m.from===req.account.username||req.account.role==="owner").slice(0,100)}));
