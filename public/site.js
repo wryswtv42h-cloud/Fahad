@@ -23,10 +23,12 @@ search.oninput=()=>{if(view!=="members")change("members");searchMembers()};
   if(!overlay){overlay=document.createElement("div");overlay.id="menu-overlay";overlay.setAttribute("aria-hidden","true");document.body.appendChild(overlay);}
   function place(){
     if(!drawer.classList.contains("open"))return;
-    var r=trigger.getBoundingClientRect(),w=Math.min(430,window.innerWidth-20);
+    var r=trigger.getBoundingClientRect(),vw=window.innerWidth,w=Math.min(430,Math.max(280,vw-20));
+    var left=Math.min(Math.max(10,Math.round(r.right-w)),Math.max(10,Math.round(vw-w-10)));
     drawer.style.top=Math.max(8,Math.round(r.bottom+8))+"px";
-    drawer.style.right=Math.max(10,Math.round(window.innerWidth-r.right))+"px";
-    drawer.style.left="auto";drawer.style.width=w+"px";
+    drawer.style.left=left+"px";
+    drawer.style.right="auto";
+    drawer.style.width=w+"px";
   }
   function close(){drawer.classList.remove("open");overlay.classList.remove("open");document.body.classList.remove("menu-open");document.documentElement.classList.remove("menu-open");trigger.setAttribute("aria-expanded","false");drawer.setAttribute("aria-hidden","true");}
   function open(){drawer.classList.add("open");overlay.classList.add("open");document.body.classList.add("menu-open");document.documentElement.classList.add("menu-open");trigger.setAttribute("aria-expanded","true");drawer.setAttribute("aria-hidden","false");requestAnimationFrame(place);}
