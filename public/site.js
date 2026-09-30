@@ -16,7 +16,16 @@ async function searchMembers(){clearTimeout(timer);const q=search.value.trim();i
 async function change(v){view=v;mobile.classList.remove("open");const rev=document.querySelector(".reviews-section"),dir=$("#directory");if(rev)rev.style.display="none";if(dir)dir.classList.remove("hidden");if(v==="message")return messageView();searchWrap.style.display=v==="members"?"flex":"none";title.textContent=v==="members"?"أعضاء المجتمع":v==="roles"?"الرتب القيادية الست":"لوحة TOP";if(v==="members")return refresh();if(v==="roles")return refresh();renderTop(await fetch("/api/public/top").then(r=>r.json()));setStatus("تحديث مباشر للنشاط")}
 document.querySelectorAll("[data-view]").forEach(b=>b.onclick=()=>change(b.dataset.view));search.oninput=()=>{if(view!=="members")change("members");searchMembers()};$("#menu").onclick=()=>mobile.classList.toggle("open");$("#close").onclick=closeModal;modal.onclick=e=>{if(e.target===modal)closeModal()};document.onkeydown=e=>{if(e.key==="Escape")closeModal()};$("#year").textContent=new Date().getFullYear();
 loadReviews();
-fetch("/api/public/server").then(r=>r.json()).then(function(d){var b=$("#discord-support");if(b&&d.supportDiscordId)b.href="https://discord.com/users/"+encodeURIComponent(d.supportDiscordId);}).catch(function(){});
+fetch("/api/public/server").then(r=>r.json()).then(function(d){
+  var name=$("#server-name"),count=$("#server-count"),founder=$("#server-founder"),bot=$("#server-bot-status"),online=$("#server-online"),visits=$("#server-visits");
+  if(name)name.textContent=d.name||"MLD";
+  if(count)count.textContent=num(d.memberCount);
+  if(founder)founder.textContent=d.ownerName||"فهد المطيري";
+  if(online)online.textContent=num(d.online);
+  if(visits)visits.textContent=num(d.totalVisits);
+  if(bot){bot.textContent=d.botReady?"● متصل":"● غير متصل";bot.classList.toggle("online",!!d.botReady);}
+  var b=$("#discord-support");if(b&&d.supportDiscordId)b.href="https://discord.com/users/"+encodeURIComponent(d.supportDiscordId);
+}).catch(function(){});
 setInterval(function(){if(reviewItems.length>3){reviewIndex=(reviewIndex+3)%reviewItems.length;renderReviews();}},3000);
 refresh();
 refreshTimer=setInterval(()=>{if(!modal.classList.contains("hidden")||view==="message")return;refresh()},15000);
