@@ -13,6 +13,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - run: node --check index.js && node --check bot-manager.js && node --check public/platform.js && node --check public/extra.js
       - run: node scripts/game-engine-smoke.js
       - run: node --input-type=commonjs < scripts/game-action-smoke.js
       - run: node scripts/bot-manager-smoke.js
