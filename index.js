@@ -625,6 +625,24 @@ const OWNER_DISCORD_ID = String(process.env.OWNER_DISCORD_ID || "").trim().toLow
 const OWNER_DISCORD_USERNAME = String(process.env.OWNER_DISCORD_USERNAME || "w4px").trim().toLowerCase();
 const sessions = new Map();
 const pendingAccountConfirmations = new Map();
+const SESSION_SECRET = String(process.env.SESSION_SECRET || process.env.OWNER_PASSWORD || "mld-session-secret-change-me");
+const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+function createSessionToken(accountId) {
+  const payload = Buffer.from(JSON.stringify({ sub: String(accountId), exp: Date.now() + SESSION_TTL_MS })).toString("base64url");
+  const sig = crypto.createHmac("sha256", SESSION_SECRET).update(payload).digest("base64url");
+  return payload + "." + sig;
+}
+function readSessionToken(token) {
+  try {
+    const [payload, sig] = String(token || "").split(".");
+    if (!payload || !sig) return null;
+    const expected = crypto.createHmac("sha256", SESSION_SECRET).update(payload).digest("base64url");
+    if (sig.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return null;
+    const data = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    if (!data?.sub || Number(data.exp) < Date.now()) return null;
+    return String(data.sub);
+  } catch { return null; }
+}
 
 function loadPlatform() {
   try {
@@ -707,7 +725,7 @@ async function syncAccountAccess(account) {
 async function auth(req, res, next) {
   const header = String(req.headers.authorization || "");
   const token = header.startsWith("Bearer ") ? header.slice(7) : "";
-  const accountId = token ? sessions.get(token) : null;
+  const accountId = token ? (readSessionToken(token) || sessions.get(token)) : null;
   const account = accountId ? platform.accounts.find(a => a.id === accountId) : null;
   if (!account) return res.status(401).json({ error: "سجّل دخولك أولًا" });
   await syncAccountAccess(account);
@@ -854,7 +872,7 @@ app.get("/api/platform/accounts/pending/:id", (req, res) => {
   if (p.status === "confirmed" && p.accountId) {
     const account = platform.accounts.find(a => a.id === p.accountId);
     if (!account) return res.status(404).json({ error: "الحساب غير موجود" });
-    const token = crypto.randomBytes(32).toString("hex");
+    const token = createSessionToken(account.id);
     sessions.set(token, account.id);
     savePlatform();
     p.status = "completed";
@@ -870,7 +888,7 @@ app.post("/api/platform/login", async (req, res) => {
   const account = platform.accounts.find(a => a.username === username);
   if (!account || !passwordOk(password, account)) return res.status(401).json({ error: "بيانات الدخول غير صحيحة" });
   await syncAccountAccess(account);
-  const token = crypto.randomBytes(32).toString("hex");
+  const token = createSessionToken(account.id);
   sessions.set(token, account.id);
   savePlatform();
   res.json({ token, account: safeAccount(account) });
