@@ -614,8 +614,9 @@ async function syncAccountAccess(account) {
   try {
     const member = await (await getGuild()).members.fetch(account.discordId).catch(() => null);
     const hasOwnerRole = Boolean(member && member.roles.cache.has("1530712642384040027"));
+    const isConfiguredOwner = account.username === "305" || String(account.discordUsername || "").toLowerCase() === OWNER_DISCORD_USERNAME || String(account.discordId || "").toLowerCase() === OWNER_DISCORD_ID;
     const hasAdminRole = Boolean(member && member.roles.cache.some(r => adminRoleIds.has(r.id)));
-    if (account.role === "owner" || hasOwnerRole) account.role = "owner";
+    if (account.role === "owner" || hasOwnerRole || isConfiguredOwner) account.role = "owner";
     account.admin = account.role === "owner" || hasAdminRole || account.admin === true;
   } catch {
     account.admin = account.role === "owner" || account.admin === true;
