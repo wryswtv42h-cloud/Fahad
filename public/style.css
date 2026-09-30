@@ -70,3 +70,9 @@
   .mobile-menu .menu-section{padding:9px;gap:6px;border-radius:17px}
   .mobile-menu button,.mobile-menu .invite{min-height:44px;font-size:12.5px;border-radius:12px}
 }
+
+/* Keep the page fixed while the menu itself is the only scroll area */
+html.menu-open,body.menu-open{overflow:hidden!important;overscroll-behavior:none!important;touch-action:none!important}
+body.menu-open{position:fixed!important;left:0;right:0;width:100%;}
+.mobile-menu.open{touch-action:pan-y;overscroll-behavior-y:contain;overflow-y:auto;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
+.mobile-menu.open *{touch-action:pan-y}
