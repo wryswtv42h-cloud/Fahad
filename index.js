@@ -270,7 +270,8 @@ app.get("/api/public/server", async (req, res) => {
       icon: guild.iconURL({ extension: "png", size: 256 }),
       memberCount: guild.memberCount,
       ownerName: process.env.SERVER_FOUNDER_NAME || "فهد المطيري",
-      invite: process.env.DISCORD_INVITE_URL || ""
+      invite: process.env.DISCORD_INVITE_URL || "",
+      supportDiscordId: /^\d{15,22}$/.test(String(process.env.OWNER_DISCORD_ID || "")) ? String(process.env.OWNER_DISCORD_ID) : ""
     });
   } catch (error) {
     console.error("Server endpoint:", error);
@@ -590,26 +591,38 @@ function logPlatform(action, accountId, details = "") {
 function safeAccount(a) {
   return {
     id: a.id, username: a.username, discordId: a.discordId,
-    role: a.role, createdAt: a.createdAt,
+    role: a.role, admin: a.role === "owner" || a.admin === true, createdAt: a.createdAt,
     profileName: a.profileName || a.username,
     avatar: a.avatar || "",
     bio: a.bio || ""
   };
 }
 
-function auth(req, res, next) {
+const adminRoleIds = new Set(["1521187079336362024","1531109479264026706","1548732297669255259","1548732341185155103","1548732606508703744"]);
+async function syncAccountAccess(account) {
+  try {
+    if (account.role === "owner") { account.admin = true; return; }
+    const member = await (await getGuild()).members.fetch(account.discordId).catch(() => null);
+    account.admin = Boolean(member && member.roles.cache.some(r => adminRoleIds.has(r.id)));
+  } catch { account.admin = account.admin === true; }
+}
+async function auth(req, res, next) {
   const header = String(req.headers.authorization || "");
   const token = header.startsWith("Bearer ") ? header.slice(7) : "";
   const accountId = token ? sessions.get(token) : null;
   const account = accountId ? platform.accounts.find(a => a.id === accountId) : null;
   if (!account) return res.status(401).json({ error: "سجّل دخولك أولًا" });
+  await syncAccountAccess(account);
   req.account = account;
   req.token = token;
   next();
 }
-
 function ownerOnly(req, res, next) {
   if (req.account?.role !== "owner") return res.status(403).json({ error: "هذا القسم للأونر فقط" });
+  next();
+}
+function adminOnly(req, res, next) {
+  if (req.account?.role !== "owner" && req.account?.admin !== true) return res.status(403).json({ error: "هذا القسم للإدارة والأونر فقط" });
   next();
 }
 
@@ -831,7 +844,7 @@ app.delete("/api/platform/lobbies/:id", auth, (req, res) => {
 
 app.get("/api/platform/logs", auth, ownerOnly, (req, res) => res.json({ logs: platform.logs.slice(0, 100) }));
 
-app.get("/api/platform/admin", auth, ownerOnly, (req, res) => {
+app.get("/api/platform/admin", auth, adminOnly, (req, res) => {
   res.json({
     accounts: platform.accounts.length,
     owners: platform.accounts.filter(a=>a.role==="owner").length,
@@ -840,7 +853,7 @@ app.get("/api/platform/admin", auth, ownerOnly, (req, res) => {
   });
 });
 
-require("./platform-extra")({ app, client, auth, ownerOnly, logPlatform, getGuild, getAllMembers, platform, savePlatform });
+require("./platform-extra")({ app, client, auth, ownerOnly, adminOnly, logPlatform, getGuild, getAllMembers, platform, savePlatform });
 
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
