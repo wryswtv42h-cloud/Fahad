@@ -612,10 +612,14 @@ function safeAccount(a) {
 const adminRoleIds = new Set(["1521187079336362024","1531109479264026706","1548732297669255259","1548732341185155103","1548732606508703744"]);
 async function syncAccountAccess(account) {
   try {
-    if (account.role === "owner") { account.admin = true; return; }
     const member = await (await getGuild()).members.fetch(account.discordId).catch(() => null);
-    account.admin = Boolean(member && member.roles.cache.some(r => adminRoleIds.has(r.id)));
-  } catch { account.admin = account.admin === true; }
+    const hasOwnerRole = Boolean(member && member.roles.cache.has("1530712642384040027"));
+    const hasAdminRole = Boolean(member && member.roles.cache.some(r => adminRoleIds.has(r.id)));
+    if (account.role === "owner" || hasOwnerRole) account.role = "owner";
+    account.admin = account.role === "owner" || hasAdminRole || account.admin === true;
+  } catch {
+    account.admin = account.role === "owner" || account.admin === true;
+  }
 }
 async function auth(req, res, next) {
   const header = String(req.headers.authorization || "");
@@ -749,13 +753,15 @@ app.get("/api/platform/accounts/pending/:id", (req, res) => {
   res.json({ status: p.status, expiresAt: p.expiresAt });
 });
 
-app.post("/api/platform/login", (req, res) => {
+app.post("/api/platform/login", async (req, res) => {
   const username = String(req.body?.username || "").trim().toLowerCase();
   const password = String(req.body?.password || "");
   const account = platform.accounts.find(a => a.username === username);
   if (!account || !passwordOk(password, account)) return res.status(401).json({ error: "بيانات الدخول غير صحيحة" });
+  await syncAccountAccess(account);
   const token = crypto.randomBytes(32).toString("hex");
   sessions.set(token, account.id);
+  savePlatform();
   res.json({ token, account: safeAccount(account) });
 });
 
