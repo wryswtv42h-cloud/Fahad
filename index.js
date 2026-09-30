@@ -1017,7 +1017,25 @@ app.delete("/api/platform/lobbies/:id",auth,(req,res)=>{
 });
 
 app.get("/api/platform/lobbies", (req, res) => {
-  res.json({ lobbies: platform.lobbies.filter(l => l.status !== "closed") });
+  // Public discovery must never expose raw gameState, decks, hands, tokens, or private cards.
+  // A sanitized summary is enough for the lobby directory; authenticated room responses use lobbyFor().
+  res.json({
+    lobbies: platform.lobbies
+      .filter(l => l.status !== "closed")
+      .map(l => ({
+        id: l.id,
+        game: l.game,
+        host: l.host,
+        players: l.players.map(p => String(p).startsWith("__test_") ? "__test_" : p),
+        spectators: l.spectators,
+        maxPlayers: l.maxPlayers,
+        status: l.status,
+        started: Boolean(l.gameState?.startedAt),
+        turn: l.gameState?.turnIndex ?? null,
+        currentPlayer: l.gameState ? l.players[l.gameState.turnIndex] || null : null,
+        createdAt: l.createdAt
+      }))
+  });
 });
 
 app.post("/api/platform/lobbies", auth, (req, res) => {
