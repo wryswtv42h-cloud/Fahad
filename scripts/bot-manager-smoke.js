@@ -4,7 +4,7 @@ const c=fs.readFileSync("bot-manager.js","utf8");
 const assert=(v,m)=>{if(!v)throw new Error(m)};
 assert(c.includes("GatewayIntentBits.MessageContent"),"managed bot needs message content intent");
 assert(c.includes('messageCreate'),"managed bot message listener missing");
-for(const cmd of ["ping","help","server","bot"]) assert(c.includes('command === "'+cmd+'"'),"missing !"+cmd+" command");
+for(const cmd of ["ping","help","server","bot","roulette"]) assert(c.includes('command === "'+cmd+'"'),"missing !"+cmd+" command");
 assert(c.includes("message.reply"),"managed bot cannot reply");
 assert(c.includes("encrypt(token)"),"bot token must be encrypted at rest");
 assert(!c.includes("res.json({ token:"),"bot token must never be returned");
