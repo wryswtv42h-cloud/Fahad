@@ -151,7 +151,7 @@
     }).catch(function(e){alert(e.message)});
   }
   function groupsView(){
-    if(!need())return;
+    
     api("/api/platform/groups").then(function(d){
       var list=d.groups.length?d.groups.map(function(g){return "<article class='group-card'><h3>"+esc(g.name)+"</h3><p>"+esc(g.description||"بدون وصف")+"</p><small>👥 "+g.members+" · @"+esc(g.owner)+"</small><button class='platform-link' data-group='"+g.id+"'>انضمام</button></article>"}).join(""):"<div class='empty'>لا توجد مجموعات بعد.</div>";
       show("المجموعات","<div class='platform-head'><div><span class='eyebrow'>MLD GROUPS</span><h2>المجموعات</h2><p class='muted'>مجتمعات صغيرة داخل MLD.</p></div>"+(account?"<button class='primary' id='new-group'>+ مجموعة</button>":"")+"</div><div id='group-create' class='account-card hidden'><input id='group-name' class='full' placeholder='اسم المجموعة'><input id='group-desc' class='full' placeholder='وصف مختصر'><button class='primary' id='save-group'>إنشاء</button></div><div class='group-grid'>"+list+"</div>");
@@ -200,10 +200,11 @@
     $("#pigeon-send").onclick=function(){var st=$("#pigeon-status"),btn=$("#pigeon-send"),msg=$("#pigeon-text").value.trim(),anon=$("#pigeon-anon").checked,name=$("#pigeon-name").value.trim();if(!selected){st.textContent="اختر عضوًا أولًا";return;}if(!msg){st.textContent="اكتب الرسالة أولًا";return;}if(!anon&&!name){st.textContent="اكتب اسم المرسل أو فعّل الإرسال كمجهول";return;}btn.disabled=true;api("/api/public/message",{method:"POST",body:JSON.stringify({memberId:selected.id,title:"زاجل من MLD",message:anon?"مرسل مجهول\n\n"+msg:"من: "+name+"\n\n"+msg})}).then(function(){st.textContent="تم إرسال الزاجل بنجاح ✓";$("#pigeon-text").value="";}).catch(function(e){st.textContent=e.message;}).finally(function(){btn.disabled=false;});};
   }
   document.querySelectorAll("[data-pigeon]").forEach(function(b){b.onclick=function(){pigeonView();var m=$("#mobile-menu");if(m)m.className=m.className.replace(/\bopen\b/g,"").trim();};});
-  document.querySelectorAll("[data-logout]").forEach(function(b){b.onclick=logoutView});
+  document.querySelectorAll("[data-logout]").forEach(function(b){b.onclick=function(){if(account)logoutView()}});
   document.querySelectorAll("[data-owner]").forEach(function(b){b.onclick=function(){adminView();var m=$("#mobile-menu");if(m)m.className=m.className.replace(/\\bopen\\b/g,"").trim();};});
-  function updateOwnerMenu(){document.querySelectorAll("[data-owner]").forEach(function(b){if(account&&account.role==="owner")b.classList.remove("hidden");else b.classList.add("hidden");});}
-  document.querySelectorAll("[data-platform]").forEach(function(b){b.onclick=function(){if(b.dataset.platform==="account")accountView();if(b.dataset.platform==="games")gamesView();if(b.dataset.platform==="groups")groupsView();if(b.dataset.platform==="admin")adminView();var m=$("#mobile-menu");if(m)m.className=m.className.replace(/\bopen\b/g,"").trim()}});
+  function updateOwnerMenu(){document.querySelectorAll("[data-owner]").forEach(function(b){if(account&&account.role==="owner")b.classList.remove("hidden");else b.classList.add("hidden");});document.querySelectorAll(".auth-only").forEach(function(b){if(account)b.classList.remove("hidden");else b.classList.add("hidden");});}
+  document.querySelectorAll("[data-platform]").forEach(function(b){b.onclick=function(){if(b.dataset.platform==="account"&&!need())return;if(b.dataset.platform==="account")accountView();if(b.dataset.platform==="games")gamesView();if(b.dataset.platform==="groups")groupsView();if(b.dataset.platform==="admin")adminView();var m=$("#mobile-menu");if(m)m.className=m.className.replace(/\bopen\b/g,"").trim()}});
+  updateOwnerMenu();
   if(token)api("/api/platform/me").then(function(d){account=d.account;updateOwnerMenu();}).catch(function(){token="";localStorage.removeItem("mld_token");updateOwnerMenu();});
   updateOwnerMenu();
   window.MLDPlatform={accountView:accountView,gamesView:gamesView,groupsView:groupsView,adminView:adminView,profileView:profileView,chatView:chatView};
