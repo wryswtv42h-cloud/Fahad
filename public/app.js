@@ -14,18 +14,44 @@ function go(p){S.page=p;closeMenu();render()}
 function menu(){
 const a=S.account,staff=a&&["admin","owner"].includes(a.role),owner=a&&a.role==="owner";
 const items=[
-["home","⌂","الرئيسية","#ff79c8",true],["top","★","TOP","#ffd166",true],["members","♟","الأعضاء","#63d9ff",true],
-["direct","✉","إرسال رسالة خاصة","#8d7cff",true],["roles","◆","الرتب القيادية","#65e6a2",true],["games","◈","الألعاب","#ff8f70",true],
-["account","◎","الحساب","#c084fc",!!a],["admin","⚙","الإدارة","#ff6688",!!staff],["groups","◉","المجموعات","#63d9ff",true],
-["tickets","▣","التذاكر","#ffb86b",!!a],["bots","♙","البوتات","#9b8cff",!!staff],["reviews","✦","الآراء","#ff79c8",true],
-["applications","✓","التقديمات","#65e6a2",!!a],["messages","✉","الرسائل","#7dd3fc",!!a],["overview","▤","مركز المنصة","#f59e0b",!!staff],
-["chat","☁","فضفض","#c084fc",!!a],["jokes","☻","نكت","#ffd166",true],["stories","▤","قصص","#fb7185",true]
+["home","⌂","الرئيسية","#ff79c8",true,"البداية"],
+["top","★","TOP","#ffd166",true,"الأكثر نشاطًا"],
+["members","♟","الأعضاء","#63d9ff",true,"أعضاء المجتمع"],
+["roles","◆","الرتب القيادية","#65e6a2",true,"الرتب المهمة"],
+["games","◈","الألعاب","#ff8f70",true,"ألعاب وجلسات"],
+["groups","◉","المجموعات","#63d9ff",true,"قروبات المجتمع"],
+["reviews","✦","الآراء","#ff79c8",true,"صوت الأعضاء"],
+["direct","✉","رسالة خاصة","#8d7cff",true,"تواصل مباشر"],
+["jokes","☻","نكت","#ffd166",true,"مساحة خفيفة"],
+["stories","▤","قصص","#fb7185",true,"قصص المجتمع"],
+["account","◎","الحساب","#c084fc",!!a,"حسابك"],
+["chat","☁","فضفض","#c084fc",!!a,"الشات العام"],
+["messages","✉","الرسائل","#7dd3fc",!!a,"رسائلك"],
+["tickets","▣","التذاكر","#ffb86b",!!a,"الدعم"],
+["applications","✓","التقديمات","#65e6a2",!!a,"طلبات الإدارة"],
+["admin","⚙","الإدارة","#ff6688",!!staff,"صلاحيات الإدارة"],
+["bots","♙","البوتات","#9b8cff",!!staff,"أنظمة البوتات"],
+["overview","▤","مركز المنصة","#f59e0b",!!staff,"حالة الأنظمة"],
+["cinema","▣","السينما","#66dcff",true,"غرف المشاهدة"]
 ];
-const x=(id,i,t,c,v=true)=>v?"<button class='menu-item' data-page='"+id+"' style='--menu-c:"+c+"'><span class='menu-icon'>"+i+"</span><span>"+t+"</span></button>":"";
-N.innerHTML="<div class='menu-section'><div class='menu-title'>MLD · الأقسام</div><div class='menu-grid menu-grid-main'>"+items.map(i=>x(...i)).join("")+"</div></div>"
-+(owner?"<div class='menu-section owner-menu-section'><div class='menu-title'>تحكم الأونر</div>"+x("owner","♛","لوحة الأونر","#ff79c8",true)+"</div>":"")
-+(a?"<button id='logout' class='danger-btn wide menu-login'>تسجيل الخروج</button>":"<div class='menu-auth'><button class='primary wide menu-login' data-page='login'>تسجيل الدخول</button><button class='secondary wide menu-login' data-page='register'>إنشاء حساب</button></div>")
-+"<a class='invite' href='"+esc(S.server?.invite||"#")+"' target='_blank' rel='noreferrer'>انضم إلى سيرفر MLD ↗</a>";
+const groups=[
+["اكتشف MLD","استكشف المجتمع","home,top,members,roles,games,groups,reviews"],
+["التواصل والمحتوى","كل ما يجمع أعضاء MLD","direct,chat,messages,jokes,stories"],
+["حسابي والخدمات","الخدمات المرتبطة بحسابك","account,tickets,applications"],
+["إدارة المنصة","صلاحيات وأنظمة الإدارة","admin,bots,overview"]
+];
+const x=(id,i,t,c,v=true,sub="")=>v?"<button class='menu-item "+(S.page===id?"active":"")+"' data-page='"+id+"' style='--menu-c:"+c+"'><span class='menu-icon'>"+i+"</span><span class='menu-copy'><b>"+t+"</b><small>"+sub+"</small></span>"+(S.page===id?"<span class='menu-active'>●</span>":"")+"</button>":"";
+const byId=new Map(items.map(i=>[i[0],i]));
+let html="<div class='menu-intro'><div><span class='eyebrow'>MLD · MENU</span><b>كل شيء في مكانه.</b><small>"+(owner?"وضع الأونر مفعّل":"واجهة المجتمع")+"</small></div><span class='menu-live'><i></i> LIVE</span></div>";
+for(const [title,desc,ids] of groups){
+const allowed=ids.split(",").map(id=>byId.get(id)).filter(Boolean).filter(i=>i[4]);
+if(!allowed.length)continue;
+html+="<div class='menu-section'><div class='menu-title-row'><div><div class='menu-title'>"+title+"</div><small>"+desc+"</small></div><span>"+String(allowed.length).padStart(2,"0")+"</span></div><div class='menu-grid'>"+allowed.map(i=>x(...i)).join("")+"</div></div>";
+}
+if(owner)html+="<div class='menu-section owner-menu-section'><div class='menu-title-row'><div><div class='menu-title'>منطقة الأونر</div><small>تحكم كامل وحصري</small></div><span>01</span></div>"+x("owner","♛","لوحة الأونر","#ff79c8",true,"التحكم الكامل بالمنصة")+"</div>";
+html+=a?"<button id='logout' class='danger-btn wide menu-login'>تسجيل الخروج</button>":"<div class='menu-auth'><button class='primary wide menu-login' data-page='login'>تسجيل الدخول</button><button class='secondary wide menu-login' data-page='register'>إنشاء حساب</button></div>";
+html+="<a class='invite' href='"+esc(S.server?.invite||"#")+"' target='_blank' rel='noreferrer'><span>انضم إلى سيرفر MLD</span><b>↗</b></a>";
+N.innerHTML=html;
 $$("[data-page]").forEach(btn=>btn.onclick=()=>go(btn.dataset.page));
 const l=$("#logout");if(l)l.onclick=logout;
 }
