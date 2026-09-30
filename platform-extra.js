@@ -42,6 +42,39 @@ module.exports = function setupMLDExtra({ app, client, auth, ownerOnly, adminOnl
   const dmBroadcastJobs=new Map();
   const staffOnly=(req,res,next)=>req.account?.role==="owner" || req.account?.admin===true ? next() : res.status(403).json({error:"هذا القسم للإدارة والأونر"});
   function chatMember(room, username){ return room.members.includes(username) || room.owner===username; }
+  const aiRate=new Map();
+  app.get("/api/platform/ai/live-token",auth,async(req,res)=>{
+    const now=Date.now(), key=String(req.account.id||req.account.username), old=aiRate.get(key)||[];
+    const recent=old.filter(t=>now-t<60000);
+    if(recent.length>=5)return res.status(429).json({error:"تم الوصول للحد المؤقت. انتظر دقيقة."});
+    recent.push(now); aiRate.set(key,recent);
+    const apiKey=String(process.env.GEMINI_API_KEY||"").trim();
+    if(!apiKey)return res.status(503).json({error:"ميزة الذكاء الصوتي تحتاج GEMINI_API_KEY في متغيرات Railway."});
+    try{
+      const nowIso=new Date().toISOString();
+      const payload={
+        authToken:{
+          uses:1,
+          expireTime:new Date(Date.now()+30*60*1000).toISOString(),
+          newSessionExpireTime:new Date(Date.now()+60*1000).toISOString(),
+          liveConnectConstraints:{
+            model:"models/gemini-3.8-live",
+            config:{
+              responseModalities:["AUDIO"],
+              inputAudioTranscription:{},
+              outputAudioTranscription:{},
+              sessionResumption:{},
+              systemInstruction:{parts:[{text:"أنت مساعد MLD الصوتي. تحدث بالعربية السعودية بشكل طبيعي وودود ومختصر. اسمع المستخدم ورد عليه مباشرة بصوت. لا تقل إنك روبوت إلا إذا سُئلت. لا تستخدم مقدمات طويلة. اسمك مساعد MLD."}]}
+            }
+          }
+        }
+      };
+      const rr=await fetch("https://generativelanguage.googleapis.com/v1beta/auth_tokens",{method:"POST",headers:{"x-goog-api-key":apiKey,"content-type":"application/json"},body:JSON.stringify(payload)});
+      const data=await rr.json();
+      if(!rr.ok)return res.status(502).json({error:data?.error?.message||"تعذر تشغيل خدمة الذكاء الصوتي"});
+      res.json({token:data.name,model:"gemini-3.8-live",expiresAt:data.expireTime||nowIso});
+    }catch(e){res.status(502).json({error:"تعذر الاتصال بخدمة الذكاء الصوتي"})}
+  });
   app.get("/api/platform/chat/general",(req,res)=>res.json({messages:data.chats.general.slice(-200)}));
   app.post("/api/platform/chat/general",auth,(req,res)=>{
     const message=clean(req.body?.message,1000); if(!message)return res.status(400).json({error:"اكتب رسالة"});
