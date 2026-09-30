@@ -15,10 +15,12 @@
       api("/api/platform/bot-catalog").then(function(d){
         var logged=!!token();
         var cards=(d.bots||[]).map(function(b){
-          var actions=logged
-            ? "<div class='bot-actions'><button class='primary' data-openbot='"+b.id+"'>لوحة التحكم</button><button class='platform-link' data-stopbot='"+b.id+"'>"+(b.status==="online"?"إيقاف":"تشغيل")+"</button><button class='platform-link danger-link' data-delbot='"+b.id+"'>حذف البوت</button></div>"
-            : "<button class='primary full-btn' data-login-bot>سجل دخول للتحكم بالبوت</button>";
-          return "<article class='game-card bot-manager-card'><div class='game-icon'>🤖</div><h3>"+esc(b.name)+"</h3><p>"+esc(b.botUsername||"بوت Discord")+"</p><span class='platform-chip "+(b.status==="online"?"online":"")+"'>"+statusText(b.status)+"</span><p class='small'>"+esc(b.guildName||"السيرفر غير محدد")+"</p>"+(b.lastError?"<p class='small danger-link'>"+esc(b.lastError)+"</p>":"")+actions+"</article>";
+          var actions=b.programmed
+            ? "<div class='bot-actions'><button class='primary' data-programbot='"+b.id+"'>اختيار البوت</button></div>"
+            : (logged
+              ? "<div class='bot-actions'><button class='primary' data-openbot='"+b.id+"'>لوحة التحكم</button><button class='platform-link' data-stopbot='"+b.id+"'>"+(b.status==="online"?"إيقاف":"تشغيل")+"</button><button class='platform-link danger-link' data-delbot='"+b.id+"'>حذف البوت</button></div>"
+              : "<button class='primary full-btn' data-login-bot>سجل دخول للتحكم بالبوت</button>");
+          return "<article class='game-card bot-manager-card'><div class='game-icon'>🤖</div><h3>"+esc(b.name)+"</h3><p>"+esc(b.botUsername||"بوت Discord")+"</p><span class='platform-chip "+(b.status==="online"?"online":"")+"'>"+statusText(b.status)+"</span><p class='small'>"+esc(b.guildName||"بوت ملاذ المبرمج")+"</p>"+(b.description?"<p class='small bot-description'>"+esc(b.description)+"</p>":"")+(b.features?"<div class='bot-features'>"+b.features.map(function(x){return "<span>"+esc(x)+"</span>"}).join("")+"</div>":"")+(b.lastError?"<p class='small danger-link'>"+esc(b.lastError)+"</p>":"")+actions+"</article>";
         }).join("");
         if(!cards)cards="<div class='empty'>لا توجد بوتات مضافة حاليًا.</div>";
         var head="<div class='platform-head'><div><span class='eyebrow'>MLD BOT</span><h2>البوتات</h2><p class='muted'>شاهد البوتات المتاحة. إنشاء بوت أو تشغيله أو التحكم فيه يتطلب تسجيل الدخول.</p></div></div>";
@@ -30,6 +32,10 @@
         document.querySelectorAll("[data-stopbot]").forEach(function(b){b.onclick=function(){var mine=d.bots.find(function(z){return z.id===b.dataset.stopbot;});var url="/api/platform/my-bots/"+b.dataset.stopbot+(mine&&mine.status==="online"?"/stop":"/start");api(url,{method:"POST"}).then(load).catch(function(e){alert(e.message)})}});
         document.querySelectorAll("[data-delbot]").forEach(function(b){b.onclick=function(){if(confirm("حذف البوت وإيقاف استضافته؟"))api("/api/platform/my-bots/"+b.dataset.delbot,{method:"DELETE"}).then(load).catch(function(e){alert(e.message)})}});
         document.querySelectorAll("[data-openbot]").forEach(function(b){b.onclick=function(){commandPanel(b.dataset.openbot)}});
+        document.querySelectorAll("[data-programbot]").forEach(function(b){b.onclick=function(){
+          var bot=d.bots.find(function(x){return x.id===b.dataset.programbot;}); if(!bot)return;
+          show("البوت","<div class='platform-head'><div><span class='eyebrow'>MLD BOT</span><h2>"+esc(bot.name)+"</h2><p class='muted'>"+esc(bot.description||"بوت مبرمج داخل منظومة ملاذ.")+"</p></div><button class='platform-link' id='back-bots'>رجوع</button></div><div class='account-card'><h3>الأوامر والمميزات</h3><div class='bot-features'>"+(bot.features||[]).map(function(x){return "<span>"+esc(x)+"</span>"}).join("")+"</div><p class='muted'>الأوامر الأساسية: <b>!ping</b> · <b>!help</b> · <b>!server</b> · <b>!bot</b> · <b>!roulette</b></p><button class='primary' id='back-bots-2'>العودة لقائمة البوتات</button></div>"); $("#back-bots").onclick=bots; $("#back-bots-2").onclick=bots;
+        }});
       }).catch(function(e){alert(e.message)});
     }
     function addBot(ds){
