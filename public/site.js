@@ -33,7 +33,7 @@ search.oninput=()=>{if(view!=="members")change("members");searchMembers()};
   function close(){drawer.classList.remove("open");overlay.classList.remove("open");document.body.classList.remove("menu-open");document.documentElement.classList.remove("menu-open");trigger.setAttribute("aria-expanded","false");drawer.setAttribute("aria-hidden","true");}
   function open(){drawer.classList.add("open");overlay.classList.add("open");document.body.classList.add("menu-open");document.documentElement.classList.add("menu-open");trigger.setAttribute("aria-expanded","true");drawer.setAttribute("aria-hidden","false");requestAnimationFrame(place);}
   function toggle(){drawer.classList.contains("open")?close():open();}
-  trigger.setAttribute("aria-expanded","false");trigger.setAttribute("aria-controls","mobile-menu");drawer.setAttribute("aria-hidden","true");
+  trigger.setAttribute("aria-expanded","false");trigger.setAttribute("aria-controls","mobile-menu");drawer.setAttribute("aria-hidden","true");drawer.classList.remove("open");overlay.classList.remove("open");document.body.classList.remove("menu-open");document.documentElement.classList.remove("menu-open");
   trigger.onclick=function(e){e.preventDefault();e.stopPropagation();toggle();};
   overlay.onclick=close;
   drawer.addEventListener("click",function(e){var b=e.target.closest("button,a");if(!b)return;setTimeout(close,0);});
@@ -41,7 +41,7 @@ search.oninput=()=>{if(view!=="members")change("members");searchMembers()};
   document.addEventListener("keydown",function(e){if(e.key==="Escape")close();});
   window.addEventListener("resize",place,{passive:true});
   window.addEventListener("scroll",place,{passive:true});
-  window.MLDMenu={open:open,close:close,toggle:toggle};
+  window.MLDMenu={open:open,close:close,toggle:toggle};window.addEventListener("pageshow",close);
 })();
 async function loadAnnouncement(){try{const d=await fetch("/api/platform/announcement").then(r=>r.json()),a=d.announcement||{},bar=$("#announcement-bar"),text=$("#announcement-text");if(!bar||!text)return;if(a.enabled&&a.text){text.textContent=a.text;bar.classList.remove("hidden");if(a.color)bar.style.setProperty("--announcement-color",a.color);else bar.style.removeProperty("--announcement-color")}else bar.classList.add("hidden")}catch(e){}}
 loadAnnouncement();
