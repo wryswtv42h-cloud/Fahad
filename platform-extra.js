@@ -90,6 +90,15 @@ module.exports = function setupMLDExtra({ app, client, auth, ownerOnly, logPlatf
     save(); logPlatform("bot_settings",req.account.id,bot.id); res.json({settings:data.botSettings[bot.id]});
   });
 
+  app.post("/api/platform/profile",auth,(req,res)=>{
+    req.account.profileName=clean(req.body?.profileName,60)||req.account.username;
+    req.account.avatar=clean(req.body?.avatar,500);
+    req.account.bio=clean(req.body?.bio,300);
+    savePlatform();
+    logPlatform("profile_updated",req.account.id,req.account.username);
+    res.json({account:req.account});
+  });
+
   app.get("/api/platform/tickets",auth,(req,res)=>{
     const mine=data.tickets.filter(t=>t.owner===req.account.username||req.account.role==="owner");
     res.json({tickets:mine});
