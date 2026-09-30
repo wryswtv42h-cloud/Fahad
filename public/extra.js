@@ -77,6 +77,17 @@
   }
   document.querySelectorAll("[data-chat],[data-profile],[data-pigeon],[data-extra='bots'],[data-extra='tickets'],[data-extra='applications'],[data-extra='messages'],[data-extra='economy'],[data-extra='overview'],[data-logout]").forEach(wrapLogin);
 
+  // Hard fallback for the guest login button: bind after platform.js has loaded.
+  document.querySelectorAll("[data-login]").forEach(function(b){
+    b.onclick=function(e){
+      if(e)e.preventDefault();
+      if(window.MLDPlatform&&typeof window.MLDPlatform.loginView==="function"){
+        window.MLDPlatform.loginView();
+      }
+      closeMenu();
+    };
+  });
+
   function syncAccess(){
     if(window.MLDPlatform&&window.MLDPlatform.refreshMenu)window.MLDPlatform.refreshMenu();
   }
