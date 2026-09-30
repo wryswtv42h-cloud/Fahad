@@ -5,6 +5,7 @@
   "description": "Discord bot and read-only API for the Malaz website",
   "main": "index.js",
   "scripts": {
+    "prestart": "node --check index.js",
     "start": "node index.js"
   },
   "engines": {
