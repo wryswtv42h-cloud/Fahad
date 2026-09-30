@@ -169,7 +169,9 @@ app.get("/api/platform/owner/accounts",auth,ownerOnly,(req,res)=>{
         try{
           for(const member of members){
             try{
-              await member.send({content:"📣 **MLD Community**\\n\\n"+message});
+              await member.send({content:"📣 **MLD Community**
+
+"+message});
               job.sent++;
             }catch(e){
               job.failed++;
