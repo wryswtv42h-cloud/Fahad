@@ -40,7 +40,7 @@
         var poll=setInterval(function(){
           attempts++;
           api("/api/platform/accounts/pending/"+encodeURIComponent(d.pendingId)+"?token="+encodeURIComponent(d.browserToken)).then(function(v){
-            if(v.status==="confirmed"){clearInterval(poll);token=v.token;account=v.account;localStorage.setItem("mld_token",token);accountView();}
+            if(v.status==="confirmed"){clearInterval(poll);token=v.token;account=v.account;localStorage.setItem("mld_token",token);updateOwnerMenu();accountView();}
             else if(v.status==="cancelled"||attempts>=60){clearInterval(poll);if(attempts>=60)$("#pending-status").textContent="انتهت مهلة التأكيد. اضغط إنشاء الحساب للمحاولة من جديد.";create.disabled=false;create.textContent="إرسال طلب إنشاء الحساب";}
           }).catch(function(){});
           if(attempts>=60)clearInterval(poll);
@@ -52,7 +52,7 @@
   }
   function loginView(){
     show("تسجيل الدخول","<div class='account-card narrow'><span class='eyebrow'>WELCOME BACK</span><h2>تسجيل الدخول</h2><input id='login-user' class='full' placeholder='اسم المستخدم'><input id='login-pass' class='full' type='password' placeholder='كلمة المرور'><button class='primary wide' id='login'>دخول</button><button class='platform-link' id='new-account'>إنشاء حساب جديد</button></div>");
-    $("#login").onclick=function(){api("/api/platform/login",{method:"POST",body:JSON.stringify({username:$("#login-user").value,password:$("#login-pass").value})}).then(function(d){token=d.token;account=d.account;localStorage.setItem("mld_token",token);accountView()}).catch(function(e){alert(e.message)})};
+    $("#login").onclick=function(){api("/api/platform/login",{method:"POST",body:JSON.stringify({username:$("#login-user").value,password:$("#login-pass").value})}).then(function(d){token=d.token;account=d.account;localStorage.setItem("mld_token",token);updateOwnerMenu();accountView()}).catch(function(e){alert(e.message)})};
     $("#new-account").onclick=accountView;
   }
   function gamesView(){
@@ -108,7 +108,10 @@
   document.querySelectorAll("[data-chat]").forEach(function(b){b.onclick=chatView});
   document.querySelectorAll("[data-pigeon]").forEach(function(b){b.onclick=function(){messageView();$("#view-title").textContent="الزاجل";$("#subtitle").textContent="أرسل رسالة لعضو من السيرفر باسمك أو كمجهول.";};});
   document.querySelectorAll("[data-logout]").forEach(function(b){b.onclick=logoutView});
+  document.querySelectorAll("[data-owner]").forEach(function(b){b.onclick=function(){adminView();var m=$("#mobile-menu");if(m)m.className=m.className.replace(/\\bopen\\b/g,"").trim();};});
+  function updateOwnerMenu(){document.querySelectorAll("[data-owner]").forEach(function(b){if(account&&account.role==="owner")b.classList.remove("hidden");else b.classList.add("hidden");});}
   document.querySelectorAll("[data-platform]").forEach(function(b){b.onclick=function(){if(b.dataset.platform==="account")accountView();if(b.dataset.platform==="games")gamesView();if(b.dataset.platform==="groups")groupsView();if(b.dataset.platform==="admin")adminView();var m=$("#mobile-menu");if(m)m.className=m.className.replace(/\bopen\b/g,"").trim()}});
-  if(token)api("/api/platform/me").then(function(d){account=d.account}).catch(function(){token="";localStorage.removeItem("mld_token")});
+  if(token)api("/api/platform/me").then(function(d){account=d.account;updateOwnerMenu();}).catch(function(){token="";localStorage.removeItem("mld_token");updateOwnerMenu();});
+  updateOwnerMenu();
   window.MLDPlatform={accountView:accountView,gamesView:gamesView,groupsView:groupsView,adminView:adminView,profileView:profileView,chatView:chatView};
 })();
