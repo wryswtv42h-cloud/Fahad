@@ -1,0 +1,13 @@
+"use strict";
+const fs=require("fs");
+const c=fs.readFileSync("bot-manager.js","utf8");
+const assert=(v,m)=>{if(!v)throw new Error(m)};
+assert(c.includes("GatewayIntentBits.MessageContent"),"managed bot needs message content intent");
+assert(c.includes('messageCreate'),"managed bot message listener missing");
+for(const cmd of ["ping","help","server","bot"]) assert(c.includes('command === "'+cmd+'"'),"missing !"+cmd+" command");
+assert(c.includes("message.reply"),"managed bot cannot reply");
+assert(c.includes("encrypt(token)"),"bot token must be encrypted at rest");
+assert(!c.includes("res.json({ token:"),"bot token must never be returned");
+assert(c.includes('ownerId===req.account.id'),"bot ownership must be account scoped");
+assert(c.includes('req.account.discordGuilds'),"guild selection must be tied to linked Discord account");
+console.log("BOT_MANAGER_SECURITY_SMOKE_OK");
