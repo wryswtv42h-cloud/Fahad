@@ -930,7 +930,8 @@ app.post("/api/platform/groups", auth, async (req, res) => {
 });
 app.post("/api/platform/groups/:id/join", auth, async (req, res) => {
   const group=platform.groups.find(g=>g.id===req.params.id);if(!group)return res.status(404).json({error:"المجموعة غير موجودة"});
-  if(group.status!=="approved"&&group.owner!==req.account.username)return res.status(409).json({error:"القروب بانتظار اعتماد الأونر"});\n  if(group.status==="approved"&&group.discordRoleId){try{const guild=await getGuild();const account=platform.accounts.find(x=>x.username===req.account.username);const member=account?.discordId?await guild.members.fetch(account.discordId).catch(()=>null):null;const role=guild.roles.cache.get(group.discordRoleId);if(member&&role&&!member.roles.cache.has(role.id))await member.roles.add(role,"MLD group membership");}catch(err){console.error("Group role:",err.message);}}
+  if(group.status!=="approved"&&group.owner!==req.account.username)return res.status(409).json({error:"القروب بانتظار اعتماد الأونر"});
+  if(group.status==="approved"&&group.discordRoleId){try{const guild=await getGuild();const account=platform.accounts.find(x=>x.username===req.account.username);const member=account?.discordId?await guild.members.fetch(account.discordId).catch(()=>null):null;const role=guild.roles.cache.get(group.discordRoleId);if(member&&role&&!member.roles.cache.has(role.id))await member.roles.add(role,"MLD group membership");}catch(err){console.error("Group role:",err.message);}}
   if(!group.members.includes(req.account.username))group.members.push(req.account.username);savePlatform();logPlatform("group_joined",req.account.id,group.name);
   res.json({ok:true,group});
 });
