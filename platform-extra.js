@@ -172,9 +172,7 @@ app.get("/api/platform/owner/accounts",auth,ownerOnly,(req,res)=>{
         try{
           for(const member of members){
             try{
-              await member.send({content:"📣 **MLD Community**
-
-"+message});
+              await member.send({content:"📣 **MLD Community**\n\n"+message});
               job.sent++;
             }catch(e){
               job.failed++;
@@ -457,9 +455,7 @@ app.post("/api/platform/tickets/:id/close",auth,(req,res)=>{
       if(cmd==="ping") await message.reply("🏓 MLD Bot شغال.");
       else if(cmd==="help") await message.reply("🤖 MLD: !ping !server !top !balance !daily !streak !games");
       else if(cmd==="server"){const g=await getGuild(); await message.reply("🌐 "+g.name+" · "+g.memberCount+" عضو");}
-      else if(cmd==="top"){const g=await getGuild(); const ms=await getAllMembers(g); const top=ms.sort((a,b)=>(b.id.localeCompare(a.id))).slice(0,5); await message.reply("🏆 TOP
-"+top.map((m,i)=>(i+1)+". "+m.displayName).join("
-"));}
+      else if(cmd==="top"){const g=await getGuild(); const ms=await getAllMembers(g); const top=ms.sort((a,b)=>(b.id.localeCompare(a.id))).slice(0,5); await message.reply("🏆 TOP\n"+top.map((m,i)=>(i+1)+". "+m.displayName).join("\n"));}
       else if(cmd==="balance"){const w=data.wallets[message.author.id]||{coins:0}; await message.reply("💰 رصيدك: "+w.coins+" عملة");}
       else if(cmd==="daily"){const key=message.author.id, now=Date.now(), old=data.streaks[key]||{days:0,last:null}; if(old.last&&now-old.last<86400000)return message.reply("⏳ استلمت اليومية بالفعل."); old.days=old.last&&now-old.last<172800000?old.days+1:1; old.last=now; data.streaks[key]=old; data.wallets[key]=Object.assign({coins:0},data.wallets[key],{coins:(data.wallets[key]?.coins||0)+100+old.days*10}); save(); await message.reply("🎁 استلمت "+(100+old.days*10)+" عملة · ستريك "+old.days);}
       else if(cmd==="streak"){const s=data.streaks[message.author.id]||{days:0}; await message.reply("🔥 ستريك: "+s.days+" يوم");}
