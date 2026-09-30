@@ -202,9 +202,9 @@
   document.querySelectorAll("[data-pigeon]").forEach(function(b){b.onclick=function(){pigeonView();var m=$("#mobile-menu");if(m)m.className=m.className.replace(/\bopen\b/g,"").trim();};});
   document.querySelectorAll("[data-logout]").forEach(function(b){b.onclick=function(){if(account)logoutView();else{loginView();var m=$("#mobile-menu");if(m)m.classList.remove("open");}}});
   document.querySelectorAll("[data-login]").forEach(function(b){b.onclick=function(){loginView();var m=$("#mobile-menu");if(m)m.classList.remove("open");}});
-  document.querySelectorAll("[data-owner]").forEach(function(b){b.onclick=function(){adminView();var m=$("#mobile-menu");if(m)m.classList.remove("open");};});
-  function updateOwnerMenu(){document.querySelectorAll(".auth-only,.guest-only,.admin-only").forEach(function(b){b.classList.remove("hidden");});document.querySelectorAll("[data-owner]").forEach(function(b){b.classList.remove("hidden");});}
-  document.querySelectorAll("[data-platform]").forEach(function(b){b.onclick=function(){if(b.dataset.platform==="account"&&!need())return;if(b.dataset.platform==="account")accountView();if(b.dataset.platform==="games")gamesView();if(b.dataset.platform==="groups")groupsView();if(b.dataset.platform==="admin")adminView();var m=$("#mobile-menu");if(m)m.className=m.className.replace(/\bopen\b/g,"").trim()}});
+  document.querySelectorAll("[data-owner]").forEach(function(b){b.onclick=function(){if(!need())return;adminView();var m=$("#mobile-menu");if(m)m.classList.remove("open");};});
+  function updateOwnerMenu(){document.querySelectorAll(".auth-only,.guest-only,.admin-only,[data-owner]").forEach(function(b){b.classList.remove("hidden");});}
+  document.querySelectorAll("[data-platform]").forEach(function(b){b.onclick=function(){if(b.dataset.platform==="account"&&!need())return;if(b.dataset.platform==="account")accountView();if(b.dataset.platform==="games")gamesView();if(b.dataset.platform==="groups")groupsView();if(b.dataset.platform==="admin"){if(!need())return;adminView();}var m=$("#mobile-menu");if(m)m.className=m.className.replace(/\bopen\b/g,"").trim()}});
   updateOwnerMenu();
   if(token)api("/api/platform/me").then(function(d){account=d.account;updateOwnerMenu();}).catch(function(){token="";localStorage.removeItem("mld_token");updateOwnerMenu();});
   updateOwnerMenu();
