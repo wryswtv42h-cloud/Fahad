@@ -128,6 +128,7 @@
     }).catch(function(e){alert(e.message)});
   }
   function groupsView(){
+    if(!need())return;
     api("/api/platform/groups").then(function(d){
       var list=d.groups.length?d.groups.map(function(g){return "<article class='group-card'><h3>"+esc(g.name)+"</h3><p>"+esc(g.description||"بدون وصف")+"</p><small>👥 "+g.members+" · @"+esc(g.owner)+"</small><button class='platform-link' data-group='"+g.id+"'>انضمام</button></article>"}).join(""):"<div class='empty'>لا توجد مجموعات بعد.</div>";
       show("المجموعات","<div class='platform-head'><div><span class='eyebrow'>MLD GROUPS</span><h2>المجموعات</h2><p class='muted'>مجتمعات صغيرة داخل MLD.</p></div>"+(account?"<button class='primary' id='new-group'>+ مجموعة</button>":"")+"</div><div id='group-create' class='account-card hidden'><input id='group-name' class='full' placeholder='اسم المجموعة'><input id='group-desc' class='full' placeholder='وصف مختصر'><button class='primary' id='save-group'>إنشاء</button></div><div class='group-grid'>"+list+"</div>");
@@ -167,6 +168,7 @@
   document.querySelectorAll("[data-profile]").forEach(function(b){b.onclick=profileView});
   document.querySelectorAll("[data-chat]").forEach(function(b){b.onclick=chatView});
   function pigeonView(){
+    if(!need())return;
     show("الزاجل","<div class='message-box'><div class='message-icon'>✦</div><h3>الزاجل</h3><p class='muted'>ابحث عن عضو من سيرفر MLD، اختره، ثم أرسل رسالتك باسمك أو كمجهول.</p><input id='pigeon-search' class='full' placeholder='ابحث باسم العضو أو اليوزر...' autocomplete='off'><div id='pigeon-results' class='recipient-results'></div><div id='pigeon-selected' class='muted small'>لم يتم اختيار مستلم.</div><label class='check'><input id='pigeon-anon' type='checkbox'> إرسال كمجهول</label><input id='pigeon-name' class='full' maxlength='60' placeholder='اسم المرسل إذا اخترت الاسم الظاهر'><textarea id='pigeon-text' class='full' maxlength='2000' placeholder='اكتب رسالتك...'></textarea><p id='pigeon-status'></p><button class='primary wide' id='pigeon-send'>إرسال الزاجل</button></div>");
     var selected=null, timer;
     var ps=$("#pigeon-search");
