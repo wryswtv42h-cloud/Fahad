@@ -80,6 +80,22 @@ module.exports = function setupMLDExtra({ app, client, auth, ownerOnly, adminOnl
     const username=clean(req.params.username,24).toLowerCase(); if(username===room.owner)return res.status(400).json({error:"لا يمكن حذف مالك الشات"});
     room.members=room.members.filter(x=>x!==username); save(); logPlatform("private_chat_member_removed",req.account.id,room.id+":"+username); res.json({room});
   });
+  app.get("/api/platform/chat/users",auth,(req,res)=>{
+    const users=platform.accounts.map(a=>({id:a.id,username:a.username,displayName:a.displayName||a.username,avatar:a.avatar||"",role:a.role||"member"}));
+    res.json({users});
+  });
+  app.get("/api/platform/owner/accounts",auth,ownerOnly,(req,res)=>{
+    res.json({accounts:platform.accounts.map(a=>({id:a.id,username:a.username,displayName:a.displayName||a.username,discordUsername:a.discordUsername||"",role:a.role||"member",admin:Boolean(a.admin),createdAt:a.createdAt||null}))});
+  });
+  app.post("/api/platform/owner/accounts/:id/admin",auth,ownerOnly,(req,res)=>{
+    const account=platform.accounts.find(a=>a.id===req.params.id);
+    if(!account)return res.status(404).json({error:"الحساب غير موجود"});
+    if(account.role==="owner")return res.status(400).json({error:"لا يمكن تغيير صلاحية الأونر"});
+    const enabled=Boolean(req.body?.enabled);
+    account.admin=enabled; account.role=enabled?"admin":"member"; savePlatform();
+    logPlatform("admin_role_updated",req.account.id,account.username+":"+enabled);
+    res.json({account:{id:account.id,username:account.username,role:account.role,admin:account.admin}});
+  });
   app.get("/api/platform/announcement",(req,res)=>{
     const a=data.announcement||{enabled:false,text:"",color:"",updatedAt:null};
     res.json({announcement:{enabled:Boolean(a.enabled),text:clean(a.text,500),color:/^#[0-9a-fA-F]{6}$/.test(String(a.color||""))?a.color:"",updatedAt:a.updatedAt||null}});
