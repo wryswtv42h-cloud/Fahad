@@ -461,8 +461,34 @@ client.on("guildMemberAdd", invalidateMemberSnapshot);
 client.on("guildMemberRemove", invalidateMemberSnapshot);
 client.on("guildMemberUpdate", invalidateMemberSnapshot);
 
-client.on("messageCreate", (message) => {
-  if (message.author.bot) return;
+const protectionEnabled = String(process.env.PROTECTION_ENABLED || "true").toLowerCase() !== "false";
+const protectionWindow = new Map();
+const protectionLastMessage = new Map();
+const PROTECTION_PREFIX = String(process.env.BOT_COMMAND_PREFIX || "!").slice(0, 3) || "!";
+
+function canModerate(member) {
+  return Boolean(member?.permissions?.has("Administrator") || member?.permissions?.has("ManageMessages") || member?.permissions?.has("ModerateMembers"));
+}
+
+async function protectionAction(message, reason) {
+  try { await message.delete(); } catch (e) { console.error("Protection delete:", e.message); }
+  try {
+    if (message.member && message.member.moderatable && message.member.permissions && message.member.permissions.has("ModerateMembers")) {
+      await message.member.timeout(60_000, "MLD Protection: " + reason);
+    }
+  } catch (e) { console.error("Protection timeout:", e.message); }
+}
+
+function rouletteNames(message) {
+  const users = Array.from(message.mentions.users.values()).filter(u => !u.bot);
+  const unique = [];
+  const seen = new Set();
+  for (const user of users) if (!seen.has(user.id)) { seen.add(user.id); unique.push(user); }
+  return unique.slice(0, 20).map(u => ({ id:u.id, name:u.globalName || u.username }));
+}
+
+client.on("messageCreate", async (message) => {
+  if (message.author.bot || !message.guild) return;
 
   const sender = getActivity(message.author.id);
   sender.messages += 1;
@@ -471,6 +497,58 @@ client.on("messageCreate", (message) => {
   for (const id of message.mentions.users.keys()) {
     getActivity(id).mentionsReceived += 1;
     sender.mentionsSent += 1;
+  }
+
+  const member = message.member;
+  const privileged = canModerate(member);
+  const now = Date.now();
+  const key = message.author.id;
+  const history = protectionWindow.get(key) || [];
+  const recent = history.filter(t => now - t < 8_000);
+  recent.push(now);
+  protectionWindow.set(key, recent);
+
+  const text = String(message.content || "").trim();
+  const repeated = text && protectionLastMessage.get(key)?.text === text && now - protectionLastMessage.get(key).at < 12_000;
+  protectionLastMessage.set(key, { text, at: now });
+
+  if (protectionEnabled && !privileged) {
+    const hasInvite = /(?:discord\\.gg|discord(?:app)?\\.com\\/invite)\\/[^\\s]+/i.test(text);
+    const mentionRaid = message.mentions.users.size >= 8;
+    const spam = recent.length >= 6 || (repeated && recent.length >= 4);
+    if (hasInvite || mentionRaid || spam) {
+      await protectionAction(message, hasInvite ? "رابط دعوة" : mentionRaid ? "منشن جماعي" : "Spam");
+      return;
+    }
+  }
+
+  if (!text.startsWith(PROTECTION_PREFIX)) return;
+  const parts = text.slice(PROTECTION_PREFIX.length).trim().split(/\\s+/).filter(Boolean);
+  const command = String(parts.shift() || "").toLowerCase();
+
+  try {
+    if (command === "ping") {
+      await message.reply("🏓 Pong! " + Math.max(0, Math.round(client.ws.ping)) + "ms");
+    } else if (command === "protection") {
+      await message.reply("🛡️ بوت الحماية: **" + (protectionEnabled ? "فعال" : "متوقف") + "**\\n• Spam: 6 رسائل/8 ثوانٍ\\n• منشن جماعي: 8+\\n• روابط دعوات Discord: حظر تلقائي لغير الطاقم");
+    } else if (command === "roulette") {
+      const names = rouletteNames(message);
+      if (names.length < 2) return message.reply("🎰 اذكر شخصين أو أكثر، مثال: " + PROTECTION_PREFIX + "roulette @أحمد @محمد");
+      const spin = await message.reply("🎰 الروليت تبدأ...\\n" + names.map((n, i) => (i === 0 ? "👉 " : "▫️ ") + n.name).join("\\n"));
+      const rounds = Math.min(12, Math.max(6, names.length + 4));
+      for (let i = 0; i < rounds; i++) {
+        const pick = Math.floor(Math.random() * names.length);
+        const frame = names.map((n, j) => (j === pick ? "🟢 " : "▫️ ") + n.name).join("\\n");
+        await new Promise(resolve => setTimeout(resolve, 170 + i * 35));
+        await spin.edit("🎰 الروليت تدور...\\n" + frame).catch(() => {});
+      }
+      const winner = names[Math.floor(Math.random() * names.length)];
+      await spin.edit("🎰 **النتيجة النهائية**\\n🏆 **" + winner.name + "**").catch(() => {});
+    } else if (command === "help") {
+      await message.reply("🤖 " + PROTECTION_PREFIX + "ping\\n🛡️ " + PROTECTION_PREFIX + "protection\\n🎰 " + PROTECTION_PREFIX + "roulette @شخص @شخص...");
+    }
+  } catch (error) {
+    console.error("Bot command:", error);
   }
 });
 
