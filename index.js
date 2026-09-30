@@ -264,13 +264,19 @@ app.get("/api/public/stats", async (req, res) => {
 app.get("/api/public/server", async (req, res) => {
   try {
     const guild = await getGuild();
+    const configuredSupportId = /^\d{15,22}$/.test(String(process.env.OWNER_DISCORD_ID || "")) ? String(process.env.OWNER_DISCORD_ID) : "";
+    const supportMember = configuredSupportId ? null : guild.members.cache.find(m =>
+      String(m.user.username || "").toLowerCase() === String(process.env.OWNER_DISCORD_USERNAME || "w4px").toLowerCase() ||
+      String(m.user.globalName || "").toLowerCase() === String(process.env.OWNER_DISCORD_USERNAME || "w4px").toLowerCase()
+    );
     res.json({
       id: guild.id,
       name: guild.name,
       icon: guild.iconURL({ extension: "png", size: 256 }),
       memberCount: guild.memberCount,
       ownerName: process.env.SERVER_FOUNDER_NAME || "فهد المطيري",
-      invite: process.env.DISCORD_INVITE_URL || ""
+      invite: process.env.DISCORD_INVITE_URL || "",
+      supportDiscordId: configuredSupportId || supportMember?.id || ""
     });
   } catch (error) {
     console.error("Server endpoint:", error);
@@ -590,26 +596,38 @@ function logPlatform(action, accountId, details = "") {
 function safeAccount(a) {
   return {
     id: a.id, username: a.username, discordId: a.discordId,
-    role: a.role, createdAt: a.createdAt,
+    role: a.role, admin: a.role === "owner" || a.admin === true, createdAt: a.createdAt,
     profileName: a.profileName || a.username,
     avatar: a.avatar || "",
     bio: a.bio || ""
   };
 }
 
-function auth(req, res, next) {
+const adminRoleIds = new Set(["1521187079336362024","1531109479264026706","1548732297669255259","1548732341185155103","1548732606508703744"]);
+async function syncAccountAccess(account) {
+  try {
+    if (account.role === "owner") { account.admin = true; return; }
+    const member = await (await getGuild()).members.fetch(account.discordId).catch(() => null);
+    account.admin = Boolean(member && member.roles.cache.some(r => adminRoleIds.has(r.id)));
+  } catch { account.admin = account.admin === true; }
+}
+async function auth(req, res, next) {
   const header = String(req.headers.authorization || "");
   const token = header.startsWith("Bearer ") ? header.slice(7) : "";
   const accountId = token ? sessions.get(token) : null;
   const account = accountId ? platform.accounts.find(a => a.id === accountId) : null;
   if (!account) return res.status(401).json({ error: "سجّل دخولك أولًا" });
+  await syncAccountAccess(account);
   req.account = account;
   req.token = token;
   next();
 }
-
 function ownerOnly(req, res, next) {
   if (req.account?.role !== "owner") return res.status(403).json({ error: "هذا القسم للأونر فقط" });
+  next();
+}
+function adminOnly(req, res, next) {
+  if (req.account?.role !== "owner" && req.account?.admin !== true) return res.status(403).json({ error: "هذا القسم للإدارة والأونر فقط" });
   next();
 }
 
@@ -622,18 +640,36 @@ function passwordOk(password, account) {
   return crypto.timingSafeEqual(Buffer.from(hash, "hex"), Buffer.from(account.passwordHash, "hex"));
 }
 
-app.get("/api/platform/games", (req, res) => {
-  res.json({
-    botReady: client.isReady(),
-    games: [
-      { id: "baloot", name: "بلوت", icon: "🃏", players: "4", mode: "فرق" },
-      { id: "uno", name: "UNO", icon: "🎴", players: "2-4", mode: "تنافس" },
-      { id: "jackaroo", name: "جاكارو", icon: "♟️", players: "2-4", mode: "تنافس" },
-      { id: "ludo", name: "لودو", icon: "🎲", players: "2-4", mode: "تنافس" },
-      { id: "monopoly", name: "مونوبولي", icon: "🏦", players: "2-6", mode: "تنافس" }
-    ]
-  });
-});
+const GAME_CATALOG = [
+  { id:"baloot", name:"بلوت", icon:"🃏", minPlayers:4, maxPlayers:4, mode:"فريقان · 4 لاعبين", description:"طاولة ورق بأربع مقاعد ودور واضح لكل لاعب." },
+  { id:"uno", name:"UNO", icon:"🎴", minPlayers:2, maxPlayers:4, mode:"2-4 لاعبين", description:"سحب ولعب أوراق وألوان وفوز باليد." },
+  { id:"jackaroo", name:"جاكارو", icon:"♟️", minPlayers:2, maxPlayers:4, mode:"2-4 لاعبين", description:"حركة أحجار بالدور مع رمية نرد." },
+  { id:"ludo", name:"لودو", icon:"🎲", minPlayers:2, maxPlayers:4, mode:"2-4 لاعبين", description:"طاولة لودو بالدور ورمية نرد وتحريك القطع." },
+  { id:"monopoly", name:"مونوبولي", icon:"🏦", minPlayers:2, maxPlayers:6, mode:"2-6 لاعبين", description:"رمية وحركة وشراء عقارات ورصيد لكل لاعب." }
+];
+
+function shuffle(arr){for(let i=arr.length-1;i>0;i--){const j=crypto.randomInt(i+1);[arr[i],arr[j]]=[arr[j],arr[i]];}return arr;}
+function unoDeck(){const colors=["أحمر","أزرق","أخضر","أصفر"],deck=[];colors.forEach(c=>{deck.push({color:c,value:"0"});for(let n=1;n<=9;n++){deck.push({color:c,value:String(n)});deck.push({color:c,value:String(n)});}["+2","عكس","تخطي"].forEach(v=>{deck.push({color:c,value:v});deck.push({color:c,value:v});});});for(let i=0;i<4;i++){deck.push({color:"wild",value:"وايلد"});deck.push({color:"wild",value:"+4"});}return shuffle(deck);}
+function balootDeck(){const suits=["♠","♥","♦","♣"],ranks=["7","8","9","10","J","Q","K","A"],d=[];suits.forEach(s=>ranks.forEach(r=>d.push({suit:s,rank:r,label:r+s})));return shuffle(d);}
+function initialGameState(game,players){
+  const base={version:1,startedAt:new Date().toISOString(),turnIndex:0,lastRoll:null,lastAction:null,winner:null,round:1};
+  if(game==="uno"){const deck=unoDeck(),hands={};players.forEach(p=>hands[p]=[]);players.forEach(p=>{for(let i=0;i<7;i++)hands[p].push(deck.pop());});let top=deck.pop();while(top.color==="wild"){deck.unshift(top);top=deck.pop();}return {...base,deck,discard:[top],hands,currentColor:top.color};}
+  if(game==="baloot"){const deck=balootDeck(),hands={};players.forEach(p=>hands[p]=deck.splice(0,8));return {...base,hands,trick:[],trickSuit:null,scores:players.reduce((a,p)=>(a[p]=0,a),{})};}
+  if(game==="monopoly")return {...base,money:players.reduce((a,p)=>(a[p]=1500,a),{}),positions:players.reduce((a,p)=>(a[p]=0,a),{}),properties:{},lastRoll:null};
+  return {...base,pieces:players.reduce((a,p)=>(a[p]=[0,0,0,0],a),{})};
+}
+function publicGameState(lobby,username){
+  const s=lobby.gameState||{},safe={...s};
+  if(safe.hands)safe.hands=Object.fromEntries(Object.keys(safe.hands).map(p=>[p,p===username?safe.hands[p]:safe.hands[p].map(()=>({hidden:true}))]));
+  safe.myHand=s.hands&&s.hands[username]?s.hands[username]:[];
+  return safe;
+}
+function lobbyFor(lobby,username){return {id:lobby.id,game:lobby.game,host:lobby.host,players:lobby.players,spectators:lobby.spectators,maxPlayers:lobby.maxPlayers,status:lobby.status,createdAt:lobby.createdAt,started:Boolean(lobby.gameState?.startedAt),turn:lobby.gameState?.turnIndex??null,currentPlayer:lobby.gameState?lobby.players[lobby.gameState.turnIndex]||null:null,gameState:lobby.gameState?publicGameState(lobby,username):null};}
+function advanceTurn(lobby){lobby.gameState.turnIndex=(lobby.gameState.turnIndex+1)%lobby.players.length;}
+function drawUno(s){if(!s.deck.length){const top=s.discard.pop();s.deck=shuffle(s.discard.splice(0));if(top)s.discard=[top];}return s.deck.pop()||null;}
+function canControl(req,lobby){const cur=lobby.players[lobby.gameState.turnIndex];return cur===req.account.username||(cur&&cur.startsWith("__test_")&&lobby.host===req.account.username);}
+
+app.get("/api/platform/games",(req,res)=>res.json({botReady:client.isReady(),games:GAME_CATALOG.map(g=>({id:g.id,name:g.name,icon:g.icon,players:g.minPlayers===g.maxPlayers?String(g.minPlayers):g.minPlayers+"-"+g.maxPlayers,mode:g.mode,description:g.description}))}));
 
 app.get("/api/platform/account/discord-members", async (req, res) => {
   try {
@@ -697,65 +733,98 @@ app.post("/api/platform/accounts", async (req, res) => {
       new ButtonBuilder().setCustomId("mld_account_no:" + pendingId).setLabel("لا، إلغاء").setStyle(ButtonStyle.Danger)
     );
     await member.send({
-      content: "🔐 **تأكيد إنشاء حساب ملاذ**\\n\\nتم طلب إنشاء حساب باسم **@" + username + "** المرتبط بحساب Discord الخاص بك.\\nهل أنت من أنشأ هذا الحساب؟",
-      components: [row]
-    });
-    logPlatform("account_confirmation_sent", null, username + ":" + discordId);
-    res.status(202).json({ pending: true, pendingId, browserToken, expiresAt: pending.expiresAt, message: "تم إرسال رسالة تأكيد إلى الخاص في Discord" });
-  } catch (e) {
-    platform.pendingAccounts = platform.pendingAccounts.filter(p => p.id !== pendingId);
-    savePlatform();
-    res.status(400).json({ error: "تعذر إرسال رسالة التأكيد إلى الخاص. افتح رسائل Discord الخاصة ثم حاول مرة أخرى." });
+      content: "🔐 **تأكيد إنشاء حساب ملاذ**\\n\\nتم طلب إنشاء حساب باسم **@" + username + "** المرتبط بحساب Discord الخاص بك.\\nهل أنت من أنشأ هذا الحapp.get("/api/platform/lobbies",(req,res)=>{const username=req.account?.username||"";res.json({lobbies:platform.lobbies.filter(l=>l.status!=="closed").map(l=>lobbyFor(l,username))});});
+
+app.post("/api/platform/lobbies",auth,(req,res)=>{
+  const game=String(req.body?.game||""),rules=GAME_CATALOG.find(g=>g.id===game);
+  if(!rules)return res.status(400).json({error:"اللعبة غير متاحة"});
+  const existing=platform.lobbies.find(l=>l.status!=="closed"&&(l.host===req.account.username||l.players.includes(req.account.username)));
+  if(existing)return res.status(409).json({error:"عندك جلسة ألعاب موجودة بالفعل. ادخل جلستك بدل إنشاء جلسة ثانية.",lobby:lobbyFor(existing,req.account.username)});
+  const maxPlayers=Math.max(rules.minPlayers,Math.min(rules.maxPlayers,Number(req.body?.maxPlayers||rules.maxPlayers)));
+  const lobby={id:crypto.randomUUID(),game,host:req.account.username,players:[req.account.username],spectators:[],maxPlayers,status:"open",createdAt:new Date().toISOString(),gameState:null};
+  platform.lobbies.push(lobby);savePlatform();logPlatform("lobby_created",req.account.id,game);res.status(201).json({lobby:lobbyFor(lobby,req.account.username)});
+});
+
+app.post("/api/platform/lobbies/:id/join",auth,(req,res)=>{
+  const lobby=platform.lobbies.find(l=>l.id===req.params.id);if(!lobby||lobby.status==="closed")return res.status(404).json({error:"الجلسة غير متاحة"});
+  if(lobby.gameState?.startedAt)return res.status(409).json({error:"اللعبة بدأت، لا يمكن أخذ مقعد الآن"});
+  const elsewhere=platform.lobbies.find(l=>l.status!=="closed"&&l.id!==lobby.id&&l.players.includes(req.account.username));if(elsewhere)return res.status(409).json({error:"أنت جالس في طاولة أخرى. اخرج منها أولًا."});
+  lobby.spectators=lobby.spectators.filter(x=>x!==req.account.username);
+  if(!lobby.players.includes(req.account.username)){if(lobby.players.length>=lobby.maxPlayers)return res.status(409).json({error:"المقاعد مكتملة"});lobby.players.push(req.account.username);}
+  lobby.status=lobby.players.length>=lobby.maxPlayers?"ready":"open";savePlatform();logPlatform("lobby_joined",req.account.id,lobby.game);res.json({lobby:lobbyFor(lobby,req.account.username)});
+});
+
+app.post("/api/platform/lobbies/:id/spectate",auth,(req,res)=>{
+  const lobby=platform.lobbies.find(l=>l.id===req.params.id);if(!lobby)return res.status(404).json({error:"الجلسة غير موجودة"});
+  if(!lobby.players.includes(req.account.username)&&!lobby.spectators.includes(req.account.username))lobby.spectators.push(req.account.username);
+  savePlatform();logPlatform("lobby_spectated",req.account.id,lobby.game);res.json({lobby:lobbyFor(lobby,req.account.username)});
+});
+
+app.post("/api/platform/lobbies/:id/test-seats",auth,(req,res)=>{
+  const lobby=platform.lobbies.find(l=>l.id===req.params.id);if(!lobby)return res.status(404).json({error:"الجلسة غير موجودة"});
+  if(lobby.host!==req.account.username)return res.status(403).json({error:"اختبار المقاعد للمضيف فقط"});
+  if(lobby.gameState?.startedAt)return res.status(409).json({error:"اللعبة بدأت بالفعل"});
+  const wanted=Math.max(0,Math.min(lobby.maxPlayers-1,Number(req.body?.count||lobby.maxPlayers-1)));
+  lobby.players=lobby.players.filter(p=>!p.startsWith("__test_"));
+  for(let i=1;i<=wanted&&lobby.players.length<lobby.maxPlayers;i++)lobby.players.push("__test_"+i);
+  lobby.status=lobby.players.length>=lobby.maxPlayers?"ready":"open";savePlatform();logPlatform("lobby_test_seats",req.account.id,lobby.game);res.json({lobby:lobbyFor(lobby,req.account.username)});
+});
+
+app.post("/api/platform/lobbies/:id/start",auth,(req,res)=>{
+  const lobby=platform.lobbies.find(l=>l.id===req.params.id),rules=lobby&&GAME_CATALOG.find(g=>g.id===lobby.game);
+  if(!lobby||!rules)return res.status(404).json({error:"الجلسة غير موجودة"});
+  if(lobby.host!==req.account.username)return res.status(403).json({error:"فقط صاحب الطاولة يقدر يبدأ اللعبة"});
+  if(lobby.gameState?.startedAt)return res.status(409).json({error:"اللعبة بدأت بالفعل"});
+  if(lobby.players.length<rules.minPlayers)return res.status(409).json({error:"عدد المقاعد غير كافٍ للبدء: "+rules.minPlayers});
+  lobby.gameState=initialGameState(lobby.game,lobby.players);lobby.status="playing";savePlatform();logPlatform("game_started",req.account.id,lobby.game);res.json({lobby:lobbyFor(lobby,req.account.username)});
+});
+
+app.post("/api/platform/lobbies/:id/action",auth,(req,res)=>{
+  const lobby=platform.lobbies.find(l=>l.id===req.params.id);if(!lobby||lobby.status==="closed")return res.status(404).json({error:"الطاولة غير موجودة"});
+  if(!lobby.gameState?.startedAt)return res.status(409).json({error:"ابدأ اللعبة أولًا"});
+  if(lobby.gameState.winner)return res.status(409).json({error:"اللعبة انتهت"});
+  if(!canControl(req,lobby))return res.status(403).json({error:"ليس دورك الآن"});
+  const s=lobby.gameState,actor=lobby.players[s.turnIndex],action=String(req.body?.action||"");
+  if(action==="roll"){
+    const roll=crypto.randomInt(1,7);s.lastRoll=roll;s.lastAction={by:actor,type:"roll",value:roll,at:new Date().toISOString()};
+    if(lobby.game==="monopoly"){const old=s.positions[actor];s.positions[actor]=(old+roll)%40;if(old+roll>=40)s.money[actor]+=200;advanceTurn(lobby);}
+    savePlatform();return res.json({lobby:lobbyFor(lobby,req.account.username),message:"رمية: "+roll});
   }
-});
-
-app.get("/api/platform/accounts/pending/:id", (req, res) => {
-  const p = (platform.pendingAccounts || []).find(x => x.id === req.params.id && x.browserToken === String(req.query.token || ""));
-  if (!p) return res.status(404).json({ error: "طلب إنشاء الحساب غير موجود أو انتهت صلاحيته" });
-  if (p.status === "confirmed" && p.accountId) {
-    const account = platform.accounts.find(a => a.id === p.accountId);
-    if (!account) return res.status(404).json({ error: "الحساب غير موجود" });
-    const token = crypto.randomBytes(32).toString("hex");
-    sessions.set(token, account.id);
-    savePlatform();
-    p.status = "completed";
-    savePlatform();
-    return res.json({ status: "confirmed", token, account: safeAccount(account), owner: account.role === "owner" });
+  if(["ludo","jackaroo"].includes(lobby.game)){
+    if(action!=="move")return res.status(400).json({error:"ارمِ النرد ثم اختر قطعة"});
+    const idx=Math.max(0,Math.min(3,Number(req.body?.piece||0))),steps=Number(s.lastRoll||0);if(!steps)return res.status(400).json({error:"ارمِ النرد أولًا"});
+    if(!s.pieces[actor])return res.status(400).json({error:"لا يوجد مقعد للاعب"});s.pieces[actor][idx]=(s.pieces[actor][idx]+steps)%40;s.lastAction={by:actor,type:"move",piece:idx,steps,at:new Date().toISOString()};if(steps!==6)advanceTurn(lobby);else s.lastRoll=null;
+    savePlatform();return res.json({lobby:lobbyFor(lobby,req.account.username),message:"تم تحريك القطعة"});
   }
-  res.json({ status: p.status, expiresAt: p.expiresAt });
+  if(lobby.game==="uno"){
+    if(action==="draw"){const card=drawUno(s);if(card)s.hands[actor].push(card);s.lastAction={by:actor,type:"draw",at:new Date().toISOString()};advanceTurn(lobby);}
+    else if(action==="play"){const idx=Number(req.body?.cardIndex),hand=s.hands[actor]||[],card=hand[idx],top=s.discard[s.discard.length-1];const match=card&&(card.color==="wild"||card.color===s.currentColor||card.value===top.value);if(!card||!match)return res.status(400).json({error:"لا يمكنك لعب هذه الورقة الآن"});hand.splice(idx,1);s.discard.push(card);if(card.color==="wild")s.currentColor=String(req.body?.color||"أحمر");else s.currentColor=card.color;if(card.value==="+2"){const n=lobby.players[(s.turnIndex+1)%lobby.players.length];for(let i=0;i<2;i++){const x=drawUno(s);if(x)s.hands[n].push(x);}}if(card.value==="+4"){const n=lobby.players[(s.turnIndex+1)%lobby.players.length];for(let i=0;i<4;i++){const x=drawUno(s);if(x)s.hands[n].push(x);}}if(!hand.length)s.winner=actor;else if(card.value==="عكس"&&lobby.players.length>2)s.turnIndex=(s.turnIndex-1+lobby.players.length)%lobby.players.length;else if(card.value!=="تخطي")advanceTurn(lobby);s.lastAction={by:actor,type:"play",card,at:new Date().toISOString()};}
+    else return res.status(400).json({error:"حركة UNO غير معروفة"});savePlatform();return res.json({lobby:lobbyFor(lobby,req.account.username),message:"تم تنفيذ الحركة"});
+  }
+  if(lobby.game==="baloot"){
+    if(action!=="play-card")return res.status(400).json({error:"اختر ورقة من يدك"});
+    const idx=Number(req.body?.cardIndex),hand=s.hands[actor]||[],card=hand[idx];if(!card)return res.status(400).json({error:"الورقة غير موجودة"});
+    if(s.trickSuit&&card.suit!==s.trickSuit&&hand.some(x=>x.suit===s.trickSuit))return res.status(400).json({error:"يجب متابعة النوع"});
+    hand.splice(idx,1);if(!s.trickSuit)s.trickSuit=card.suit;s.trick.push({player:actor,card});
+    if(s.trick.length<4)advanceTurn(lobby);else{s.scores[s.trick[0].player]=(s.scores[s.trick[0].player]||0);const winner=s.trick.reduce((best,t)=>t.card.suit===s.trickSuit&&["7","8","Q","K","10","A","9","J"].indexOf(t.card.rank)>["7","8","Q","K","10","A","9","J"].indexOf(best.card.rank)?t:best,s.trick[0]);s.scores[winner.player]=(s.scores[winner.player]||0)+1;s.trick=[];s.trickSuit=null;s.turnIndex=lobby.players.indexOf(winner.player);if(Object.values(s.hands).every(h=>h.length===0))s.winner=Object.keys(s.scores).sort((a,b)=>s.scores[b]-s.scores[a])[0];}
+    s.lastAction={by:actor,type:"play-card",card,at:new Date().toISOString()};savePlatform();return res.json({lobby:lobbyFor(lobby,req.account.username),message:"تم لعب الورقة"});
+  }
+  if(lobby.game==="monopoly"){
+    if(action!=="buy")return res.status(400).json({error:"بعد الرمية، إذا العقار متاح اضغط شراء"});
+    const pos=s.positions[actor],price=200+(pos%8)*25;if(s.properties[pos])return res.status(400).json({error:"العقار مملوك"});if(s.money[actor]<price)return res.status(400).json({error:"رصيدك لا يكفي"});s.money[actor]-=price;s.properties[pos]={owner:actor,price};s.lastAction={by:actor,type:"buy",at:new Date().toISOString()};advanceTurn(lobby);savePlatform();return res.json({lobby:lobbyFor(lobby,req.account.username),message:"تم شراء العقار"});
+  }
+  return res.status(400).json({error:"حركة غير مدعومة"});
 });
 
-app.post("/api/platform/login", (req, res) => {
-  const username = String(req.body?.username || "").trim().toLowerCase();
-  const password = String(req.body?.password || "");
-  const account = platform.accounts.find(a => a.username === username);
-  if (!account || !passwordOk(password, account)) return res.status(401).json({ error: "بيانات الدخول غير صحيحة" });
-  const token = crypto.randomBytes(32).toString("hex");
-  sessions.set(token, account.id);
-  res.json({ token, account: safeAccount(account) });
+app.post("/api/platform/lobbies/:id/leave",auth,(req,res)=>{
+  const lobby=platform.lobbies.find(l=>l.id===req.params.id);if(!lobby)return res.status(404).json({error:"الجلسة غير موجودة"});if(lobby.gameState?.startedAt)return res.status(409).json({error:"لا يمكن مغادرة طاولة بدأت؛ أغلقها المضيف"});
+  lobby.players=lobby.players.filter(p=>p!==req.account.username);lobby.spectators=lobby.spectators.filter(p=>p!==req.account.username);if(lobby.host===req.account.username)platform.lobbies=platform.lobbies.filter(x=>x.id!==lobby.id);else lobby.status=lobby.players.length>=lobby.maxPlayers?"ready":"open";savePlatform();logPlatform("lobby_left",req.account.id,lobby.game);res.json({ok:true});
+});
+app.delete("/api/platform/lobbies/:id",auth,(req,res)=>{
+  const i=platform.lobbies.findIndex(l=>l.id===req.params.id);if(i<0)return res.status(404).json({error:"الجلسة غير موجودة"});if(platform.lobbies[i].host!==req.account.username&&req.account.role!=="owner")return res.status(403).json({error:"لا تملك صلاحية إغلاق الجلسة"});platform.lobbies[i].status="closed";savePlatform();logPlatform("lobby_closed",req.account.id,req.params.id);res.json({ok:true});
 });
 
-app.get("/api/platform/me", auth, (req, res) => res.json({ account: safeAccount(req.account) }));
-
-app.post("/api/platform/logout", auth, (req, res) => {
-  sessions.delete(req.token);
-  savePlatform();
-  res.json({ ok: true });
-});
-
-app.get("/api/platform/groups", (req, res) => {
-  res.json({ groups: platform.groups.map(g => ({
-    id:g.id, name:g.name, description:g.description, owner:g.owner,
-    members:g.members.length, createdAt:g.createdAt
-  }))});
-});
-
-app.post("/api/platform/groups", auth, (req, res) => {
-  const name = String(req.body?.name || "").trim().slice(0, 40);
-  const description = String(req.body?.description || "").trim().slice(0, 200);
-  if (name.length < 2) return res.status(400).json({ error: "اسم المجموعة قصير" });
-  const group = {
-    id: crypto.randomUUID(), name, description, owner: req.account.username,
+ame, description, owner: req.account.username,
     members: [req.account.username], createdAt: new Date().toISOString()
   };
   platform.groups.push(group);
@@ -829,9 +898,9 @@ app.delete("/api/platform/lobbies/:id", auth, (req, res) => {
   res.json({ ok:true });
 });
 
-app.get("/api/platform/logs", auth, ownerOnly, (req, res) => res.json({ logs: platform.logs.slice(0, 100) }));
+app.get("/api/platform/logs", auth, adminOnly, (req, res) => res.json({ logs: req.account.role === "owner" ? platform.logs.slice(0, 100) : [] }));
 
-app.get("/api/platform/admin", auth, ownerOnly, (req, res) => {
+app.get("/api/platform/admin", auth, adminOnly, (req, res) => {
   res.json({
     accounts: platform.accounts.length,
     owners: platform.accounts.filter(a=>a.role==="owner").length,
@@ -840,7 +909,7 @@ app.get("/api/platform/admin", auth, ownerOnly, (req, res) => {
   });
 });
 
-require("./platform-extra")({ app, client, auth, ownerOnly, logPlatform, getGuild, getAllMembers, platform, savePlatform });
+require("./platform-extra")({ app, client, auth, ownerOnly, adminOnly, logPlatform, getGuild, getAllMembers, platform, savePlatform });
 
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));

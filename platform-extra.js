@@ -4,7 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
-module.exports = function setupMLDExtra({ app, client, auth, ownerOnly, logPlatform, getGuild, getAllMembers, platform, savePlatform }) {
+module.exports = function setupMLDExtra({ app, client, auth, ownerOnly, adminOnly, logPlatform, getGuild, getAllMembers, platform, savePlatform }) {
   const dir = path.join(__dirname, "data");
   const file = path.join(dir, "features.json");
   const defaultData = {
@@ -35,7 +35,7 @@ module.exports = function setupMLDExtra({ app, client, auth, ownerOnly, logPlatf
   function save(){ fs.mkdirSync(dir,{recursive:true}); const tmp=file+".tmp"; fs.writeFileSync(tmp,JSON.stringify(data,null,2)); fs.renameSync(tmp,file); }
   const id=()=>crypto.randomUUID();
   const clean=(v,n)=>String(v==null?"":v).trim().slice(0,n);
-  const staffOnly=(req,res,next)=>req.account?.role==="owner" ? next() : res.status(403).json({error:"هذا القسم للإدارة والأونر"});
+  const staffOnly=(req,res,next)=>req.account?.role==="owner" || req.account?.admin===true ? next() : res.status(403).json({error:"هذا القسم للإدارة والأونر"});
   function chatMember(room, username){ return room.members.includes(username) || room.owner===username; }
   app.get("/api/platform/chat/general",(req,res)=>res.json({messages:data.chats.general.slice(-200)}));
   app.post("/api/platform/chat/general",auth,(req,res)=>{
