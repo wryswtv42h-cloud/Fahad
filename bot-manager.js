@@ -154,8 +154,20 @@ module.exports = function setupBotManager({ app, auth, logPlatform, platform, sa
     });
   });
 
-  app.get("/api/platform/bot-catalog", auth, (req,res) => {
-    res.json({ encryptionReady:Boolean(masterSecret), oauthReady:Boolean(clientId && clientSecret && redirectUri), bots:owned(req).map(safeBot) });
+  app.get("/api/platform/bot-catalog", (req,res) => {
+    const publicBots = [
+      {id:"mld-main",name:"بوت ملاذ الأساسي",description:"حماية السيرفر وأوامر ping وhelp وserver وtop وbalance وdaily وstreak وgames.",botUsername:"بوت السيرفر",status:"online",enabled:true,programmed:true,features:["الحماية","الأوامر الأساسية","الروليت","الاقتصاد","الألعاب"]},
+      {id:"mld-protection",name:"بوت الحماية",description:"مراقبة السبام والروابط والمنشنات المفرطة ومحاولات الإزعاج.",botUsername:"Protection",status:"online",enabled:true,programmed:true,features:["مكافحة السبام","روابط الدعوات","المنشنات المفرطة","إجراءات الحماية"]},
+      {id:"mld-roulette",name:"بوت الروليت",description:"روليت متحركة تختار فائزًا عشوائيًا من الأشخاص المذكورين.",botUsername:"Roulette",status:"online",enabled:true,programmed:true,features:["روليت متحركة","اختيار عشوائي","أسماء المشاركين"]},
+      {id:"mld-managed",name:"البوتات المضافة",description:"البوتات التي أضافها أصحاب الحسابات من لوحة البوتات.",botUsername:"بوتات الأعضاء",status:"catalog",enabled:true,programmed:false,features:["إضافة","تشغيل وإيقاف","اختبار الاتصال","لوحة تحكم"]}
+    ];
+    let mine=[];
+    try {
+      const bearer=String(req.headers.authorization||"").replace(/^Bearer\s+/i,"");
+      const accountId=sessions?.get(bearer);
+      if(accountId) mine=store.bots.filter(b=>b.ownerId===accountId).map(safeBot);
+    } catch {}
+    res.json({ encryptionReady:Boolean(masterSecret), oauthReady:Boolean(clientId && clientSecret && redirectUri), bots:publicBots.concat(mine) });
   });
 
   async function startBot(record) {
