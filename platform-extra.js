@@ -14,14 +14,14 @@ module.exports = function setupMLDExtra({ app, client, auth, ownerOnly, adminOnl
     applications: [],
     reviews: [],
     privateMessages: [],
-    chats: { general: [], rooms: {} },
+    chats: { general: [], rooms: {}, generalMuted: false, blockedUsers: [] },
     wallets: {},
     streaks: {},
     giveaways: [],
     jokes: [],
     jokeRatings: {},
     stories: [],
-    announcement: { enabled: false, text: "", color: "", updatedAt: null }
+    announcement: { enabled: false, text: "", color: "", updatedAt: null },\n    ticketSettings: { questions: ["عنوان المشكلة","التفاصيل"] },\n    cinemaRooms: [],\n    cinemaCatalog: []
   };
 
   function load() {
@@ -42,49 +42,65 @@ module.exports = function setupMLDExtra({ app, client, auth, ownerOnly, adminOnl
   const dmBroadcastJobs=new Map();
   const staffOnly=(req,res,next)=>req.account?.role==="owner" || req.account?.admin===true ? next() : res.status(403).json({error:"هذا القسم للإدارة والأونر"});
   function chatMember(room, username){ return room.members.includes(username) || room.owner===username; }
-  app.get("/api/platform/chat/general",(req,res)=>res.json({messages:data.chats.general.slice(-200)}));
-  app.post("/api/platform/chat/general",auth,(req,res)=>{
-    const message=clean(req.body?.message,1000); if(!message)return res.status(400).json({error:"اكتب رسالة"});
-    const item={id:id(),username:req.account.username,message,at:new Date().toISOString()};
-    data.chats.general.push(item); data.chats.general=data.chats.general.slice(-500); save(); logPlatform("general_chat_message",req.account.id,message.slice(0,80)); res.status(201).json({message:item});
-  });
-  app.get("/api/platform/chat/rooms",auth,(req,res)=>{
-    const rooms=Object.values(data.chats.rooms).filter(r=>chatMember(r,req.account.username)).map(r=>({id:r.id,name:r.name,owner:r.owner,members:r.members,messages:r.messages.slice(-100)}));
-    res.json({rooms});
-  });
-  app.post("/api/platform/chat/rooms",auth,(req,res)=>{
-    const raw=Array.isArray(req.body?.members)?req.body.members.map(x=>clean(x,24).toLowerCase()).filter(Boolean):[];
-    const members=[...new Set([req.account.username,...raw])];
-    const valid=members.filter(u=>platform.accounts.some(a=>a.username===u));
-    if(valid.length<2)return res.status(400).json({error:"اختر شخصًا واحدًا على الأقل من الحسابات المسجلة"});
-    const room={id:id(),name:clean(req.body?.name,60)||"شات خاص",owner:req.account.username,members:valid,messages:[],createdAt:new Date().toISOString()};
-    data.chats.rooms[room.id]=room; save(); logPlatform("private_chat_created",req.account.id,room.id); res.status(201).json({room});
-  });
-  app.post("/api/platform/chat/rooms/:id/message",auth,(req,res)=>{
-    const room=data.chats.rooms[req.params.id]; if(!room)return res.status(404).json({error:"الشات غير موجود"});
-    if(!chatMember(room,req.account.username))return res.status(403).json({error:"لست عضوًا في هذا الشات"});
-    const message=clean(req.body?.message,1000); if(!message)return res.status(400).json({error:"اكتب رسالة"});
-    const item={id:id(),username:req.account.username,message,at:new Date().toISOString()};
-    room.messages.push(item); room.messages=room.messages.slice(-500); save(); logPlatform("private_chat_message",req.account.id,room.id); res.status(201).json({message:item});
-  });
-  app.post("/api/platform/chat/rooms/:id/members",auth,(req,res)=>{
-    const room=data.chats.rooms[req.params.id]; if(!room)return res.status(404).json({error:"الشات غير موجود"});
-    if(room.owner!==req.account.username)return res.status(403).json({error:"مالك الشات فقط يقدر يعدل الأعضاء"});
-    const username=clean(req.body?.username,24).toLowerCase();
-    if(!platform.accounts.some(a=>a.username===username))return res.status(404).json({error:"الحساب غير موجود"});
-    if(!room.members.includes(username))room.members.push(username); save(); logPlatform("private_chat_member_added",req.account.id,room.id+":"+username); res.json({room});
-  });
-  app.delete("/api/platform/chat/rooms/:id/members/:username",auth,(req,res)=>{
-    const room=data.chats.rooms[req.params.id]; if(!room)return res.status(404).json({error:"الشات غير موجود"});
-    if(room.owner!==req.account.username)return res.status(403).json({error:"مالك الشات فقط يقدر يعدل الأعضاء"});
-    const username=clean(req.params.username,24).toLowerCase(); if(username===room.owner)return res.status(400).json({error:"لا يمكن حذف مالك الشات"});
-    room.members=room.members.filter(x=>x!==username); save(); logPlatform("private_chat_member_removed",req.account.id,room.id+":"+username); res.json({room});
-  });
-  app.get("/api/platform/chat/users",auth,(req,res)=>{
-    const users=platform.accounts.map(a=>({id:a.id,username:a.username,displayName:a.displayName||a.username,avatar:a.avatar||"",role:a.role||"member"}));
-    res.json({users});
-  });
-  app.get("/api/platform/owner/accounts",auth,ownerOnly,(req,res)=>{
+function chatBlocked(username){ return Array.isArray(data.chats.blockedUsers)&&data.chats.blockedUsers.includes(username); }
+app.get("/api/platform/chat/general",(req,res)=>res.json({messages:data.chats.general.slice(-200),muted:Boolean(data.chats.generalMuted)}));
+app.post("/api/platform/chat/general",auth,(req,res)=>{
+  if(data.chats.generalMuted&&req.account.role!=="owner"&&req.account.admin!==true)return res.status(403).json({error:"الشات العام مكتوم حاليًا"});
+  if(chatBlocked(req.account.username))return res.status(403).json({error:"تم منعك من الدردشة"});
+  const message=clean(req.body?.message,1000); if(!message)return res.status(400).json({error:"اكتب رسالة"});
+  const item={id:id(),username:req.account.username,message,at:new Date().toISOString()};
+  data.chats.general.push(item); data.chats.general=data.chats.general.slice(-500); save(); logPlatform("general_chat_message",req.account.id,message.slice(0,80)); res.status(201).json({message:item});
+});
+app.post("/api/platform/chat/general/settings",auth,ownerOnly,(req,res)=>{
+  data.chats.generalMuted=Boolean(req.body?.muted); save(); logPlatform("general_chat_mute",req.account.id,String(data.chats.generalMuted)); res.json({muted:data.chats.generalMuted});
+});
+app.get("/api/platform/chat/rooms",auth,(req,res)=>{
+  const rooms=Object.values(data.chats.rooms).filter(r=>chatMember(r,req.account.username)).map(r=>({id:r.id,name:r.name,owner:r.owner,members:r.members,messages:r.messages.slice(-100),createdAt:r.createdAt}));
+  res.json({rooms});
+});
+app.post("/api/platform/chat/rooms",auth,(req,res)=>{
+  const raw=Array.isArray(req.body?.members)?req.body.members.map(x=>clean(x,24).toLowerCase()).filter(Boolean):[];
+  const members=[...new Set([req.account.username,...raw])].filter(u=>platform.accounts.some(x=>x.username===u));
+  if(members.length<2)return res.status(400).json({error:"اختر شخصًا واحدًا على الأقل من الحسابات المسجلة"});
+  const room={id:id(),name:clean(req.body?.name,60)||"شات خاص",owner:req.account.username,members,messages:[],createdAt:new Date().toISOString()};
+  data.chats.rooms[room.id]=room; save(); logPlatform("private_chat_created",req.account.id,room.id); res.status(201).json({room});
+});
+app.post("/api/platform/chat/rooms/:id/message",auth,(req,res)=>{
+  const room=data.chats.rooms[req.params.id]; if(!room)return res.status(404).json({error:"الشات غير موجود"});
+  if(!chatMember(room,req.account.username))return res.status(403).json({error:"لست عضوًا في هذا الشات"});
+  if(chatBlocked(req.account.username))return res.status(403).json({error:"تم منعك من الدردشة"});
+  const message=clean(req.body?.message,1000); if(!message)return res.status(400).json({error:"اكتب رسالة"});
+  const item={id:id(),username:req.account.username,message,at:new Date().toISOString()};
+  room.messages.push(item); room.messages=room.messages.slice(-500); save(); logPlatform("private_chat_message",req.account.id,room.id); res.status(201).json({message:item});
+});
+app.post("/api/platform/chat/rooms/:id/members",auth,(req,res)=>{
+  const room=data.chats.rooms[req.params.id]; if(!room)return res.status(404).json({error:"الشات غير موجود"});
+  if(room.owner!==req.account.username)return res.status(403).json({error:"مالك الشات فقط يقدر يعدل الأعضاء"});
+  const username=clean(req.body?.username,24).toLowerCase();
+  if(!platform.accounts.some(x=>x.username===username))return res.status(404).json({error:"الحساب غير موجود"});
+  if(chatBlocked(username))return res.status(403).json({error:"هذا العضو محظور من الدردشة"});
+  if(!room.members.includes(username))room.members.push(username); save(); logPlatform("private_chat_member_added",req.account.id,room.id+":"+username); res.json({room});
+});
+app.delete("/api/platform/chat/rooms/:id/members/:username",auth,(req,res)=>{
+  const room=data.chats.rooms[req.params.id]; if(!room)return res.status(404).json({error:"الشات غير موجود"});
+  if(room.owner!==req.account.username)return res.status(403).json({error:"مالك الشات فقط يقدر يعدل الأعضاء"});
+  const username=clean(req.params.username,24).toLowerCase(); if(username===room.owner)return res.status(400).json({error:"لا يمكن حذف مالك الشات"});
+  room.members=room.members.filter(x=>x!==username); save(); logPlatform("private_chat_member_removed",req.account.id,room.id+":"+username); res.json({room});
+});
+app.get("/api/platform/chat/users",auth,(req,res)=>{
+  const users=platform.accounts.map(x=>({id:x.id,username:x.username,displayName:x.displayName||x.username,avatar:x.avatar||"",role:x.role||"member"}));
+  res.json({users});
+});
+app.get("/api/platform/chat/blocked",auth,(req,res)=>res.json({blocked:data.chats.blockedUsers||[]}));
+app.post("/api/platform/chat/block/:username",auth,(req,res)=>{
+  const username=clean(req.params.username,24).toLowerCase(); if(username===req.account.username)return res.status(400).json({error:"لا يمكنك حظر نفسك"});
+  if(!platform.accounts.some(x=>x.username===username))return res.status(404).json({error:"الحساب غير موجود"});
+  data.chats.blockedUsers=[...new Set([...(data.chats.blockedUsers||[]),username])]; save(); logPlatform("chat_user_blocked",req.account.id,username); res.json({ok:true,blocked:data.chats.blockedUsers});
+});
+app.delete("/api/platform/chat/block/:username",auth,(req,res)=>{
+  const username=clean(req.params.username,24).toLowerCase(); data.chats.blockedUsers=(data.chats.blockedUsers||[]).filter(x=>x!==username); save(); logPlatform("chat_user_unblocked",req.account.id,username); res.json({ok:true,blocked:data.chats.blockedUsers});
+});
+app.get("/api/platform/owner/accounts",auth,ownerOnly,(req,res)=>{
     res.json({accounts:platform.accounts.map(a=>({id:a.id,username:a.username,displayName:a.displayName||a.username,discordUsername:a.discordUsername||"",role:a.role||"member",admin:Boolean(a.admin),createdAt:a.createdAt||null}))});
   });
   app.post("/api/platform/owner/accounts/:id/admin",auth,ownerOnly,(req,res)=>{
@@ -178,7 +194,25 @@ module.exports = function setupMLDExtra({ app, client, auth, ownerOnly, adminOnl
     res.json({job});
   });
 
-  require("./bot-manager")({ app, auth, logPlatform, platform, savePlatform });
+
+  app.get("/api/platform/cinema/catalog",(req,res)=>res.json({items:data.cinemaCatalog||[]}));
+  app.get("/api/platform/cinema/rooms",(req,res)=>res.json({rooms:(data.cinemaRooms||[]).filter(r=>r.status!=="closed").map(r=>({id:r.id,name:r.name,content:r.content,host:r.host,members:r.members.length,createdAt:r.createdAt,status:r.status}))}));
+  app.post("/api/platform/cinema/rooms",auth,(req,res)=>{
+    const name=clean(req.body?.name,60)||"غرفة مشاهدة"; const content=clean(req.body?.content,200);
+    if(content.length<2)return res.status(400).json({error:"اكتب اسم المحتوى"});
+    const room={id:id(),name,content,host:req.account.username,members:[req.account.username],createdAt:new Date().toISOString(),status:"open"};
+    data.cinemaRooms.unshift(room);data.cinemaRooms=data.cinemaRooms.slice(0,100);save();logPlatform("cinema_room_created",req.account.id,content);res.status(201).json({room});
+  });
+  app.post("/api/platform/cinema/rooms/:id/join",auth,(req,res)=>{
+    const room=data.cinemaRooms.find(x=>x.id===req.params.id);if(!room||room.status==="closed")return res.status(404).json({error:"غرفة المشاهدة غير موجودة"});
+    if(!room.members.includes(req.account.username))room.members.push(req.account.username);save();logPlatform("cinema_room_joined",req.account.id,room.id);res.json({room});
+  });
+  app.post("/api/platform/cinema/rooms/:id/close",auth,(req,res)=>{
+    const room=data.cinemaRooms.find(x=>x.id===req.params.id);if(!room)return res.status(404).json({error:"الغرفة غير موجودة"});
+    if(room.host!==req.account.username&&req.account.role!=="owner")return res.status(403).json({error:"صاحب الغرفة أو الأونر فقط"});
+    room.status="closed";save();logPlatform("cinema_room_closed",req.account.id,room.id);res.json({ok:true});
+  });
+\n  require("./bot-manager")({ app, auth, logPlatform, platform, savePlatform });
 
   app.get("/api/platform/bots",(req,res)=>res.json({bots:data.bots.map(b=>Object.assign({},b,{settings:data.botSettings[b.id]||{}}))}));
 
@@ -203,25 +237,42 @@ module.exports = function setupMLDExtra({ app, client, auth, ownerOnly, adminOnl
   });
 
   app.get("/api/platform/tickets",auth,(req,res)=>{
-    const mine=data.tickets.filter(t=>t.owner===req.account.username||req.account.role==="owner"||req.account.admin===true);
-    res.json({tickets:mine});
-  });
-  app.post("/api/platform/tickets",auth,(req,res)=>{
-    const ticket={id:id(),owner:req.account.username,title:clean(req.body?.title,100),category:clean(req.body?.category||"عام",30),message:clean(req.body?.message,1000),status:"open",createdAt:new Date().toISOString(),replies:[]};
-    if(ticket.title.length<2||ticket.message.length<2)return res.status(400).json({error:"أكمل بيانات التذكرة"});
-    data.tickets.unshift(ticket); save(); logPlatform("ticket_created",req.account.id,ticket.title); res.status(201).json({ticket});
-  });
-  app.post("/api/platform/tickets/:id/reply",auth,(req,res)=>{
-    const t=data.tickets.find(x=>x.id===req.params.id); if(!t)return res.status(404).json({error:"التذكرة غير موجودة"});
-    if(t.owner!==req.account.username&&req.account.role!=="owner"&&req.account.admin!==true)return res.status(403).json({error:"لا تملك صلاحية هذه التذكرة"});
-    t.replies.push({id:id(),by:req.account.username,message:clean(req.body?.message,1000),at:new Date().toISOString()});
-    save(); res.json({ticket:t});
-  });
-  app.post("/api/platform/tickets/:id/close",auth,(req,res)=>{
-    const t=data.tickets.find(x=>x.id===req.params.id); if(!t)return res.status(404).json({error:"التذكرة غير موجودة"});
-    if(t.owner!==req.account.username&&req.account.role!=="owner"&&req.account.admin!==true)return res.status(403).json({error:"لا تملك صلاحية إغلاقها"});
-    t.status="closed"; save(); logPlatform("ticket_closed",req.account.id,t.id); res.json({ticket:t});
-  });
+  const staff=req.account.role==="owner"||req.account.admin===true;
+  const tickets=data.tickets.filter(t=>staff||t.owner===req.account.username);
+  res.json({tickets});
+});
+app.get("/api/platform/tickets/settings",auth,(req,res)=>{
+  if(req.account.role!=="owner"&&req.account.admin!==true)return res.status(403).json({error:"للإدارة فقط"});
+  res.json({questions:data.ticketSettings?.questions||["عنوان المشكلة","التفاصيل"]});
+});
+app.post("/api/platform/tickets/settings",auth,ownerOnly,(req,res)=>{
+  const questions=Array.isArray(req.body?.questions)?req.body.questions.map(x=>clean(x,120)).filter(Boolean).slice(1,10):[];
+  data.ticketSettings={questions:questions.length?questions:["عنوان المشكلة","التفاصيل"]}; save(); logPlatform("ticket_questions_updated",req.account.id,String(questions.length)); res.json({questions:data.ticketSettings.questions});
+});
+app.post("/api/platform/tickets",auth,(req,res)=>{
+  const title=clean(req.body?.title,100),message=clean(req.body?.message,2000),category=clean(req.body?.category||"عام",40);
+  if(title.length<2||message.length<2)return res.status(400).json({error:"أكمل بيانات التذكرة"});
+  const ticket={id:id(),owner:req.account.username,title,category,message,status:"open",claimedBy:null,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),replies:[]};
+  data.tickets.unshift(ticket); save(); logPlatform("ticket_created",req.account.id,title); res.status(201).json({ticket});
+});
+app.post("/api/platform/tickets/:id/reply",auth,(req,res)=>{
+  const t=data.tickets.find(x=>x.id===req.params.id); if(!t)return res.status(404).json({error:"التذكرة غير موجودة"});
+  const staff=req.account.role==="owner"||req.account.admin===true;
+  if(t.owner!==req.account.username&&!staff)return res.status(403).json({error:"لا تملك صلاحية هذه التذكرة"});
+  const message=clean(req.body?.message,2000); if(!message)return res.status(400).json({error:"اكتب الرد"});
+  t.replies.push({id:id(),by:req.account.username,message,at:new Date().toISOString()});t.updatedAt=new Date().toISOString();save();logPlatform("ticket_replied",req.account.id,t.id);res.json({ticket:t});
+});
+app.post("/api/platform/tickets/:id/claim",auth,adminOnly,(req,res)=>{
+  const t=data.tickets.find(x=>x.id===req.params.id); if(!t)return res.status(404).json({error:"التذكرة غير موجودة"});
+  if(t.status==="closed")return res.status(409).json({error:"التذكرة مغلقة"});
+  t.claimedBy=req.account.username; t.status="claimed";t.updatedAt=new Date().toISOString();save();logPlatform("ticket_claimed",req.account.id,t.id);res.json({ticket:t});
+});
+app.post("/api/platform/tickets/:id/close",auth,(req,res)=>{
+  const t=data.tickets.find(x=>x.id===req.params.id); if(!t)return res.status(404).json({error:"التذكرة غير موجودة"});
+  const staff=req.account.role==="owner"||req.account.admin===true;
+  if(t.owner!==req.account.username&&!staff)return res.status(403).json({error:"لا تملك صلاحية إغلاقها"});
+  t.status="closed";t.updatedAt=new Date().toISOString();save();logPlatform("ticket_closed",req.account.id,t.id);res.json({ticket:t});
+});
 
   app.get("/api/platform/applications",(req,res)=>res.json({applications:data.applications.filter(a=>a.status==="open")}));
   app.post("/api/platform/applications",auth,(req,res)=>{
