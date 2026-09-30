@@ -78,7 +78,7 @@
   document.querySelectorAll("[data-chat],[data-profile],[data-pigeon],[data-extra='bots'],[data-extra='tickets'],[data-extra='applications'],[data-extra='messages'],[data-extra='economy'],[data-extra='overview'],[data-logout]").forEach(wrapLogin);
 
   function syncAccess(){
-    document.querySelectorAll("[data-platform='admin'],[data-owner]").forEach(function(b){b.classList.remove("hidden");});
+    if(window.MLDPlatform&&window.MLDPlatform.refreshMenu)window.MLDPlatform.refreshMenu();
   }
   syncAccess();
   
