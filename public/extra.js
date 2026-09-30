@@ -153,9 +153,5 @@
       if(m&&m.id)a.href="https://discord.com/users/"+encodeURIComponent(m.id);
     }).catch(function(){});
   })();
-  
-  document.querySelectorAll("#mobile-menu [data-view],#mobile-menu [data-home],#mobile-menu [data-extra],#mobile-menu [data-owner]").forEach(function(b){
-    var original=b.onclick;
-    b.onclick=function(e){if(original)original.call(b,e);closeMenu();};
-  });
+
 })();
