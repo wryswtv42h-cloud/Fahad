@@ -186,7 +186,7 @@
     }).catch(function(e){alert(e.message)});
   }
   function logoutView(){api("/api/platform/logout",{method:"POST"}).catch(function(){}).finally(function(){token="";account=null;localStorage.removeItem("mld_token");location.hash="#top";location.reload()});}
-  function homeView(){stopGamePoll();panel.className="panel platform-panel hidden";$("#directory").className=$("#directory").className+" hidden";var rev=document.querySelector(".reviews-section");if(rev)rev.style.display="block";window.scrollTo({top:0,behavior:"smooth"});}
+  function homeView(){stopGamePoll();panel.className="panel platform-panel hidden";$("#directory").className="panel hidden";var rev=document.querySelector(".reviews-section");if(rev)rev.style.display="block";location.hash="#top";window.scrollTo({top:0,behavior:"smooth"});}
   document.querySelectorAll("[data-home]").forEach(function(b){b.onclick=function(){homeView();var m=$("#mobile-menu");if(m)m.classList.remove("open");window.location.hash="#top";}});
   document.querySelectorAll("[data-profile]").forEach(function(b){b.onclick=profileView});
   document.querySelectorAll("[data-chat]").forEach(function(b){b.onclick=chatView});
@@ -202,7 +202,7 @@
   document.querySelectorAll("[data-pigeon]").forEach(function(b){b.onclick=function(){pigeonView();var m=$("#mobile-menu");if(m)m.className=m.className.replace(/\bopen\b/g,"").trim();};});
   document.querySelectorAll("[data-logout]").forEach(function(b){b.onclick=function(){if(account)logoutView()}});
   document.querySelectorAll("[data-login]").forEach(function(b){b.onclick=function(){loginView();var m=$("#mobile-menu");if(m)m.classList.remove("open");}});
-  document.querySelectorAll("[data-owner]").forEach(function(b){b.onclick=function(){adminView();var m=$("#mobile-menu");if(m)m.className=m.className.replace(/\\bopen\\b/g,"").trim();};});
+  document.querySelectorAll("[data-owner]").forEach(function(b){b.onclick=function(){adminView();var m=$("#mobile-menu");if(m)m.classList.remove("open");};});
   function updateOwnerMenu(){document.querySelectorAll("[data-owner]").forEach(function(b){if(account&&account.role==="owner")b.classList.remove("hidden");else b.classList.add("hidden");});document.querySelectorAll(".auth-only").forEach(function(b){if(account)b.classList.remove("hidden");else b.classList.add("hidden");});document.querySelectorAll(".guest-only").forEach(function(b){if(account)b.classList.add("hidden");else b.classList.remove("hidden");});document.querySelectorAll(".admin-only").forEach(function(b){if(account&&(account.admin||account.role==="owner"))b.classList.remove("hidden");else b.classList.add("hidden");});}
   document.querySelectorAll("[data-platform]").forEach(function(b){b.onclick=function(){if(b.dataset.platform==="account"&&!need())return;if(b.dataset.platform==="account")accountView();if(b.dataset.platform==="games")gamesView();if(b.dataset.platform==="groups")groupsView();if(b.dataset.platform==="admin")adminView();var m=$("#mobile-menu");if(m)m.className=m.className.replace(/\bopen\b/g,"").trim()}});
   updateOwnerMenu();
