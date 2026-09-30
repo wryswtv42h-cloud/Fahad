@@ -233,7 +233,7 @@ module.exports = function setupBotManager({ app, auth, logPlatform, platform, sa
         record.data.giveaways = record.data.giveaways || {};
         const enabled = id => !Array.isArray(record.modules) || record.modules.length===0 || record.modules.includes(id);
         const wallet = id => { if(!record.data.wallets[id]) record.data.wallets[id]={coins:100}; return record.data.wallets[id]; };
-        const durationMs = value => { const m=String(value||"").match(/^(\\d+)(s|m|h|d)$/i); if(!m)return 600000; const n=Number(m[1]); return n*({s:1000,m:60000,h:3600000,d:86400000})[m[2].toLowerCase()]; };
+        const durationMs = value => { const m=String(value||"").match(/^(\d+)(s|m|h|d)$/i); if(!m)return 600000; const n=Number(m[1]); return n*({s:1000,m:60000,h:3600000,d:86400000})[m[2].toLowerCase()]; };
         const memberName = m => m?.displayName || m?.user?.globalName || m?.user?.username || "عضو";
         if(enabled("protection") && !message.member?.permissions?.has("Administrator")){
           const rt=runtime.get(record.id); rt.spam=rt.spam||new Map(); const key=message.author.id; const now=Date.now();
