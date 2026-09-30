@@ -1015,23 +1015,6 @@ app.delete("/api/platform/lobbies/:id",auth,(req,res)=>{
   const i=platform.lobbies.findIndex(l=>l.id===req.params.id);if(i<0)return res.status(404).json({error:"الجلسة غير موجودة"});if(platform.lobbies[i].host!==req.account.username&&req.account.role!=="owner")return res.status(403).json({error:"لا تملك صلاحية إغلاق الجلسة"});platform.lobbies[i].status="closed";savePlatform();logPlatform("lobby_closed",req.account.id,req.params.id);res.json({ok:true});
 });
 
-ame, description, owner: req.account.username,
-    members: [req.account.username], createdAt: new Date().toISOString()
-  };
-  platform.groups.push(group);
-  logPlatform("group_created", req.account.id, name);
-  res.status(201).json({ group });
-});
-
-app.post("/api/platform/groups/:id/join", auth, (req, res) => {
-  const group = platform.groups.find(g => g.id === req.params.id);
-  if (!group) return res.status(404).json({ error: "المجموعة غير موجودة" });
-  if (!group.members.includes(req.account.username)) group.members.push(req.account.username);
-  savePlatform();
-  logPlatform("group_joined", req.account.id, group.name);
-  res.json({ ok: true, group });
-});
-
 app.get("/api/platform/lobbies", (req, res) => {
   res.json({ lobbies: platform.lobbies.filter(l => l.status !== "closed") });
 });
