@@ -238,13 +238,13 @@ module.exports = function setupBotManager({ app, auth, logPlatform, platform, sa
         if(enabled("protection") && !message.member?.permissions?.has("Administrator")){
           const rt=runtime.get(record.id); rt.spam=rt.spam||new Map(); const key=message.author.id; const now=Date.now();
           const arr=(rt.spam.get(key)||[]).filter(t=>now-t<8000); arr.push(now); rt.spam.set(key,arr);
-          const invite=/(?:discord\\.gg|discord(?:app)?\\.com\\/invite)\\/\\S+/i.test(content);
+          const invite=/(?:discord\.gg|discord(?:app)?\.com\/invite)\/\S+/i.test(content);
           if(invite || arr.length>=7){try{await message.delete();}catch{} if(message.member?.moderatable){try{await message.member.timeout(60000,"MLD Protection");}catch{}} return;}
         }
         if (!content.startsWith(prefix)) return;
 
         const raw = content.slice(prefix.length).trim();
-        const parts = raw ? raw.split(/\\s+/) : [];
+        const parts = raw ? raw.split(/\s+/) : [];
         const command = String(parts.shift() || "").toLowerCase();
         const args = parts;
 
