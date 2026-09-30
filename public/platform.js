@@ -279,6 +279,5 @@
     updateOwnerMenu();
   });
   updateOwnerMenu();
-  updateOwnerMenu();
   window.MLDPlatform={accountView:accountView,loginView:loginView,gamesView:gamesView,groupsView:groupsView,adminView:adminView,ownerView:ownerView,profileView:profileView,chatView:chatView,refreshMenu:updateOwnerMenu};
 })();
