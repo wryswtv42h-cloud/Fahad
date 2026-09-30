@@ -256,6 +256,12 @@
     var isAdmin=logged && (account.role==="owner" || account.admin===true);
     document.querySelectorAll(".logged-only").forEach(function(b){b.classList.toggle("hidden",!logged);});
     document.querySelectorAll(".guest-only,[data-login]").forEach(function(b){b.classList.toggle("guest-hidden",logged);});
+    document.querySelectorAll(".auth-only").forEach(function(b){
+      if(logged){b.classList.remove("hidden");b.classList.add("access-visible");b.style.removeProperty("display");}
+      else{b.classList.add("hidden");b.classList.remove("access-visible");b.style.setProperty("display","none","important");}
+    });
+    document.querySelectorAll(".menu-user-state").forEach(function(b){b.textContent=logged?(isOwner?"الأونر":(isAdmin?"إداري":"عضو")):"زائر";});
+    document.querySelectorAll(".menu-user-dot").forEach(function(b){b.style.background=logged?(isOwner?"#ff9cde":(isAdmin?"#a86fdf":"#70f5b1")):"#8e7a99";});
     document.querySelectorAll(".admin-only").forEach(function(b){
       if(isAdmin){b.classList.remove("hidden");b.classList.add("access-visible");b.style.removeProperty("display");b.setAttribute("aria-hidden","false");}
       else{b.classList.add("hidden");b.classList.remove("access-visible");b.style.setProperty("display","none","important");b.setAttribute("aria-hidden","true");}
