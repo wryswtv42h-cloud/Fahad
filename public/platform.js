@@ -11,7 +11,7 @@
   function api(url,opt){opt=opt||{};opt.headers=Object.assign({"Content-Type":"application/json"},opt.headers||{});if(token)opt.headers.Authorization="Bearer "+token;return fetch(url,opt).then(function(r){return r.json().then(function(d){if(!r.ok)throw Error(d.error||"حدث خطأ");return d})})}
   function show(title,html){panel.className=panel.className.replace(/\bhidden\b/g,"").trim();$("#directory").className+=" hidden";$("#view-title").textContent=title;$("#subtitle").textContent="منصة MLD";panel.innerHTML=html}
   function badge(){return account?"<span class='platform-chip "+(account.role==="owner"?"owner":"")+"'>@"+esc(account.username)+" · "+(account.role==="owner"?"OWNER":"عضو")+"</span>":"<span class='platform-chip'>زائر</span>"}
-  function need(){if(account)return true;accountView();return false}
+  function need(){if(account)return true;loginView();return false}
   function accountView(){
     var html;
     if(account){
