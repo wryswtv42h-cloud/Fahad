@@ -257,7 +257,7 @@ app.post("/api/platform/tickets",auth,(req,res)=>{
   const title=clean(req.body?.title,100),message=clean(req.body?.message,2000),category=clean(req.body?.category||"عام",40);
   if(title.length<2||message.length<2)return res.status(400).json({error:"أكمل بيانات التذكرة"});
   const ticket={id:id(),owner:req.account.username,title,category,message,status:"open",claimedBy:null,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),replies:[]};
-  data.tickets.unshift(ticket); save(); logPlatform("ticket_created",req.account.id,title); res.status(201).json({ticket});
+  data.tickets.unshift(ticket); save(); logPlatform("ticket_created",req.account.id,title); try{const guild=await getGuild();const ownerId=String(process.env.OWNER_DISCORD_ID||"");const owner=ownerId?await guild.members.fetch(ownerId).catch(()=>null):(await getAllMembers(guild)).find(m=>String(m.user.username||"").toLowerCase()===String(process.env.OWNER_DISCORD_USERNAME||"w4px").toLowerCase());if(owner)await owner.send("🎫 تذكرة جديدة من @"+req.account.username+"\nالعنوان: "+title+"\n\n"+message).catch(()=>{});}catch(err){console.error("Ticket owner notification:",err.message);} res.status(201).json({ticket});
 });
 app.post("/api/platform/tickets/:id/reply",auth,(req,res)=>{
   const t=data.tickets.find(x=>x.id===req.params.id); if(!t)return res.status(404).json({error:"التذكرة غير موجودة"});
@@ -280,13 +280,15 @@ app.post("/api/platform/tickets/:id/close",auth,(req,res)=>{
 
   app.get("/api/platform/applications",(req,res)=>res.json({applications:data.applications.filter(a=>a.status==="open")}));
   app.post("/api/platform/applications",auth,(req,res)=>{
-    const a={id:id(),username:req.account.username,role:clean(req.body?.role||"عضو",40),answers:clean(req.body?.answers,2000),status:"open",createdAt:new Date().toISOString()};
+    const a={id:id(),username:req.account.username,discordUsername:clean(req.body?.discordUsername||req.account.discordUsername||"",80),discordId:String(req.body?.discordId||req.account.discordId||""),role:clean(req.body?.role||"عضو",40),answers:clean(req.body?.answers,2000),status:"open",createdAt:new Date().toISOString()};
     if(a.answers.length<5)return res.status(400).json({error:"اكتب إجابتك"});
     data.applications.unshift(a); save(); logPlatform("application_created",req.account.id,a.role); res.status(201).json({application:a});
   });
   app.post("/api/platform/applications/:id/status",auth,ownerOnly,(req,res)=>{
     const a=data.applications.find(x=>x.id===req.params.id); if(!a)return res.status(404).json({error:"التقديم غير موجود"});
-    a.status=["accepted","rejected","open"].includes(req.body?.status)?req.body.status:"open"; save(); logPlatform("application_status",req.account.id,a.id+":"+a.status); res.json({application:a});
+    a.status=["accepted","rejected","open"].includes(req.body?.status)?req.body.status:"open";
+    if(a.status==="accepted"){try{const guild=await getGuild();const member=await guild.members.fetch(a.discordId||"").catch(()=>null);const role=guild.roles.cache.get(String(process.env.LOWEST_ADMIN_ROLE_ID||"1548732606508703744"));if(member&&role&&!member.roles.cache.has(role.id))await member.roles.add(role,"MLD website admin application accepted");a.discordRoleId=role?.id||null;a.discordRoleName=role?.name||null;if(member)await member.send("🎉 تم قبول تقديمك في إدارة ملاذ، وتم منحك رتبة "+(role?.name||"الإدارة")+".").catch(()=>{});}catch(err){console.error("Application Discord role:",err.message);}}
+    save(); logPlatform("application_status",req.account.id,a.id+":"+a.status); res.json({application:a});
   });
 
   const DEMO_REVIEW_NAMES=["سارة","راكان","نوف","عبدالعزيز","ليان","تركي","جود","مشعل","ريم","خالد","شهد","ناصر","دانة","سلطان","هيا","وليد","لينا","فيصل","غلا","مازن","رهف","بندر","لمى","زياد","تالا","أنس","مها","عمر","جنى","سلمان"];
