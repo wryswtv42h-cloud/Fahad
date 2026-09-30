@@ -133,9 +133,9 @@ module.exports = function setupMLDExtra({ app, client, auth, ownerOnly, logPlatf
 
   app.get("/api/platform/reviews",(req,res)=>res.json({reviews:data.reviews.slice(0,100)}));
   app.post("/api/platform/reviews",(req,res)=>{
-    const r={id:id(),username:req.account.username,rating:Math.max(1,Math.min(5,Number(req.body?.rating||5))),text:clean(req.body?.text,500),createdAt:new Date().toISOString()};
+    const r={id:id(),username:req.account?.username||"زائر",rating:Math.max(1,Math.min(5,Number(req.body?.rating||5))),text:clean(req.body?.text,500),createdAt:new Date().toISOString()};
     if(r.text.length<2)return res.status(400).json({error:"اكتب رأيك"});
-    data.reviews.unshift(r); data.reviews=data.reviews.slice(0,200); save(); logPlatform("review_created",req.account.id,r.rating); res.status(201).json({review:r});
+    data.reviews.unshift(r); data.reviews=data.reviews.slice(0,200); save(); logPlatform("review_created",req.account?.id||null,r.username+":"+r.rating); res.status(201).json({review:r});
   });
 
   app.get("/api/platform/messages",auth,(req,res)=>res.json({messages:data.privateMessages.filter(m=>m.to===req.account.username||m.from===req.account.username||req.account.role==="owner").slice(0,100)}));
