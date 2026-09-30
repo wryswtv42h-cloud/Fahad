@@ -144,7 +144,18 @@
       var cards=g.games.map(function(a){return "<article class='game-card'><div class='game-icon'>"+a.icon+"</div><h3>"+a.name+"</h3><p>"+a.mode+"</p><p class='muted small'>"+esc(a.description||"")+" </p><button class='primary game-create' data-game='"+a.id+"'>إنشاء طاولة</button></article>"}).join("");
       var ls=l.lobbies.length?l.lobbies.map(function(a){return "<article class='lobby-card'><span class='platform-chip'>"+esc(gameLabel(a.game))+"</span><h3>طاولة @"+esc(a.host)+"</h3><p>🪑 "+a.players.length+"/"+a.maxPlayers+" · 👀 "+a.spectators.length+" · "+(a.started?"بدأت":"انتظار")+"</p><button class='primary' data-join='"+a.id+"' "+(a.started?"disabled":"")+">دخول لاعب</button> <button class='platform-link' data-watch='"+a.id+"'>مشاهدة</button></article>"}).join(""):"<div class='empty'>لا توجد طاولات الآن.</div>";
       show("الألعاب","<div class='platform-head'><div><span class='eyebrow'>MLD GAME TABLES</span><h2>الألعاب الجماعية</h2><p class='muted'>كل لاعب له طاولة ومقعد ودور. لا أحد يأخذ مكان لاعب آخر.</p></div>"+badge()+"</div>"+(mine?"<div class='account-card'><b>طاولتك الحالية</b><p class='muted'>"+esc(gameLabel(mine.game))+" · "+mine.players.length+"/"+mine.maxPlayers+"</p><button class='primary' id='open-my-room'>دخول الطاولة</button></div>":"")+"<div class='game-grid'>"+cards+"</div><div class='lobby-area'><div class='section-mini'><h3>الطاولات الحالية</h3><button class='platform-link' id='refresh-lobbies'>تحديث</button></div><div class='lobby-grid'>"+ls+"</div></div>");
-      document.querySelectorAll(".game-create").forEach(function(b){b.onclick=function(){if(!need())return;api("/api/platform/lobbies",{method:"POST",body:JSON.stringify({game:b.dataset.game})}).then(function(d){gameRoom(d.lobby)}).catch(function(e){if(e.lobby)gameRoom(e.lobby);else alert(e.message)})}});
+      document.querySelectorAll(".game-create").forEach(function(b){b.onclick=function(){
+        if(!need())return;
+        var game=g.games.find(function(x){return x.id===b.dataset.game})||{};
+        var min=Number(game.minPlayers||2),max=Number(game.maxPlayers||6);
+        var options=""; for(var n=min;n<=max;n++) options+="<option value='"+n+"'>"+n+" لاعبين</option>";
+        show("إنشاء طاولة","<div class='account-card narrow'><span class='eyebrow'>NEW GAME TABLE</span><h2>"+esc(game.icon||"🎮")+" "+esc(game.name||"لعبة")+"</h2><p class='muted'>اختر عدد المقاعد قبل إنشاء الطاولة. لا يمكن تجاوز العدد المحدد.</p><label>عدد الأشخاص</label><select id='table-player-count' class='full'>"+options+"</select><button class='primary wide' id='confirm-create-table'>إنشاء الطاولة</button><button class='platform-link wide' id='cancel-create-table'>إلغاء</button></div>");
+        $("#confirm-create-table").onclick=function(){
+          var count=Number($("#table-player-count").value);
+          api("/api/platform/lobbies",{method:"POST",body:JSON.stringify({game:b.dataset.game,maxPlayers:count})}).then(function(d){gameRoom(d.lobby)}).catch(function(e){if(e.lobby)gameRoom(e.lobby);else alert(e.message)});
+        };
+        $("#cancel-create-table").onclick=gamesView;
+      }});
       document.querySelectorAll("[data-join]").forEach(function(b){b.onclick=function(){if(!need())return;api("/api/platform/lobbies/"+b.dataset.join+"/join",{method:"POST"}).then(function(d){gameRoom(d.lobby)}).catch(function(e){alert(e.message)})}});
       document.querySelectorAll("[data-watch]").forEach(function(b){b.onclick=function(){if(!need())return;api("/api/platform/lobbies/"+b.dataset.watch+"/spectate",{method:"POST"}).then(function(d){gameRoom(d.lobby)}).catch(function(e){alert(e.message)})}});
       var om=$("#open-my-room");if(om)om.onclick=function(){gameRoom(mine)};
@@ -203,7 +214,7 @@
   document.querySelectorAll("[data-pigeon]").forEach(function(b){b.onclick=function(){pigeonView();var m=$("#mobile-menu");if(m)m.className=m.className.replace(/\bopen\b/g,"").trim();};});
   document.querySelectorAll("[data-logout]").forEach(function(b){b.onclick=function(){if(account)logoutView();else{loginView();var m=$("#mobile-menu");if(m)m.classList.remove("open");}}});
   document.querySelectorAll("[data-login]").forEach(function(b){b.onclick=function(){loginView();var m=$("#mobile-menu");if(m)m.classList.remove("open");}});
-  document.querySelectorAll("[data-owner]").forEach(function(b){b.onclick=function(){if(!need())return;adminView();var m=$("#mobile-menu");if(m)m.classList.remove("open");};});
+  document.querySelectorAll("[data-owner]").forEach(function(b){b.onclick=function(){if(!need())return;ownerView();var m=$("#mobile-menu");if(m)m.classList.remove("open");};});
   function updateOwnerMenu(){
     var logged=!!account;
     var isOwner=logged && account.role==="owner";
@@ -217,5 +228,5 @@
   updateOwnerMenu();
   if(token)api("/api/platform/me").then(function(d){account=d.account;updateOwnerMenu();}).catch(function(){token="";localStorage.removeItem("mld_token");updateOwnerMenu();});
   updateOwnerMenu();
-  window.MLDPlatform={accountView:accountView,loginView:loginView,gamesView:gamesView,groupsView:groupsView,adminView:adminView,profileView:profileView,chatView:chatView,refreshMenu:updateOwnerMenu};
+  window.MLDPlatform={accountView:accountView,loginView:loginView,gamesView:gamesView,groupsView:groupsView,adminView:adminView,ownerView:ownerView,profileView:profileView,chatView:chatView,refreshMenu:updateOwnerMenu};
 })();
