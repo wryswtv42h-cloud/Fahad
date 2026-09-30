@@ -138,7 +138,7 @@
   function gamesView(){
     stopGamePoll();
     Promise.all([api("/api/platform/games"),api("/api/platform/lobbies")]).then(function(x){
-      var g=x[0],l=x[1],mine=(l.lobbies||[]).find(function(a){return a.host===account.username||a.players.indexOf(account.username)>=0||a.spectators.indexOf(account.username)>=0});
+      var g=x[0],l=x[1],my=account&&account.username,mine=my?(l.lobbies||[]).find(function(a){return a.host===my||a.players.indexOf(my)>=0||a.spectators.indexOf(my)>=0}):null;
       var cards=g.games.map(function(a){return "<article class='game-card'><div class='game-icon'>"+a.icon+"</div><h3>"+a.name+"</h3><p>"+a.mode+"</p><p class='muted small'>"+esc(a.description||"")+" </p><button class='primary game-create' data-game='"+a.id+"'>إنشاء طاولة</button></article>"}).join("");
       var ls=l.lobbies.length?l.lobbies.map(function(a){return "<article class='lobby-card'><span class='platform-chip'>"+esc(gameLabel(a.game))+"</span><h3>طاولة @"+esc(a.host)+"</h3><p>🪑 "+a.players.length+"/"+a.maxPlayers+" · 👀 "+a.spectators.length+" · "+(a.started?"بدأت":"انتظار")+"</p><button class='primary' data-join='"+a.id+"' "+(a.started?"disabled":"")+">دخول لاعب</button> <button class='platform-link' data-watch='"+a.id+"'>مشاهدة</button></article>"}).join(""):"<div class='empty'>لا توجد طاولات الآن.</div>";
       show("الألعاب","<div class='platform-head'><div><span class='eyebrow'>MLD GAME TABLES</span><h2>الألعاب الجماعية</h2><p class='muted'>كل لاعب له طاولة ومقعد ودور. لا أحد يأخذ مكان لاعب آخر.</p></div>"+badge()+"</div>"+(mine?"<div class='account-card'><b>طاولتك الحالية</b><p class='muted'>"+esc(gameLabel(mine.game))+" · "+mine.players.length+"/"+mine.maxPlayers+"</p><button class='primary' id='open-my-room'>دخول الطاولة</button></div>":"")+"<div class='game-grid'>"+cards+"</div><div class='lobby-area'><div class='section-mini'><h3>الطاولات الحالية</h3><button class='platform-link' id='refresh-lobbies'>تحديث</button></div><div class='lobby-grid'>"+ls+"</div></div>");
@@ -186,7 +186,7 @@
   }
   function logoutView(){api("/api/platform/logout",{method:"POST"}).catch(function(){}).finally(function(){token="";account=null;localStorage.removeItem("mld_token");location.hash="#top";location.reload()});}
   function homeView(){stopGamePoll();panel.className="panel platform-panel hidden";$("#directory").className=$("#directory").className+" hidden";var rev=document.querySelector(".reviews-section");if(rev)rev.style.display="block";window.scrollTo({top:0,behavior:"smooth"});}
-  document.querySelectorAll("[data-home]").forEach(function(b){b.onclick=homeView});
+  document.querySelectorAll("[data-home]").forEach(function(b){b.onclick=function(){homeView();var m=$("#mobile-menu");if(m)m.className=m.className.replace(/\\bopen\\b/g,"").trim();}});
   document.querySelectorAll("[data-profile]").forEach(function(b){b.onclick=profileView});
   document.querySelectorAll("[data-chat]").forEach(function(b){b.onclick=chatView});
   function pigeonView(){
@@ -200,8 +200,9 @@
   }
   document.querySelectorAll("[data-pigeon]").forEach(function(b){b.onclick=function(){pigeonView();var m=$("#mobile-menu");if(m)m.className=m.className.replace(/\bopen\b/g,"").trim();};});
   document.querySelectorAll("[data-logout]").forEach(function(b){b.onclick=function(){if(account)logoutView()}});
+  document.querySelectorAll("[data-login]").forEach(function(b){b.onclick=function(){loginView();var m=$("#mobile-menu");if(m)m.className=m.className.replace(/\\bopen\\b/g,"").trim();}});
   document.querySelectorAll("[data-owner]").forEach(function(b){b.onclick=function(){adminView();var m=$("#mobile-menu");if(m)m.className=m.className.replace(/\\bopen\\b/g,"").trim();};});
-  function updateOwnerMenu(){document.querySelectorAll("[data-owner]").forEach(function(b){if(account&&account.role==="owner")b.classList.remove("hidden");else b.classList.add("hidden");});document.querySelectorAll(".auth-only").forEach(function(b){if(account)b.classList.remove("hidden");else b.classList.add("hidden");});}
+  function updateOwnerMenu(){document.querySelectorAll("[data-owner]").forEach(function(b){if(account&&account.role==="owner")b.classList.remove("hidden");else b.classList.add("hidden");});document.querySelectorAll(".auth-only").forEach(function(b){if(account)b.classList.remove("hidden");else b.classList.add("hidden");});document.querySelectorAll(".guest-only").forEach(function(b){if(account)b.classList.add("hidden");else b.classList.remove("hidden");});}
   document.querySelectorAll("[data-platform]").forEach(function(b){b.onclick=function(){if(b.dataset.platform==="account"&&!need())return;if(b.dataset.platform==="account")accountView();if(b.dataset.platform==="games")gamesView();if(b.dataset.platform==="groups")groupsView();if(b.dataset.platform==="admin")adminView();var m=$("#mobile-menu");if(m)m.className=m.className.replace(/\bopen\b/g,"").trim()}});
   updateOwnerMenu();
   if(token)api("/api/platform/me").then(function(d){account=d.account;updateOwnerMenu();}).catch(function(){token="";localStorage.removeItem("mld_token");updateOwnerMenu();});
