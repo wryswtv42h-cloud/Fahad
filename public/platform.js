@@ -5,7 +5,7 @@
   var panel=$("#platform");
   var token=localStorage.getItem("mld_token")||"";
   var account=null;
-  var names={"baloot":"بلوت","uno":"UNO","jackaroo":"جاكارو","ludo":"لودو","monopoly":"مونوبولي"};
+  var names={"baloot":"بلوت","uno":"UNO","jackaroo":"جاكارو","ludo":"لودو","monopoly":"مونوبولي","maqsor":"مقوصر"};
   if(!panel)return;
   function esc(v){return String(v==null?"":v).replace(/[&<>\"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]})}
   function api(url,opt){opt=opt||{};opt.headers=Object.assign({"Content-Type":"application/json"},opt.headers||{});if(token)opt.headers.Authorization="Bearer "+token;return fetch(url,opt).then(function(r){return r.json().then(function(d){if(!r.ok)throw Error(d.error||"حدث خطأ");return d})})}
@@ -83,6 +83,9 @@
         }else if(lobby.game==="baloot"){
           var bh=state.myHand||[];
           controls="<div class='game-controls'><div class='turn-box "+(isMyTurn?"my-turn":"")+"'>الدور الآن: <b>"+esc(seatName(lobby.currentPlayer))+"</b></div><p class='muted'>النوع المفتوح: "+esc(state.trickSuit||"لم يبدأ")+"</p><div class='card-hand'>"+bh.map(function(card,i){return "<button class='uno-card' data-baloot-card='"+i+"'><b>"+esc(card.label)+"</b></button>"}).join("")+"</div><p class='muted'>عدد الأكلات: "+Object.keys(state.scores||{}).map(function(k){return "@"+esc(k)+": "+state.scores[k]}).join(" · ")+"</p></div>";
+        }else if(lobby.game==="maqsor"){
+          var mh=state.myHand||[], drawn=state.drawn&&state.drawn[my], scores=state.scores||{};
+          controls="<div class='game-controls'><div class='turn-box "+(isMyTurn?"my-turn":"")+"'>الدور الآن: <b>"+esc(seatName(lobby.currentPlayer))+"</b></div><p class='muted'>النقاط: "+(scores[my]||0)+" · التصفيرات: "+((state.zeros&&state.zeros[my])||0)+" · الجولة: "+(state.round||1)+"</p><div class='card-hand maqsor-hand'>"+mh.map(function(card,i){return "<button class='uno-card maqsor-card' data-maqsor-card='"+i+"'><b>"+(card.hidden?"🂠 "+(i+1):esc(card.label))+"</b><small>"+(card.hidden?"مخفي":"قيمة "+(card.rank==="K"?0:card.rank==="JOKER"?20:card.rank==="J"?11:card.rank==="Q"?12:card.rank==="A"?1:Number(card.rank)))+"</small></button>"}).join("")+"</div>"+(drawn?"<p class='muted'>المسحوبة: <b>"+esc(drawn.label)+"</b> — اضغط ورقة لتبديلها أو استخدم زر الوطي.</p>":"")+"<div class='maqsor-actions'><button class='primary' id='maqsor-draw' "+(!isMyTurn||drawn?"disabled":"")+">سحب من الخبيصة</button><button class='platform-link' id='maqsor-take' "+(!isMyTurn||drawn?"disabled":"")+">أخذ المرمية</button><button class='platform-link' id='maqsor-qawsar' "+(!isMyTurn||drawn?"disabled":"")+">قوصر</button></div><p class='muted small'>الحرق بالقيمة فقط؛ 8 و9 تكشفان ورقة ذاتية، 9 الأحمر يكشف أي ورقة، والولد الأحمر يبدّل ورقتين.</p></div>";
         }else{
           var pieces=(state.pieces&&state.pieces[my])||[];
           var extra=lobby.game==="monopoly"?"<p class='muted'>رصيدك: 💰 "+(state.money&&state.money[my]||0)+" · موقعك: "+(state.positions&&state.positions[my]||0)+"</p>":"<p class='muted'>رمية النرد: "+(state.lastRoll||"—")+"</p>";
@@ -106,6 +109,26 @@
         document.querySelectorAll("[data-card]").forEach(function(b){b.onclick=function(){var color="";var card=(state.myHand||[])[Number(b.dataset.card)];if(card&&card.color==="wild")color=prompt("اختر اللون: أحمر / أزرق / أخضر / أصفر","أحمر")||"أحمر";gameAction(lobby.id,"play",{cardIndex:Number(b.dataset.card),color:color}).then(function(d){render(d.lobby)}).catch(function(e){alert(e.message)})}});
         document.querySelectorAll("[data-baloot-card]").forEach(function(b){b.onclick=function(){gameAction(lobby.id,"play-card",{cardIndex:Number(b.dataset.balootCard)}).then(function(d){render(d.lobby)}).catch(function(e){alert(e.message)})}});
         var draw=$("#uno-draw");if(draw)draw.onclick=function(){gameAction(lobby.id,"draw").then(function(d){render(d.lobby)}).catch(function(e){alert(e.message)})};
+        var md=$("#maqsor-draw");if(md)md.onclick=function(){gameAction(lobby.id,"draw").then(function(d){render(d.lobby)}).catch(function(e){alert(e.message)})};
+        var mt=$("#maqsor-take");if(mt)mt.onclick=function(){gameAction(lobby.id,"take-discard").then(function(d){render(d.lobby)}).catch(function(e){alert(e.message)})};
+        var mq=$("#maqsor-qawsar");if(mq)mq.onclick=function(){gameAction(lobby.id,"qawsar").then(function(d){render(d.lobby)}).catch(function(e){alert(e.message)})};
+        document.querySelectorAll("[data-maqsor-card]").forEach(function(b){b.onclick=function(){
+          var i=Number(b.dataset.maqsorCard),card=(state.myHand||[])[i];
+          if(!isMyTurn)return;
+          if(drawn){gameAction(lobby.id,"replace",{index:i}).then(function(d){render(d.lobby)}).catch(function(e){alert(e.message)});return;}
+          if(card&&card.hidden)return;
+          if(card&&(card.rank==="8"||card.rank==="9")){
+            var t=prompt("اكتب رقم الورقة المخفية التي تريد كشفها (1-4):","3");if(t)gameAction(lobby.id,"reveal-self",{cardIndex:i,targetIndex:Number(t)-1}).then(function(d){render(d.lobby)}).catch(function(e){alert(e.message)});return;
+          }
+          if(card&&card.rank==="J"&&["♥","♦"].includes(card.suit)){
+            var p=prompt("اكتب يوزر اللاعب الآخر للتبديل:","");var oi=prompt("رقم ورقته 1-4:","1");if(p&&oi)gameAction(lobby.id,"swap",{myIndex:i,player:p,otherIndex:Number(oi)-1}).then(function(d){render(d.lobby)}).catch(function(e){alert(e.message)});return;
+          }
+          if(card&&card.rank==="9"&&["♥","♦"].includes(card.suit)){
+            var p=prompt("يوزر اللاعب الذي تريد كشف ورقته:","");var oi=prompt("رقم الورقة 1-4:","1");if(p&&oi)gameAction(lobby.id,"reveal-any",{cardIndex:i,player:p,index:Number(oi)-1}).then(function(d){render(d.lobby)}).catch(function(e){alert(e.message)});return;
+          }
+          gameAction(lobby.id,"burn",{index:i}).then(function(d){render(d.lobby)}).catch(function(e){alert(e.message)});
+        }});
+        var discardDrawn=document.querySelector("[data-maqsor-discard]");if(discardDrawn)discardDrawn.onclick=function(){gameAction(lobby.id,"discard-drawn").then(function(d){render(d.lobby)}).catch(function(e){alert(e.message)})};
       }
       var nr=$("#new-from-table");if(nr)nr.onclick=gamesView;
     }
