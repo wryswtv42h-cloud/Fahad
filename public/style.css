@@ -115,3 +115,49 @@ body.menu-open{overflow:hidden}
 @media(min-width:821px){#menu{display:none}.mobile-menu{display:none!important}#menu-overlay{display:none!important}}
 @media(max-width:820px){.desktop-nav{display:none}.mobile-menu{top:76px}}
 @media(max-width:560px){#menu{width:44px;height:44px}.mobile-menu{top:68px;right:10px;width:calc(100vw - 20px);max-height:calc(100vh - 80px);padding:9px;border-radius:18px}.mobile-menu .menu-grid{grid-template-columns:1fr}.mobile-menu .menu-grid button{min-height:50px}}
+
+
+/* MLD FINAL UI FIX — remove page lock/blur and unify Discord button */
+#menu-overlay{
+  display:none!important;
+  background:transparent!important;
+  backdrop-filter:none!important;
+  -webkit-backdrop-filter:none!important;
+  pointer-events:none!important;
+}
+#menu-overlay.open{
+  display:block!important;
+  pointer-events:auto!important;
+  background:rgba(0,0,0,.22)!important;
+  backdrop-filter:none!important;
+  -webkit-backdrop-filter:none!important;
+}
+.mobile-menu{
+  z-index:10003!important;
+  filter:none!important;
+  backdrop-filter:none!important;
+  -webkit-backdrop-filter:none!important;
+}
+#menu{
+  z-index:10004!important;
+  pointer-events:auto!important;
+}
+.discord-support{
+  right:16px!important;
+  bottom:16px!important;
+  z-index:10005!important;
+  width:54px!important;
+  height:54px!important;
+  border:1px solid rgba(255,255,255,.28)!important;
+  border-radius:17px!important;
+  color:#fff!important;
+  background:linear-gradient(135deg,#ff9cdc 0%,#b77aff 52%,#7567ff 100%)!important;
+  box-shadow:0 10px 28px rgba(0,0,0,.45),0 0 22px rgba(255,156,220,.24)!important;
+}
+.discord-support svg{width:28px;height:28px;display:block}
+.discord-support:hover{transform:translateY(-3px) scale(1.04)!important;box-shadow:0 14px 32px rgba(0,0,0,.5),0 0 26px rgba(255,156,220,.34)!important}
+.discord-support:active{transform:scale(.96)!important}
+@media(max-width:560px){
+  .discord-support{right:12px!important;bottom:12px!important;width:50px!important;height:50px!important;border-radius:15px!important}
+  .discord-support svg{width:26px;height:26px}
+}
