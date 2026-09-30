@@ -203,10 +203,18 @@
   document.querySelectorAll("[data-logout]").forEach(function(b){b.onclick=function(){if(account)logoutView();else{loginView();var m=$("#mobile-menu");if(m)m.classList.remove("open");}}});
   document.querySelectorAll("[data-login]").forEach(function(b){b.onclick=function(){loginView();var m=$("#mobile-menu");if(m)m.classList.remove("open");}});
   document.querySelectorAll("[data-owner]").forEach(function(b){b.onclick=function(){if(!need())return;adminView();var m=$("#mobile-menu");if(m)m.classList.remove("open");};});
-  function updateOwnerMenu(){document.querySelectorAll(".auth-only,.guest-only,.admin-only,[data-owner]").forEach(function(b){b.classList.remove("hidden");});}
+  function updateOwnerMenu(){
+    var logged=!!account;
+    var isOwner=logged && account.role==="owner";
+    var isAdmin=logged && (account.role==="owner" || account.admin===true);
+    document.querySelectorAll(".auth-only").forEach(function(b){b.classList.toggle("hidden",!logged);});
+    document.querySelectorAll(".guest-only").forEach(function(b){b.classList.toggle("hidden",logged);});
+    document.querySelectorAll(".admin-only").forEach(function(b){b.classList.toggle("hidden",!isAdmin);});
+    document.querySelectorAll(".owner-only,.owner-menu,[data-owner]").forEach(function(b){b.classList.toggle("hidden",!isOwner);});
+  }
   document.querySelectorAll("[data-platform]").forEach(function(b){b.onclick=function(){if(b.dataset.platform==="account"&&!need())return;if(b.dataset.platform==="account")accountView();if(b.dataset.platform==="games")gamesView();if(b.dataset.platform==="groups")groupsView();if(b.dataset.platform==="admin"){if(!need())return;adminView();}var m=$("#mobile-menu");if(m)m.className=m.className.replace(/\bopen\b/g,"").trim()}});
   updateOwnerMenu();
   if(token)api("/api/platform/me").then(function(d){account=d.account;updateOwnerMenu();}).catch(function(){token="";localStorage.removeItem("mld_token");updateOwnerMenu();});
   updateOwnerMenu();
-  window.MLDPlatform={accountView:accountView,loginView:loginView,gamesView:gamesView,groupsView:groupsView,adminView:adminView,profileView:profileView,chatView:chatView};
+  window.MLDPlatform={accountView:accountView,loginView:loginView,gamesView:gamesView,groupsView:groupsView,adminView:adminView,profileView:profileView,chatView:chatView,refreshMenu:updateOwnerMenu};
 })();
