@@ -15,5 +15,6 @@ jobs:
           node-version: 20
       - run: node scripts/game-engine-smoke.js
       - run: node --input-type=commonjs < scripts/game-action-smoke.js
+      - run: node scripts/bot-manager-smoke.js
 
 # Full engine + action regression suite
