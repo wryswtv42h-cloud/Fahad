@@ -128,7 +128,7 @@ module.exports = function setupMLDExtra({ app, client, auth, ownerOnly, adminOnl
     if(!message)return res.status(400).json({error:"اكتب رسالة البرودكاست"});
     try{
       const guild=await getGuild();
-      const members=(await getAllMembers(guild)).filter(m=>!m.user?.bot);
+      const members=[...(await guild.members.fetch()).values()].filter(m=>!m.user?.bot);
       const jobId=id();
       const job={id:jobId,status:"running",total:members.length,sent:0,failed:0,startedAt:new Date().toISOString(),finishedAt:null,error:null};
       dmBroadcastJobs.set(jobId,job);
