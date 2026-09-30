@@ -225,8 +225,28 @@ module.exports = function setupBotManager({ app, auth, logPlatform, platform, sa
               prefix + "ping — فحص الاتصال",
               prefix + "help — عرض الأوامر",
               prefix + "server — معلومات السيرفر",
-              prefix + "bot — معلومات البوت"
+              prefix + "bot — معلومات البوت",
+              prefix + "roulette @شخص @شخص... — سحب عشوائي متحرك بالأسماء"
             ].join("\\n"));
+          } else if (command === "roulette") {
+            const mentions = Array.from(message.mentions.members?.values?.() || []).filter(m => !m.user.bot);
+            const unique = [];
+            const seen = new Set();
+            for (const m of mentions) {
+              if (!seen.has(m.id)) { seen.add(m.id); unique.push(m); }
+            }
+            if (unique.length < 2) return message.reply("🎰 اذكر شخصين أو أكثر بعد الأمر، مثال: " + prefix + "roulette @أحمد @محمد");
+            const names = unique.slice(0, 20).map(m => m.displayName || m.user.globalName || m.user.username);
+            const spin = await message.reply("🎰 الروليت تبدأ...\\n" + names.map((n, i) => (i === 0 ? "👉 " : "▫️ ") + n).join("\\n"));
+            const rounds = Math.min(10, Math.max(5, names.length + 3));
+            for (let i = 0; i < rounds; i++) {
+              const pick = Math.floor(Math.random() * names.length);
+              const frame = names.map((n, j) => (j === pick ? "🟢 " : "▫️ ") + n).join("\\n");
+              await new Promise(resolve => setTimeout(resolve, 180 + i * 35));
+              await spin.edit("🎰 الروليت تدور...\\n" + frame).catch(() => {});
+            }
+            const winner = Math.floor(Math.random() * names.length);
+            await spin.edit("🎰 **النتيجة النهائية**\\n🏆 **" + names[winner] + "**").catch(() => {});
           } else if (command === "server") {
             await message.reply("🏠 " + message.guild.name + " • الأعضاء: " + message.guild.memberCount);
           } else if (command === "bot") {
