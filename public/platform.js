@@ -162,7 +162,7 @@
     }).catch(function(e){alert(e.message)});
   }
   function logoutView(){api("/api/platform/logout",{method:"POST"}).catch(function(){}).finally(function(){token="";account=null;localStorage.removeItem("mld_token");location.hash="#top";location.reload()});}
-  function homeView(){panel.className="panel platform-panel hidden";$("#directory").className=$("#directory").className.replace(/\bhidden\b/g,"").trim();window.scrollTo({top:0,behavior:"smooth"});}
+  function homeView(){stopGamePoll();panel.className="panel platform-panel hidden";$("#directory").className=$("#directory").className+" hidden";var rev=document.querySelector(".reviews-section");if(rev)rev.style.display="block";window.scrollTo({top:0,behavior:"smooth"});}
   document.querySelectorAll("[data-home]").forEach(function(b){b.onclick=homeView});
   document.querySelectorAll("[data-profile]").forEach(function(b){b.onclick=profileView});
   document.querySelectorAll("[data-chat]").forEach(function(b){b.onclick=chatView});
