@@ -248,10 +248,15 @@ module.exports = function setupMLDExtra({ app, client, auth, ownerOnly, adminOnl
   }
   seedDemoReviews();
   app.get("/api/platform/reviews",(req,res)=>res.json({reviews:data.reviews.slice(0,100)}));
-  app.post("/api/platform/reviews",(req,res)=>{
-    const r={id:id(),username:req.account?.username||"زائر",rating:Math.max(1,Math.min(5,Number(req.body?.rating||5))),text:clean(req.body?.text,500),createdAt:new Date().toISOString()};
+  app.post("/api/platform/reviews",auth,(req,res)=>{
+    const r={id:id(),username:req.account.username,rating:Math.max(1,Math.min(5,Number(req.body?.rating||5))),text:clean(req.body?.text,500),createdAt:new Date().toISOString()};
     if(r.text.length<2)return res.status(400).json({error:"اكتب رأيك"});
-    data.reviews.unshift(r); data.reviews=data.reviews.slice(0,200); save(); logPlatform("review_created",req.account?.id||null,r.username+":"+r.rating); res.status(201).json({review:r});
+    data.reviews.unshift(r); data.reviews=data.reviews.slice(0,200); save(); logPlatform("review_created",req.account.id,r.username+":"+r.rating); res.status(201).json({review:r});
+  });
+  app.delete("/api/platform/reviews/:id",auth,ownerOnly,(req,res)=>{
+    const i=data.reviews.findIndex(x=>x.id===req.params.id);
+    if(i<0)return res.status(404).json({error:"الرأي غير موجود"});
+    const [removed]=data.reviews.splice(i,1); save(); logPlatform("review_deleted",req.account.id,removed.id); res.json({ok:true});
   });
 
   const DEFAULT_JOKES=[
