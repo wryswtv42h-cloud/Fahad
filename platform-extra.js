@@ -39,6 +39,7 @@ module.exports = function setupMLDExtra({ app, client, auth, ownerOnly, adminOnl
   function save(){ fs.mkdirSync(dir,{recursive:true}); const tmp=file+".tmp"; fs.writeFileSync(tmp,JSON.stringify(data,null,2)); fs.renameSync(tmp,file); }
   const id=()=>crypto.randomUUID();
   const clean=(v,n)=>String(v==null?"":v).trim().slice(0,n);
+  const dmBroadcastJobs=new Map();
   const staffOnly=(req,res,next)=>req.account?.role==="owner" || req.account?.admin===true ? next() : res.status(403).json({error:"هذا القسم للإدارة والأونر"});
   function chatMember(room, username){ return room.members.includes(username) || room.owner===username; }
   app.get("/api/platform/chat/general",(req,res)=>res.json({messages:data.chats.general.slice(-200)}));
@@ -121,6 +122,44 @@ module.exports = function setupMLDExtra({ app, client, auth, ownerOnly, adminOnl
       logPlatform("broadcast_sent",req.account.id,"channels="+sentCount+" mentionEveryone="+mentionEveryone);
       res.json({ok:true,sentCount,results});
     }catch(e){console.error("Broadcast send:",e);res.status(500).json({error:"تعذر تنفيذ البرودكاست"});}
+  });
+  app.post("/api/platform/broadcast/dm",auth,ownerOnly,async(req,res)=>{
+    const message=clean(req.body?.message,2000);
+    if(!message)return res.status(400).json({error:"اكتب رسالة البرودكاست"});
+    try{
+      const guild=await getGuild();
+      const members=(await getAllMembers(guild)).filter(m=>!m.user?.bot);
+      const jobId=id();
+      const job={id:jobId,status:"running",total:members.length,sent:0,failed:0,startedAt:new Date().toISOString(),finishedAt:null,error:null};
+      dmBroadcastJobs.set(jobId,job);
+      res.status(202).json({ok:true,job});
+      (async()=>{
+        try{
+          for(const member of members){
+            try{
+              await member.send({content:"📣 **MLD Community**\\n\\n"+message});
+              job.sent++;
+            }catch(e){
+              job.failed++;
+            }
+            if(job.sent+job.failed < members.length) await new Promise(r=>setTimeout(r,250));
+          }
+          job.status="completed";
+          job.finishedAt=new Date().toISOString();
+          logPlatform("broadcast_dm_sent",req.account.id,"sent="+job.sent+" failed="+job.failed+" total="+job.total);
+        }catch(e){
+          job.status="failed";
+          job.error=String(e?.message||e);
+          job.finishedAt=new Date().toISOString();
+          console.error("Broadcast DM:",e);
+        }
+      })();
+    }catch(e){console.error("Broadcast DM prepare:",e);res.status(500).json({error:"تعذر تجهيز برودكاست الخاص"});}
+  });
+  app.get("/api/platform/broadcast/dm/:id",auth,ownerOnly,(req,res)=>{
+    const job=dmBroadcastJobs.get(req.params.id);
+    if(!job)return res.status(404).json({error:"عملية البرودكاست غير موجودة"});
+    res.json({job});
   });
 
   require("./bot-manager")({ app, auth, logPlatform, platform, savePlatform });
