@@ -11,8 +11,25 @@ function closeMenu(){D.classList.remove("open");B.classList.remove("open");docum
 function openMenu(){D.classList.add("open");B.classList.add("open");document.body.classList.add("menu-open");D.setAttribute("aria-hidden","false");$("#menuButton").setAttribute("aria-expanded","true")}
 $("#menuButton").onclick=()=>D.classList.contains("open")?closeMenu():openMenu();$("#closeMenu").onclick=closeMenu;B.onclick=closeMenu;
 function go(p){S.page=p;closeMenu();render()}
-function menu(){const a=S.account,staff=a&&["admin","owner"].includes(a.role),owner=a&&a.role==="owner";const x=(id,t,v=true)=>v?"<button class='menu-item' data-page='"+id+"'><span class='mi'>•</span><span>"+t+"</span></button>":"";N.innerHTML="<div class='menu-section'><div class='menu-title'>المجتمع</div><div class='menu-grid'>"+x("home","الرئيسية")+x("members","الأعضاء")+x("top","TOP")+x("roles","الرتب")+x("reviews","الآراء")+"</div></div><div class='menu-section'><div class='menu-title'>المنصة</div><div class='menu-grid'>"+x("games","الألعاب")+x("groups","القروبات")+x("jokes","النكت")+x("stories","القصص")+x("cinema","السينما")+x("chat","الشات",!!a)+x("messages","الزاجل",!!a)+x("tickets","التذاكر",!!a)+x("applications","التقديمات",!!a)+"</div></div>"+(a?"<div class='menu-section'><div class='menu-title'>حسابي</div><div class='menu-grid'>"+x("account","حسابي")+x("profile","بروفايلي")+x("admin","الإدارة",!!staff)+x("bots","البوتات",!!staff)+x("overview","مركز المنصة",!!staff)+x("owner","لوحة الأونر",!!owner)+"</div></div><button id='logout' class='danger-btn wide menu-login'>تسجيل الخروج</button>":"<button class='primary wide menu-login' data-page='login'>تسجيل الدخول</button><button class='secondary wide menu-login' data-page='register'>إنشاء حساب</button>")+"<a class='invite' href='"+esc(S.server?.invite||"#")+"' target='_blank' rel='noreferrer'>انضم إلى سيرفر MLD ↗</a>";
-$$("[data-page]").forEach(b=>b.onclick=()=>go(b.dataset.page));const l=$("#logout");if(l)l.onclick=logout}
+function menu(){
+const a=S.account,staff=a&&["admin","owner"].includes(a.role),owner=a&&a.role==="owner";
+const items=[
+["home","⌂","الرئيسية","#ff79c8",true],["top","★","TOP","#ffd166",true],["members","♟","الأعضاء","#63d9ff",true],
+["direct","✉","إرسال رسالة خاصة","#8d7cff",true],["roles","◆","الرتب القيادية","#65e6a2",true],["games","◈","الألعاب","#ff8f70",true],
+["account","◎","الحساب","#c084fc",!!a],["admin","⚙","الإدارة","#ff6688",!!staff],["groups","◉","المجموعات","#63d9ff",true],
+["tickets","▣","التذاكر","#ffb86b",!!a],["bots","♙","البوتات","#9b8cff",!!staff],["reviews","✦","الآراء","#ff79c8",true],
+["applications","✓","التقديمات","#65e6a2",!!a],["messages","✉","الرسائل","#7dd3fc",!!a],["overview","▤","مركز المنصة","#f59e0b",!!staff],
+["chat","☁","فضفض","#c084fc",!!a],["jokes","☻","نكت","#ffd166",true],["stories","▤","قصص","#fb7185",true]
+];
+const x=(id,i,t,c,v=true)=>v?"<button class='menu-item' data-page='"+id+"' style='--menu-c:"+c+"'><span class='menu-icon'>"+i+"</span><span>"+t+"</span></button>":"";
+N.innerHTML="<div class='menu-section'><div class='menu-title'>MLD · الأقسام</div><div class='menu-grid menu-grid-main'>"+items.map(i=>x(...i)).join("")+"</div></div>"
++(owner?"<div class='menu-section owner-menu-section'><div class='menu-title'>تحكم الأونر</div>"+x("owner","♛","لوحة الأونر","#ff79c8",true)+"</div>":"")
++(a?"<button id='logout' class='danger-btn wide menu-login'>تسجيل الخروج</button>":"<div class='menu-auth'><button class='primary wide menu-login' data-page='login'>تسجيل الدخول</button><button class='secondary wide menu-login' data-page='register'>إنشاء حساب</button></div>")
++"<a class='invite' href='"+esc(S.server?.invite||"#")+"' target='_blank' rel='noreferrer'>انضم إلى سيرفر MLD ↗</a>";
+$$("[data-page]").forEach(btn=>btn.onclick=()=>go(btn.dataset.page));
+const l=$("#logout");if(l)l.onclick=logout;
+}
+
 function header(){const a=S.account;$("#accountState").textContent=a?(a.role==="owner"?"أونر":a.role==="admin"?"إداري":"عضو"):"زائر";$("#menuUserText").textContent=a?"@"+a.username:"زائر";menu()}
 async function loadMe(){if(!token()){S.account=null;header();return}try{S.account=(await api("/api/platform/me")).account}catch(e){localStorage.removeItem("mld_token");S.account=null}header()}
 function shell(t,s,b){M.innerHTML="<section class='page'><div class='page-head'><span class='eyebrow'>MLD · COMMUNITY</span><h1>"+t+"</h1><p>"+s+"</p></div>"+b+"</section>";scrollTo(0,0);$$("[data-page]",M).forEach(x=>x.onclick=()=>go(x.dataset.page))}
@@ -35,9 +52,22 @@ async function admin(){if(!S.account||!["admin","owner"].includes(S.account.role
 async function bots(){if(!S.account||!["admin","owner"].includes(S.account.role))return go("login");shell("إدارة البوتات","الأنظمة المفعلة.","<div id='list' class='grid'></div>");try{const d=await api("/api/platform/bots");$("#list").innerHTML=(d.bots||[]).map(b=>"<article class='card' style='display:block'><h3>🤖 "+esc(b.name||b.id)+"</h3><p class='muted'>"+esc(b.description||b.type||"نظام")+"</p></article>").join("")||"<div class='empty'>لا توجد بوتات</div>"}catch(e){note(e.message)}}
 async function overview(){if(!S.account||!["admin","owner"].includes(S.account.role))return go("login");shell("مركز المنصة","ملخص الأنظمة.","<div id='stats' class='stats'></div>");try{const d=await api("/api/platform/overview");$("#stats").innerHTML=Object.entries(d).slice(0,10).map(x=>"<div class='stat'><small>"+esc(x[0])+"</small><b>"+esc(x[1])+"</b></div>").join("")}catch(e){note(e.message)}}
 async function owner(){if(S.account?.role!=="owner")return go("login");shell("لوحة الأونر","تحكم الأونر الكامل.","<div class='notice'>هذه الصفحة للأونر فقط.</div><div class='actions'><button class='primary' data-page='bots'>البوتات</button><button class='secondary' data-page='overview'>مركز المنصة</button></div>")}
-async function messages(){return simple("/api/platform/messages","الزاجل","رسائلك داخل MLD.","رسالة جديدة")}
+async function messages(){return simple("/api/platform/messages","الزاجل","رسائلك داخل MLD.","رسالة جديدة")}async function direct(){
+shell("إرسال رسالة خاصة","أرسل رسالة Discord مباشرة إلى عضو من سيرفر MLD.","<div class='direct-layout'><div class='panel direct-search'><div class='field'><label>ابحث عن العضو</label><input id='dmq' class='input' placeholder='اكتب الاسم أو اليوزر...'></div><div id='dmMembers' class='direct-members'></div></div><div class='panel direct-compose'><div class='selected-member' id='selectedMember'><span class='menu-icon'>✉</span><div><b>اختر عضوًا</b><small>سيظهر هنا المستلم</small></div></div><div class='field'><label>عنوان الرسالة</label><input id='dmTitle' class='input' value='رسالة من MLD Community'></div><div class='field'><label>الرسالة</label><textarea id='dmText' class='input' rows='8' placeholder='اكتب رسالتك...'></textarea></div><button id='dmSend' class='primary wide'>إرسال الرسالة</button></div></div>");
+let selected=null;
+const load=async(q="")=>{try{
+const d=await api("/api/public/members"+(q?"?q="+encodeURIComponent(q):""));
+const list=(d.members||[]).filter(m=>!m.bot).slice(0,12);
+$("#dmMembers").innerHTML=list.map(m=>"<button class='dm-member' data-dmid='"+esc(m.id)+"'><img class='avatar' src='"+esc(av(m))+"'><span><b>"+esc(m.name)+"</b><small>@"+esc(m.username||"")+"</small></span><i>›</i></button>").join("")||"<div class='empty'>لا يوجد عضو مطابق</div>";
+$("[data-dmid]").forEach(btn=>btn.onclick=()=>{selected=(d.members||[]).find(m=>String(m.id)===String(btn.dataset.dmid))||null;$(".dm-member").forEach(x=>x.classList.remove("selected"));btn.classList.add("selected");$("#selectedMember").innerHTML="<img class='avatar' src='"+esc(av(selected))+"'><div><b>"+esc(selected.name)+"</b><small>@"+esc(selected.username||"")+"</small></div>";});
+}catch(e){note(e.message)}};
+await load();
+$("#dmq").oninput=e=>{clearTimeout(direct.t);direct.t=setTimeout(()=>load(e.target.value.trim()),220)};
+$("#dmSend").onclick=async()=>{if(!selected)return note("اختر العضو أولًا");const message=$("#dmText").value.trim();if(!message)return note("اكتب الرسالة أولًا");try{await api("/api/public/message",{method:"POST",body:JSON.stringify({memberId:selected.id,title:$("#dmTitle").value.trim()||"رسالة من MLD Community",message})});$("#dmText").value="";note("تم إرسال الرسالة بنجاح")}catch(e){note(e.message)}};
+}
+
 async function cinema(){shell("السينما","غرف مشاهدة مشتركة للمحتوى المرخص.","<div class='panel'><h2>غرف المشاهدة</h2><p class='muted'>قسم مستقل للسينما.</p></div>")}
-const V={home,members,roles,top,games,groups,reviews,jokes,stories,login:()=>auth(false),register:()=>auth(true),account,profile,chat,messages,cinema,tickets:()=>simple("/api/platform/tickets","التذاكر","الدعم والتذاكر","فتح تذكرة"),applications:()=>simple("/api/platform/applications","التقديمات","طلبات الإدارة","تقديم طلب"),admin,bots,overview,owner};
+const V={home,members,roles,top,direct,games,groups,reviews,jokes,stories,login:()=>auth(false),register:()=>auth(true),account,profile,chat,messages,cinema,tickets:()=>simple("/api/platform/tickets","التذاكر","الدعم والتذاكر","فتح تذكرة"),applications:()=>simple("/api/platform/applications","التقديمات","طلبات الإدارة","تقديم طلب"),admin,bots,overview,owner};
 async function render(){try{await(V[S.page]||home)()}catch(e){M.innerHTML="<section class='page'><div class='empty'><h3>تعذر فتح الصفحة</h3><p>"+esc(e.message)+"</p></div></section>"}header();scrollTo(0,0)}
 async function logout(){try{await api("/api/platform/logout",{method:"POST"})}catch(e){}localStorage.removeItem("mld_token");S.account=null;header();go("home")}
 async function boot(){try{S.server=await api("/api/public/server");if(S.server.supportDiscordId)$("#discordSupport").href="https://discord.com/users/"+encodeURIComponent(S.server.supportDiscordId);else if(S.server.invite)$("#discordSupport").href=S.server.invite}catch(e){}try{const d=await api("/api/platform/announcement");if(d.announcement?.enabled&&d.announcement.text){$("#announcementText").textContent=d.announcement.text;$("#announcement").classList.remove("hidden")}}catch(e){}await loadMe();await render()}
