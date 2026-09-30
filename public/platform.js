@@ -41,7 +41,7 @@
           attempts++;
           api("/api/platform/accounts/pending/"+encodeURIComponent(d.pendingId)+"?token="+encodeURIComponent(d.browserToken)).then(function(v){
             if(v.status==="confirmed"){clearInterval(poll);token=v.token;account=v.account;localStorage.setItem("mld_token",token);updateOwnerMenu();accountView();}
-            else if(v.status==="cancelled"||attempts>=60){clearInterval(poll);if(attempts>=60)$("#pending-status").textContent="انتهت مهلة التأكيد. اضغط إنشاء الحساب للمحاولة من جديد.";create.disabled=false;create.textContent="إرسال طلب إنشاء الحساب";}
+            else if(v.status==="cancelled"){clearInterval(poll);$("#pending-status").textContent="❌ تم إلغاء إنشاء الحساب. لم يتم إنشاء أي حساب.";create.disabled=false;create.textContent="إرسال طلب إنشاء الحساب";}\n            else if(attempts>=60){clearInterval(poll);$("#pending-status").textContent="انتهت مهلة التأكيد. اضغط إنشاء الحساب للمحاولة من جديد.";create.disabled=false;create.textContent="إرسال طلب إنشاء الحساب";}
           }).catch(function(){});
           if(attempts>=60)clearInterval(poll);
         },5000);
