@@ -43,16 +43,13 @@ jobs:
               await page.goto(base+'/#top', {waitUntil:'domcontentloaded'});
               await page.waitForTimeout(1500);
               if (!(await page.locator('#platform').count())) throw new Error('platform panel missing');
-              if (viewport.width < 800) {
-                await page.locator('#menu').click();
-                if (!(await page.locator('#mobile-menu.open').count())) throw new Error('mobile menu did not open');
-                if (await page.locator('#mobile-menu [data-login].hidden').count()) throw new Error('guest login hidden');
-                if (!(await page.locator('#mobile-menu [data-platform="admin"].hidden').count())) throw new Error('admin menu visible to guest');
-                if (!(await page.locator('#mobile-menu [data-owner].hidden').count())) throw new Error('owner menu visible to guest');
-                await page.locator('#mobile-menu [data-platform="games"]').click();
-              } else {
-                await page.locator('.desktop-nav [data-platform="games"]').click();
-              }
+              // The platform uses one navigation system on mobile and desktop.
+              await page.locator('#menu').click();
+              if (!(await page.locator('#mobile-menu.open').count())) throw new Error('unified menu did not open');
+              if (await page.locator('#mobile-menu [data-login].hidden').count()) throw new Error('guest login hidden');
+              if (!(await page.locator('#mobile-menu [data-platform="admin"].hidden').count())) throw new Error('admin menu visible to guest');
+              if (!(await page.locator('#mobile-menu [data-owner].hidden').count())) throw new Error('owner menu visible to guest');
+              await page.locator('#mobile-menu [data-platform="games"]').click();
               await page.waitForTimeout(800);
               if (!(await page.locator('.game-create').count())) throw new Error('game create buttons missing');
               // Guest must be blocked from creating a table and routed to login.
@@ -71,12 +68,8 @@ jobs:
                 await page.waitForTimeout(50);
                 await page.goto(base+'/#top', {waitUntil:'domcontentloaded'});
                 await page.waitForTimeout(500);
-                if (viewport.width < 800) {
-                  await page.locator('#menu').click();
-                  await page.locator('#mobile-menu [data-platform="games"]').click();
-                } else {
-                  await page.locator('.desktop-nav [data-platform="games"]').click();
-                }
+                await page.locator('#menu').click();
+                await page.locator('#mobile-menu [data-platform="games"]').click();
                 await page.waitForTimeout(300);
               }
               const lobbyApi = await page.request.get(base+'/api/platform/lobbies');
