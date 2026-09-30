@@ -716,8 +716,10 @@ async function syncAccountAccess(account) {
     const linkedDiscord = String(account.discordUsername || "").trim().toLowerCase();
     const isConfiguredOwner = linkedDiscord === OWNER_DISCORD_USERNAME || (OWNER_DISCORD_ID && String(account.discordId || "").toLowerCase() === OWNER_DISCORD_ID);
     const hasAdminRole = Boolean(member && member.roles.cache.some(r => adminRoleIds.has(r.id)));
-    account.role = isConfiguredOwner ? "owner" : "member";
-    account.admin = account.role === "owner" || hasAdminRole || account.admin === true;
+    const configuredUsername = String(process.env.OWNER_USERNAME || "").trim().toLowerCase();
+    const isConfiguredOwnerAccount = configuredUsername && String(account.username || "").trim().toLowerCase() === configuredUsername;
+    account.role = isConfiguredOwner || isConfiguredOwnerAccount ? "owner" : (hasAdminRole || account.admin === true ? "admin" : "member");
+    account.admin = account.role === "owner" || account.role === "admin";
   } catch {
     account.admin = account.role === "owner" || account.admin === true;
   }
