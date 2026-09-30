@@ -77,6 +77,16 @@
   }
   document.querySelectorAll("[data-chat],[data-profile],[data-pigeon],[data-extra='bots'],[data-extra='tickets'],[data-extra='applications'],[data-extra='messages'],[data-extra='economy'],[data-extra='overview'],[data-logout]").forEach(wrapLogin);
 
+  // Absolute fallback: handle login through event delegation even if another menu handler is missing.
+  document.addEventListener("click",function(e){
+    var b=e.target&&e.target.closest?e.target.closest("[data-login]"):null;
+    if(!b)return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if(window.MLDPlatform&&typeof window.MLDPlatform.loginView==="function") window.MLDPlatform.loginView();
+    closeMenu();
+  },true);
+
   // Hard fallback for the guest login button: bind after platform.js has loaded.
   document.querySelectorAll("[data-login]").forEach(function(b){
     b.onclick=function(e){
