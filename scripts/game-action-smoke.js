@@ -1,4 +1,5 @@
 "use strict";
+(async()=>{
 const fs=require("fs"), crypto=require("crypto"), vm=require("vm");
 const source=fs.readFileSync("index.js","utf8");
 const start=source.indexOf("const GAME_CATALOG = [");
@@ -44,3 +45,5 @@ for(const game of ["ludo","jackaroo"]){
  const l=lobby("maqsor",["p0","p1"]);await act(l,"p0",{action:"draw"});assert(l.gameState.drawn.p0,"Maqsor draw");await act(l,"p0",{action:"replace",index:2});assert(!l.gameState.drawn.p0,"Maqsor replace");l.gameState.turnIndex=0;const i=l.gameState.hands.p0.findIndex(c=>maqsorCanBurn(c,l.gameState.discard.at(-1)));if(i>=0){await act(l,"p0",{action:"burn",index:i});assert(l.gameState.hands.p0.length===4,"Maqsor burn size");}assert(maqsorValue({rank:"K"})===0&&maqsorValue({rank:"JOKER"})===20,"Maqsor values");
 }
 console.log("GAME_ACTION_SMOKE_OK");
+
+})().catch(e=>{console.error(e.stack||e);process.exit(1);});
