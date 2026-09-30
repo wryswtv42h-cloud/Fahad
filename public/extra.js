@@ -7,7 +7,7 @@
   function esc(v){return String(v==null?"":v).replace(/[&<>\"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c];});}
   function api(url,opt){opt=opt||{};opt.headers=Object.assign({"Content-Type":"application/json"},opt.headers||{});if(token())opt.headers.Authorization="Bearer "+token();return fetch(url,opt).then(function(r){return r.json().then(function(d){if(!r.ok)throw Error(d.error||"حدث خطأ");return d;});});}
   function show(title,body){panel.className=panel.className.replace(/\bhidden\b/g,"").trim();$("#directory").className+=" hidden";$("#view-title").textContent=title;$("#subtitle").textContent="منصة MLD";panel.innerHTML=body;}
-  function login(){if(token())return true;alert("سجّل دخولك من قسم الحساب أولًا");return false;}
+  function login(){if(token())return true;if(window.MLDPlatform&&window.MLDPlatform.loginView){window.MLDPlatform.loginView();}var m=$("#mobile-menu");if(m)m.classList.remove("open");return false;}
   function nav(){var m=$("#mobile-menu");if(m)m.className=m.className.replace(/\bopen\b/g,"").trim();}
   function bots(){
     if(!login())return;
@@ -68,12 +68,12 @@
     if(!button)return;
     var original=button.onclick;
     button.onclick=function(e){
-      if(!token()){alert("سجّل دخولك أولًا من «حسابي».");closeMenu();return;}
+      if(!token()){if(window.MLDPlatform&&window.MLDPlatform.loginView)window.MLDPlatform.loginView();closeMenu();return;}
       if(original)original.call(button,e);
       closeMenu();
     };
   }
-  document.querySelectorAll("[data-chat],[data-profile],[data-pigeon],[data-platform='games'],[data-platform='groups'],[data-extra='bots'],[data-extra='tickets'],[data-extra='applications'],[data-extra='messages'],[data-extra='economy'],[data-extra='overview'],[data-logout]").forEach(wrapLogin);
+  document.querySelectorAll("[data-chat],[data-profile],[data-pigeon],[data-extra='bots'],[data-extra='tickets'],[data-extra='applications'],[data-extra='messages'],[data-extra='economy'],[data-extra='overview'],[data-logout]").forEach(wrapLogin);
 
   function syncAccess(){
     var admin=document.querySelectorAll("[data-platform='admin']"),owner=document.querySelectorAll("[data-owner]");
