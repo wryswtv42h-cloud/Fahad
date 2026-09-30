@@ -413,6 +413,7 @@ module.exports = function setupBotManager({ app, auth, logPlatform, platform, sa
         botUsername:botUser.tag || botUser.username,
         botAvatar:botUser.displayAvatarURL({ extension:"png", size:256 }),
         prefix,
+        modules: Array.isArray(req.body?.modules) ? req.body.modules.filter(x => ["protection","games","bank","streak","tickets","applications","broadcast","giveaways"].includes(String(x))) : [],
         enabled:true,
         status:"starting",
         lastError:"",
