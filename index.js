@@ -733,6 +733,40 @@ function passwordOk(password, account) {
   return crypto.timingSafeEqual(Buffer.from(hash, "hex"), Buffer.from(account.passwordHash, "hex"));
 }
 
+function ensureConfiguredOwnerAccount() {
+  const username = String(process.env.OWNER_USERNAME || "").trim().toLowerCase();
+  const password = String(process.env.OWNER_PASSWORD || "");
+  if (!username || password.length < 6) return;
+  const discordId = String(process.env.OWNER_DISCORD_ID || "").trim();
+  const discordUsername = String(process.env.OWNER_DISCORD_USERNAME || "w4px").trim();
+  let account = platform.accounts.find(a => a.username === username);
+  if (!account) {
+    const pass = hashPassword(password);
+    account = {
+      id: crypto.randomUUID(),
+      username,
+      discordId,
+      discordUsername,
+      role: "owner",
+      admin: true,
+      passwordHash: pass.hash,
+      salt: pass.salt,
+      createdAt: new Date().toISOString()
+    };
+    platform.accounts.push(account);
+  } else {
+    account.role = "owner";
+    account.admin = true;
+    if (discordId) account.discordId = discordId;
+    if (discordUsername) account.discordUsername = discordUsername;
+    const pass = hashPassword(password);
+    account.passwordHash = pass.hash;
+    account.salt = pass.salt;
+  }
+  savePlatform();
+}
+ensureConfiguredOwnerAccount();
+
 app.get("/api/platform/games", (req, res) => {
   res.json({ botReady: client.isReady(), games: GAME_CATALOG.map(g => ({
     id:g.id, name:g.name, icon:g.icon, players:g.minPlayers===g.maxPlayers?String(g.maxPlayers):g.minPlayers+"-"+g.maxPlayers,
