@@ -68,9 +68,9 @@ jobs:
                 if (persona.name==='owner') {
                   if (adminHidden||ownerHidden||botHidden) throw new Error('owner menu matrix failed');
                 } else if (persona.name==='admin') {
-                  if (adminHidden||!ownerHidden||!botHidden) throw new Error('admin menu matrix failed');
+                  if (adminHidden||!ownerHidden||botHidden) throw new Error('admin menu matrix failed');
                 } else {
-                  if (!adminHidden||!ownerHidden||!botHidden) throw new Error(persona.name+' menu matrix failed');
+                  if (!adminHidden||!ownerHidden||botHidden) throw new Error(persona.name+' menu matrix failed');
                 }
                 await page.locator('#menu').click();
               }
