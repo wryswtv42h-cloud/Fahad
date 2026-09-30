@@ -828,7 +828,8 @@ function initialGameState(game,players){
 function publicGameState(lobby,username){
   const s=lobby.gameState||{},safe={...s};
   if(safe.hands)safe.hands=Object.fromEntries(Object.keys(safe.hands).map(p=>[p,p===username?safe.hands[p]:safe.hands[p].map((card,i)=>safe.publicReveals&&safe.publicReveals.some(r=>r.player===p&&r.index===i&&r.until>Date.now())?card:card&&card.known?card:{hidden:true})]));
-  if(safe.game==="maqsor"&&safe.drawn){safe.drawn=Object.fromEntries(Object.keys(safe.drawn).map(p=>[p,p===username?safe.drawn[p]:null]));}
+  if(lobby.game==="maqsor"&&safe.drawn){safe.drawn=Object.fromEntries(Object.keys(safe.drawn).map(p=>[p,p===username?safe.drawn[p]:null]));}
+  safe.game=lobby.game;
   safe.myHand=s.hands&&s.hands[username]?s.hands[username].map(c=>c):[];
   return safe;
 }
@@ -965,7 +966,7 @@ app.post("/api/platform/lobbies/:id/action",auth,(req,res)=>{
   const s=lobby.gameState,actor=lobby.players[s.turnIndex],action=String(req.body?.action||"");
   if(action==="roll"){
     const roll=crypto.randomInt(1,7);s.lastRoll=roll;s.lastAction={by:actor,type:"roll",value:roll,at:new Date().toISOString()};
-    if(lobby.game==="monopoly"){const old=s.positions[actor];s.positions[actor]=(old+roll)%40;if(old+roll>=40)s.money[actor]+=200;advanceTurn(lobby);}
+    if(lobby.game==="monopoly"){const old=s.positions[actor];s.positions[actor]=(old+roll)%40;if(old+roll>=40)s.money[actor]+=200;s.awaitingBuy=Boolean(!s.properties[s.positions[actor]]);if(!s.awaitingBuy)advanceTurn(lobby);}
     savePlatform();return res.json({lobby:lobbyFor(lobby,req.account.username),message:"رمية: "+roll});
   }
   if(["ludo","jackaroo"].includes(lobby.game)){
@@ -976,7 +977,7 @@ app.post("/api/platform/lobbies/:id/action",auth,(req,res)=>{
   }
   if(lobby.game==="uno"){
     if(action==="draw"){const card=drawUno(s);if(card)s.hands[actor].push(card);s.lastAction={by:actor,type:"draw",at:new Date().toISOString()};advanceTurn(lobby);}
-    else if(action==="play"){const idx=Number(req.body?.cardIndex),hand=s.hands[actor]||[],card=hand[idx],top=s.discard[s.discard.length-1];const match=card&&(card.color==="wild"||card.color===s.currentColor||card.value===top.value);if(!card||!match)return res.status(400).json({error:"لا يمكنك لعب هذه الورقة الآن"});hand.splice(idx,1);s.discard.push(card);if(card.color==="wild")s.currentColor=String(req.body?.color||"أحمر");else s.currentColor=card.color;if(card.value==="+2"){const n=lobby.players[(s.turnIndex+1)%lobby.players.length];for(let i=0;i<2;i++){const x=drawUno(s);if(x)s.hands[n].push(x);}}if(card.value==="+4"){const n=lobby.players[(s.turnIndex+1)%lobby.players.length];for(let i=0;i<4;i++){const x=drawUno(s);if(x)s.hands[n].push(x);}}if(!hand.length)s.winner=actor;else if(card.value==="عكس"&&lobby.players.length>2)s.turnIndex=(s.turnIndex-1+lobby.players.length)%lobby.players.length;else if(card.value!=="تخطي")advanceTurn(lobby);s.lastAction={by:actor,type:"play",card,at:new Date().toISOString()};}
+    else if(action==="play"){const idx=Number(req.body?.cardIndex),hand=s.hands[actor]||[],card=hand[idx],top=s.discard[s.discard.length-1];const match=card&&(card.color==="wild"||card.color===s.currentColor||card.value===top.value);if(!card||!match)return res.status(400).json({error:"لا يمكنك لعب هذه الورقة الآن"});hand.splice(idx,1);s.discard.push(card);if(card.color==="wild")s.currentColor=String(req.body?.color||"أحمر");else s.currentColor=card.color;let skipped=0,penalty=0;if(card.value==="+2"){penalty=2;skipped=1;}if(card.value==="+4"){penalty=4;skipped=1;}const next=lobby.players[(s.turnIndex+1)%lobby.players.length];for(let i=0;i<penalty;i++){const x=drawUno(s);if(x)s.hands[next].push(x);}if(!hand.length)s.winner=actor;else if(card.value==="عكس"&&lobby.players.length>2)s.turnIndex=(s.turnIndex-1+lobby.players.length)%lobby.players.length;else{advanceTurn(lobby);if(card.value==="تخطي"||skipped)advanceTurn(lobby);}s.lastAction={by:actor,type:"play",card,at:new Date().toISOString()};}
     else return res.status(400).json({error:"حركة UNO غير معروفة"});savePlatform();return res.json({lobby:lobbyFor(lobby,req.account.username),message:"تم تنفيذ الحركة"});
   }
   if(lobby.game==="baloot"){
@@ -1002,7 +1003,7 @@ app.post("/api/platform/lobbies/:id/action",auth,(req,res)=>{
   }
   if(lobby.game==="monopoly"){
     if(action!=="buy")return res.status(400).json({error:"بعد الرمية، إذا العقار متاح اضغط شراء"});
-    const pos=s.positions[actor],price=200+(pos%8)*25;if(s.properties[pos])return res.status(400).json({error:"العقار مملوك"});if(s.money[actor]<price)return res.status(400).json({error:"رصيدك لا يكفي"});s.money[actor]-=price;s.properties[pos]={owner:actor,price};s.lastAction={by:actor,type:"buy",at:new Date().toISOString()};advanceTurn(lobby);savePlatform();return res.json({lobby:lobbyFor(lobby,req.account.username),message:"تم شراء العقار"});
+    const pos=s.positions[actor],price=200+(pos%8)*25;if(!s.awaitingBuy)return res.status(400).json({error:"لا يوجد عقار متاح للشراء الآن"});if(s.properties[pos])return res.status(400).json({error:"العقار مملوك"});if(s.money[actor]<price)return res.status(400).json({error:"رصيدك لا يكفي"});s.money[actor]-=price;s.properties[pos]={owner:actor,price};s.awaitingBuy=false;s.lastAction={by:actor,type:"buy",at:new Date().toISOString()};advanceTurn(lobby);savePlatform();return res.json({lobby:lobbyFor(lobby,req.account.username),message:"تم شراء العقار"});
   }
   return res.status(400).json({error:"حركة غير مدعومة"});
 });
