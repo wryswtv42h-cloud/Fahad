@@ -1062,44 +1062,31 @@ app.post("/api/platform/lobbies/:id/action",auth,(req,res)=>{
   const s=lobby.gameState,actor=lobby.players[s.turnIndex],action=String(req.body?.action||"");
   if(action==="roll"){
     const roll=crypto.randomInt(1,7);s.lastRoll=roll;s.lastAction={by:actor,type:"roll",value:roll,at:new Date().toISOString()};
-    if(lobby.game==="monopoly"){const old=s.positions[actor];s.positions[actor]=(old+roll)%40;if(old+roll>=40)s.money[actor]+=200;s.awaitingBuy=Boolean(!s.properties[s.positions[actor]]);if(!s.awaitingBuy)advanceTurn(lobby);}
-    savePlatform();return res.json({lobby:lobbyFor(lobby,req.account.username),message:"رمية: "+roll});
-  }
-  if(["ludo","jackaroo"].includes(lobby.game)){
-    if(action!=="move")return res.status(400).json({error:"ارمِ النرد ثم اختر قطعة"});
-    const idx=Math.max(0,Math.min(3,Number(req.body?.piece||0))),steps=Number(s.lastRoll||0);if(!steps)return res.status(400).json({error:"ارمِ النرد أولًا"});
-    if(!s.pieces[actor])return res.status(400).json({error:"لا يوجد مقعد للاعب"});s.pieces[actor][idx]=(s.pieces[actor][idx]+steps)%40;s.lastAction={by:actor,type:"move",piece:idx,steps,at:new Date().toISOString()};if(steps!==6)advanceTurn(lobby);else s.lastRoll=null;
-    savePlatform();return res.json({lobby:lobbyFor(lobby,req.account.username),message:"تم تحريك القطعة"});
-  }
-  if(lobby.game==="uno"){
-    if(action==="draw"){const count=Math.max(1,s.pendingDraw||1);for(let i=0;i<count;i++){const card=drawUno(s);if(card)s.hands[actor].push(card);}s.pendingDraw=0;s.pendingChallenge=null;s.lastAction={by:actor,type:"draw",count,at:new Date().toISOString()};advanceTurn(lobby);}
-    else if(action==="play"){const idx=Number(req.body?.cardIndex),hand=s.hands[actor]||[],card=hand[idx],top=s.discard[s.discard.length-1];const match=card&&(card.color==="wild"||card.color===s.currentColor||card.value===top.value);if(!card||!match)return res.status(400).json({error:"لا يمكنك لعب هذه الورقة الآن"});hand.splice(idx,1);s.discard.push(card);if(card.color==="wild")s.currentColor=String(req.body?.color||"أحمر");else s.currentColor=card.color;let skipped=0,penalty=0;if(card.value==="+2"){penalty=2;skipped=1;}if(card.value==="+4"){penalty=4;skipped=1;}const next=lobby.players[(s.turnIndex+1)%lobby.players.length];for(let i=0;i<penalty;i++){const x=drawUno(s);if(x)s.hands[next].push(x);}if(!hand.length)s.winner=actor;else if(card.value==="عكس"&&lobby.players.length>2)s.turnIndex=(s.turnIndex-1+lobby.players.length)%lobby.players.length;else{advanceTurn(lobby);if(card.value==="تخطي"||skipped)advanceTurn(lobby);}s.lastAction={by:actor,type:"play",card,at:new Date().toISOString()};}
-    else return res.status(400).json({error:"حركة UNO غير معروفة"});savePlatform();return res.json({lobby:lobbyFor(lobby,req.account.username),message:"تم تنفيذ الحركة"});
-  }
-  if(lobby.game==="baloot"){
-    if(action!=="play-card")return res.status(400).json({error:"اختر ورقة من يدك"});
-    const idx=Number(req.body?.cardIndex),hand=s.hands[actor]||[],card=hand[idx];if(!card)return res.status(400).json({error:"الورقة غير موجودة"});
-    if(s.trickSuit&&card.suit!==s.trickSuit&&hand.some(x=>x.suit===s.trickSuit))return res.status(400).json({error:"يجب متابعة النوع"});
-    hand.splice(idx,1);if(!s.trickSuit)s.trickSuit=card.suit;s.trick.push({player:actor,card});
-    if(s.trick.length<4)advanceTurn(lobby);else{s.scores[s.trick[0].player]=(s.scores[s.trick[0].player]||0);const winner=s.trick.reduce((best,t)=>t.card.suit===s.trickSuit&&["7","8","Q","K","10","A","9","J"].indexOf(t.card.rank)>["7","8","Q","K","10","A","9","J"].indexOf(best.card.rank)?t:best,s.trick[0]);s.scores[winner.player]=(s.scores[winner.player]||0)+1;s.trick=[];s.trickSuit=null;s.turnIndex=lobby.players.indexOf(winner.player);if(Object.values(s.hands).every(h=>h.length===0))s.winner=Object.keys(s.scores).sort((a,b)=>s.scores[b]-s.scores[a])[0];}
-    s.lastAction={by:actor,type:"play-card",card,at:new Date().toISOString()};savePlatform();return res.json({lobby:lobbyFor(lobby,req.account.username),message:"تم لعب الورقة"});
-  }
-  if(lobby.game==="maqsor"){
-    const hand=s.hands[actor]||[];
-    if(action==="draw"){if(s.drawn[actor])return res.status(409).json({error:"عندك ورقة مسحوبة بالفعل"});const card=s.deck.pop();if(!card)return res.status(409).json({error:"الخبيصة فارغة"});s.drawn[actor]=card;s.lastAction={by:actor,type:"draw",at:new Date().toISOString()};savePlatform();return res.json({lobby:lobbyFor(lobby,req.account.username),message:"سحبت من الخبيصة"});}
-    if(action==="take-discard"){if(s.drawn[actor])return res.status(409).json({error:"عندك ورقة مسحوبة بالفعل"});const card=s.discard.pop();if(!card)return res.status(409).json({error:"لا توجد مرمية"});s.drawn[actor]=card;s.lastAction={by:actor,type:"take-discard",at:new Date().toISOString()};savePlatform();return res.json({lobby:lobbyFor(lobby,req.account.username),message:"أخذت المرمية"});}
-    if(action==="replace"){const source=s.drawn[actor],i=Number(req.body?.index);if(!source)return res.status(409).json({error:"اسحب أو خذ المرمية أولًا"});if(i<0||i>3)return res.status(400).json({error:"اختر ورقة صحيحة"});const old=hand[i];hand[i]={...source,known:true};s.discard.push(old);delete s.drawn[actor];s.lastAction={by:actor,type:"replace",index:i,at:new Date().toISOString()};advanceTurn(lobby);savePlatform();return res.json({lobby:lobbyFor(lobby,req.account.username),message:"تم التبديل"});}
-    if(action==="discard-drawn"){const source=s.drawn[actor];if(!source)return res.status(409).json({error:"لا توجد ورقة مسحوبة"});s.discard.push(source);delete s.drawn[actor];s.lastAction={by:actor,type:"discard-drawn",at:new Date().toISOString()};advanceTurn(lobby);savePlatform();return res.json({lobby:lobbyFor(lobby,req.account.username),message:"تم الوطي"});}
-    if(action==="burn"){const i=Number(req.body?.index),card=hand[i],top=s.discard[s.discard.length-1];if(i<0||i>3||!maqsorCanBurn(card,top))return res.status(400).json({error:"الحرق يكون بنفس الرقم فقط، والجوكر يحرق جوكر"});hand.splice(i,1);const fresh=s.deck.pop();if(fresh)hand.push({...fresh,known:false});s.lastAction={by:actor,type:"burn",index:i,at:new Date().toISOString()};advanceTurn(lobby);savePlatform();return res.json({lobby:lobbyFor(lobby,req.account.username),message:"تم الحرق"});}
-    if(action==="reveal-self"){const i=Number(req.body?.cardIndex),target=Number(req.body?.targetIndex),card=hand[i];if(!card||!["8","9"].includes(card.rank))return res.status(400).json({error:"تحتاج 8 أو 9"});if(!hand[target]||hand[target].known)return res.status(400).json({error:"اختر ورقة مخفية"});hand[target].known=true;hand.splice(i,1);s.discard.push(card);s.lastAction={by:actor,type:"reveal-self",index:target,at:new Date().toISOString()};advanceTurn(lobby);savePlatform();return res.json({lobby:lobbyFor(lobby,req.account.username),message:"تم كشف ورقتك"});}
-    if(action==="reveal-any"){const i=Number(req.body?.cardIndex),targetPlayer=String(req.body?.player||""),targetIndex=Number(req.body?.index),card=hand[i];if(!card||card.rank!=="9"||!maqsorRed(card))return res.status(400).json({error:"تحتاج 9 أحمر"});const th=s.hands[targetPlayer]||[];if(!th[targetIndex])return res.status(400).json({error:"اختر ورقة صحيحة"});s.publicReveals=(s.publicReveals||[]).filter(r=>r.until>Date.now());s.publicReveals.push({player:targetPlayer,index:targetIndex,until:Date.now()+10000});hand.splice(i,1);s.discard.push(card);s.lastAction={by:actor,type:"reveal-any",player:targetPlayer,index:targetIndex,at:new Date().toISOString()};advanceTurn(lobby);savePlatform();return res.json({lobby:lobbyFor(lobby,req.account.username),message:"تم كشف الورقة مؤقتًا"});}
-    if(action==="swap"){const i=Number(req.body?.myIndex),p=String(req.body?.player||""),j=Number(req.body?.otherIndex),card=hand[i],other=s.hands[p]||[],jack=hand.find(c=>c.rank==="J"&&maqsorRed(c));if(!jack||!card||!other[j])return res.status(400).json({error:"تحتاج ولدًا أحمر واختر الورقتين"});const t=card;hand[i]=other[j];other[j]=t;hand[i].known=true;other[j].known=false;const ji=hand.indexOf(jack);if(ji>=0){hand.splice(ji,1);s.discard.push(jack);}s.lastAction={by:actor,type:"swap",player:p,at:new Date().toISOString()};advanceTurn(lobby);savePlatform();return res.json({lobby:lobbyFor(lobby,req.account.username),message:"تم التبديل"});}
-    if(action==="qawsar"){if(s.qawsarBy)return res.status(409).json({error:"تم إعلان قوصر بالفعل"});if(s.drawn[actor])return res.status(409).json({error:"أنهِ الورقة المسحوبة أولًا"});s.qawsarBy=actor;s.lastAction={by:actor,type:"qawsar",at:new Date().toISOString()};advanceTurn(lobby);savePlatform();return res.json({lobby:lobbyFor(lobby,req.account.username),message:"تم إعلان قوصر"});}
-    return res.status(400).json({error:"حركة مقوصر غير معروفة"});
-  }
-  if(lobby.game==="monopoly"){
-    if(action!=="buy")return res.status(400).json({error:"بعد الرمية، إذا العقار متاح اضغط شراء"});
-    const pos=s.positions[actor],price=200+(pos%8)*25;if(!s.awaitingBuy)return res.status(400).json({error:"لا يوجد عقار متاح للشراء الآن"});if(s.properties[pos])return res.status(400).json({error:"العقار مملوك"});if(s.money[actor]<price)return res.status(400).json({error:"رصيدك لا يكفي"});s.money[actor]-=price;s.properties[pos]={owner:actor,price};s.awaitingBuy=false;s.lastAction={by:actor,type:"buy",at:new Date().toISOString()};advanceTurn(lobby);savePlatform();return res.json({lobby:lobbyFor(lobby,req.account.username),message:"تم شراء العقار"});
+    if(lobby.game==="monopoly"){
+    if(action==="roll"){
+      const d1=crypto.randomInt(1,7),d2=crypto.randomInt(1,7),roll=d1+d2;
+      const old=s.positions[actor],next=(old+roll)%40;
+      s.lastRoll={d1,d2,total:roll}; if(old+roll>=40)s.money[actor]+=200; s.positions[actor]=next;
+      const tile=MONOPOLY_BOARD[next];
+      if(tile&&(tile.type==="property"||tile.type==="railroad"||tile.type==="utility")&&!s.properties[next])s.awaitingBuy=true;
+      else if(tile&&tile.type==="tax"){s.money[actor]-=tile.amount;s.bankFreeParking+=tile.amount;}
+      else if(tile&&tile.type==="gotojail"){s.positions[actor]=10;s.jailTurns[actor]=3;}
+      else if(tile&&tile.type==="property"&&s.properties[next]&&s.properties[next].owner!==actor){
+        const owner=s.properties[next].owner;const rent=tile.rent[s.houses[next]||0]||tile.rent[0];s.money[actor]-=rent;s.money[owner]=(s.money[owner]||0)+rent;
+      }
+      s.lastAction={by:actor,type:"roll",dice:[d1,d2],at:new Date().toISOString()};
+      if(d1!==d2&&!s.awaitingBuy)s.turnIndex=(s.turnIndex+1)%lobby.players.length;
+      savePlatform();return res.json({lobby:lobbyFor(lobby,req.account.username),message:"النرد: "+d1+" + "+d2});
+    }
+    if(action==="buy"){
+      const pos=s.positions[actor],tile=MONOPOLY_BOARD[pos];
+      if(!s.awaitingBuy||!tile||s.money[actor]<tile.price)return res.status(400).json({error:"لا يوجد عقار متاح للشراء أو الرصيد غير كافٍ"});
+      s.money[actor]-=tile.price;s.properties[pos]={owner:actor,pos,price:tile.price};s.houses[pos]=0;s.awaitingBuy=false;s.turnIndex=(s.turnIndex+1)%lobby.players.length;
+      s.lastAction={by:actor,type:"buy",position:pos,at:new Date().toISOString()};savePlatform();
+      return res.json({lobby:lobbyFor(lobby,req.account.username),message:"تم شراء العقار"});
+    }
+    if(action==="end-turn"){s.awaitingBuy=false;s.turnIndex=(s.turnIndex+1)%lobby.players.length;s.lastAction={by:actor,type:"end-turn",at:new Date().toISOString()};savePlatform();return res.json({lobby:lobbyFor(lobby,req.account.username),message:"انتهى دورك"});}
+    return res.status(400).json({error:"حركة مونوبولي غير معروفة"});
   }
   return res.status(400).json({error:"حركة غير مدعومة"});
 });
