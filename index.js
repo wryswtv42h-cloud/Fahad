@@ -493,6 +493,7 @@ client.on("interactionCreate", async (interaction) => {
       id: crypto.randomUUID(),
       username: pending.username,
       discordId: pending.discordId,
+      discordUsername: pending.discordUsername || "",
       role: pending.role,
       passwordHash: pending.passwordHash,
       salt: pending.salt,
@@ -549,6 +550,7 @@ function loadPlatform() {
       groups: Array.isArray(data.groups) ? data.groups : [],
       lobbies: Array.isArray(data.lobbies) ? data.lobbies : [],
       logs: Array.isArray(data.logs) ? data.logs : [],
+      sessions: Array.isArray(data.sessions) ? data.sessions : [],
       pendingAccounts: Array.isArray(data.pendingAccounts) ? data.pendingAccounts : []
     };
   } catch (error) {
@@ -558,11 +560,15 @@ function loadPlatform() {
 }
 
 let platform = loadPlatform();
+for (const session of platform.sessions || []) {
+  if (session?.token && session?.accountId && platform.accounts.some(a => a.id === session.accountId)) sessions.set(session.token, session.accountId);
+}
 // Owner identity requested for the existing MLD account: Discord username w4px / site username 305.
 for (const a of platform.accounts) { if (a.username === "305" || String(a.discordUsername || "").toLowerCase() === OWNER_DISCORD_USERNAME) a.role = "owner"; }
 savePlatform();
 
 function savePlatform() {
+  platform.sessions = [...sessions.entries()].map(([token, accountId]) => ({ token, accountId }));
   fs.mkdirSync(platformDir, { recursive: true });
   const tmp = `${platformFile}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(platform, null, 2));
@@ -661,7 +667,7 @@ app.post("/api/platform/accounts", async (req, res) => {
   if (!/^\d{15,22}$/.test(discordId)) return res.status(400).json({ error: "اختر عضوًا صحيحًا من السيرفر" });
   if (platform.accounts.some(a => a.username === username)) return res.status(409).json({ error: "اليوزر مستخدم بالفعل" });
   if (platform.accounts.some(a => String(a.discordId) === discordId)) return res.status(409).json({ error: "هذا Discord مربوط بحساب موجود بالفعل" });
-  if (platform.pendingAccounts?.some(a => a.username === username || String(a.discordId) === discordId)) return res.status(409).json({ error: "لديك طلب إنشاء حساب بانتظار التأكيد" });
+  if (platform.pendingAccounts?.some(a => a.status === "pending" && Date.parse(a.expiresAt) > Date.now() && (a.username === username || String(a.discordId) === discordId))) return res.status(409).json({ error: "لديك طلب إنشاء حساب بانتظار التأكيد" });
 
   const guild = await getGuild();
   const member = await guild.members.fetch(discordId).catch(() => null);
@@ -674,6 +680,7 @@ app.post("/api/platform/accounts", async (req, res) => {
   const pending = {
     id: pendingId, browserToken, username, discordId,
     role: owner ? "owner" : "member",
+    discordUsername: String(member.user.username || member.user.globalName || "").trim(),
     passwordHash: pass.hash, salt: pass.salt,
     createdAt: new Date().toISOString(),
     expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
@@ -710,6 +717,7 @@ app.get("/api/platform/accounts/pending/:id", (req, res) => {
     if (!account) return res.status(404).json({ error: "الحساب غير موجود" });
     const token = crypto.randomBytes(32).toString("hex");
     sessions.set(token, account.id);
+    savePlatform();
     p.status = "completed";
     savePlatform();
     return res.json({ status: "confirmed", token, account: safeAccount(account), owner: account.role === "owner" });
@@ -731,6 +739,7 @@ app.get("/api/platform/me", auth, (req, res) => res.json({ account: safeAccount(
 
 app.post("/api/platform/logout", auth, (req, res) => {
   sessions.delete(req.token);
+  savePlatform();
   res.json({ ok: true });
 });
 
