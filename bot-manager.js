@@ -64,7 +64,7 @@ module.exports = function setupBotManager({ app, auth, logPlatform, platform, sa
     return {
       id:b.id, name:b.name, description:b.description,
       guildId:b.guildId, guildName:b.guildName, botUserId:b.botUserId,
-      botUsername:b.botUsername, botAvatar:b.botAvatar || null, enabled:Boolean(b.enabled),
+      botUsername:b.botUsername, botAvatar:b.botAvatar || null, enabled:Boolean(b.enabled), modules:Array.isArray(b.modules) ? b.modules : [],
       status:live?.status || b.status || "stopped",
       lastError:b.lastError || "",
       createdAt:b.createdAt
@@ -130,8 +130,8 @@ module.exports = function setupBotManager({ app, auth, logPlatform, platform, sa
           return (p & 8n) !== 0n || (p & 32n) !== 0n || g.owner;
         } catch { return Boolean(g.owner); }
       }).map(g => ({ id:g.id, name:g.name, icon:g.icon || null, owner:Boolean(g.owner), permissions:String(g.permissions || "0") }));
-      account.discordId = me.id;
-      account.discordUsername = me.global_name || me.username;
+      account.discordOauthId = me.id;
+      account.discordUsername = account.discordUsername || me.username;
       account.discordGuilds = manageableGuilds;
       account.discordLinkedAt = new Date().toISOString();
       savePlatform();
@@ -150,16 +150,20 @@ module.exports = function setupBotManager({ app, auth, logPlatform, platform, sa
       linked:Boolean(a.discordId && /^\d{15,22}$/.test(String(a.discordId))),
       discordId:a.discordId || null,
       username:a.discordUsername || null,
+      oauthLinked:Boolean(a.discordOauthId),
       guilds:Array.isArray(a.discordGuilds) ? a.discordGuilds : []
     });
   });
 
   app.get("/api/platform/bot-catalog", (req,res) => {
     const publicBots = [
-      {id:"mld-main",name:"بوت ملاذ الأساسي",description:"حماية السيرفر وأوامر ping وhelp وserver وtop وbalance وdaily وstreak وgames.",botUsername:"بوت السيرفر",status:"online",enabled:true,programmed:true,features:["الحماية","الأوامر الأساسية","الروليت","الاقتصاد","الألعاب"]},
-      {id:"mld-protection",name:"بوت الحماية",description:"مراقبة السبام والروابط والمنشنات المفرطة ومحاولات الإزعاج.",botUsername:"Protection",status:"online",enabled:true,programmed:true,features:["مكافحة السبام","روابط الدعوات","المنشنات المفرطة","إجراءات الحماية"]},
-      {id:"mld-roulette",name:"بوت الروليت",description:"روليت متحركة تختار فائزًا عشوائيًا من الأشخاص المذكورين.",botUsername:"Roulette",status:"online",enabled:true,programmed:true,features:["روليت متحركة","اختيار عشوائي","أسماء المشاركين"]},
-      {id:"mld-managed",name:"البوتات المضافة",description:"البوتات التي أضافها أصحاب الحسابات من لوحة البوتات.",botUsername:"بوتات الأعضاء",status:"catalog",enabled:true,programmed:false,features:["إضافة","تشغيل وإيقاف","اختبار الاتصال","لوحة تحكم"]}
+      {id:"mld-suite",name:"MLD Suite",description:"حزمة بوت متكاملة: حماية وألعاب وبنك وستريك وتذاكر وتقديمات وبرودكاست وقيفاوي.",botUsername:"MLD Suite",status:"online",enabled:true,programmed:true,features:["حماية كاملة","ألعاب كاملة","بنك كامل","ستريك كامل","تيكت كامل","تقديم كامل","برودكاست كامل","قيفاوي كامل"],systems:["protection","games","bank","streak","tickets","applications","broadcast","giveaways"]},
+      {id:"mld-protection",name:"MLD Protection",description:"نظام حماية مستقل لمكافحة السبام والروابط والمنشنات والهجمات السريعة.",botUsername:"MLD Protection",status:"online",enabled:true,programmed:true,features:["مكافحة السبام","روابط الدعوات","منشنات جماعية","قفل القنوات"],systems:["protection"]},
+      {id:"mld-games",name:"MLD Games",description:"بوت ألعاب للسيرفر مع روليت وألعاب سريعة ونظام نتائج.",botUsername:"MLD Games",status:"online",enabled:true,programmed:true,features:["روليت","عملة","نرد","نتائج"],systems:["games"]},
+      {id:"mld-economy",name:"MLD Economy",description:"بنك واقتصاد وستريك يومي وحوالات وترتيب أعضاء.",botUsername:"MLD Economy",status:"online",enabled:true,programmed:true,features:["رصيد","يومية","تحويل","ستريك","توب"],systems:["bank","streak"]},
+      {id:"mld-support",name:"MLD Support",description:"نظام تيكت وتقديمات منظم مع قنوات خاصة وإغلاق وحفظ السجل.",botUsername:"MLD Support",status:"online",enabled:true,programmed:true,features:["تيكت","تقديمات","قنوات خاصة","إغلاق"],systems:["tickets","applications"]},
+      {id:"mld-community",name:"MLD Community",description:"برودكاست وقيفاوي وأدوات تفاعل المجتمع.",botUsername:"MLD Community",status:"online",enabled:true,programmed:true,features:["برودكاست","قيفاوي","مشاركات","اختيار فائز"],systems:["broadcast","giveaways"]},
+      {id:"mld-managed",name:"البوتات المضافة",description:"البوتات التي يضيفها أصحاب الحسابات من لوحة البوتات.",botUsername:"بوتات الأعضاء",status:"catalog",enabled:true,programmed:false,features:["مصادقة Discord","اختيار السيرفر","تشغيل وإيقاف","اختبار الاتصال","لوحة تحكم"],systems:[]}
     ];
     let mine=[];
     try {
