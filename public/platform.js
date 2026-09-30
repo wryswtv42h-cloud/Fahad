@@ -257,12 +257,12 @@
     document.querySelectorAll(".logged-only").forEach(function(b){b.classList.toggle("hidden",!logged);});
     document.querySelectorAll(".guest-only,[data-login]").forEach(function(b){b.classList.toggle("guest-hidden",logged);});
     document.querySelectorAll(".admin-only").forEach(function(b){
-      if(isAdmin){b.classList.remove("hidden");b.style.removeProperty("display");b.setAttribute("aria-hidden","false");}
-      else{b.classList.add("hidden");b.style.setProperty("display","none","important");b.setAttribute("aria-hidden","true");}
+      if(isAdmin){b.classList.remove("hidden");b.classList.add("access-visible");b.style.removeProperty("display");b.setAttribute("aria-hidden","false");}
+      else{b.classList.add("hidden");b.classList.remove("access-visible");b.style.setProperty("display","none","important");b.setAttribute("aria-hidden","true");}
     });
     document.querySelectorAll(".owner-only,.owner-menu,[data-owner]").forEach(function(b){
-      if(isOwner){b.classList.remove("hidden");b.style.removeProperty("display");b.setAttribute("aria-hidden","false");}
-      else{b.classList.add("hidden");b.style.setProperty("display","none","important");b.setAttribute("aria-hidden","true");}
+      if(isOwner){b.classList.remove("hidden");b.classList.add("access-visible");b.style.removeProperty("display");b.setAttribute("aria-hidden","false");}
+      else{b.classList.add("hidden");b.classList.remove("access-visible");b.style.setProperty("display","none","important");b.setAttribute("aria-hidden","true");}
     });
   }
   document.querySelectorAll("[data-platform]").forEach(function(b){b.onclick=function(){if(b.dataset.platform==="account"&&!need())return;if(b.dataset.platform==="account")accountView();if(b.dataset.platform==="games")gamesView();if(b.dataset.platform==="groups")groupsView();if(b.dataset.platform==="admin"){if(!need())return;adminView();}var m=$("#mobile-menu");if(m)m.className=m.className.replace(/\bopen\b/g,"").trim()}});
