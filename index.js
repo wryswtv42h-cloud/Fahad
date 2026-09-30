@@ -656,16 +656,10 @@ function passwordOk(password, account) {
 }
 
 app.get("/api/platform/games", (req, res) => {
-  res.json({
-    botReady: client.isReady(),
-    games: [
-      { id: "baloot", name: "بلوت", icon: "🃏", players: "4", mode: "فرق" },
-      { id: "uno", name: "UNO", icon: "🎴", players: "2-4", mode: "تنافس" },
-      { id: "jackaroo", name: "جاكارو", icon: "♟️", players: "2-4", mode: "تنافس" },
-      { id: "ludo", name: "لودو", icon: "🎲", players: "2-4", mode: "تنافس" },
-      { id: "monopoly", name: "مونوبولي", icon: "🏦", players: "2-6", mode: "تنافس" }
-    ]
-  });
+  res.json({ botReady: client.isReady(), games: GAME_CATALOG.map(g => ({
+    id:g.id, name:g.name, icon:g.icon, players:g.minPlayers===g.maxPlayers?String(g.maxPlayers):g.minPlayers+"-"+g.maxPlayers,
+    mode:g.mode, description:g.description, minPlayers:g.minPlayers, maxPlayers:g.maxPlayers
+  }))});
 });
 
 app.get("/api/platform/account/discord-members", async (req, res) => {
@@ -1027,15 +1021,18 @@ app.get("/api/platform/lobbies", (req, res) => {
 
 app.post("/api/platform/lobbies", auth, (req, res) => {
   const game = String(req.body?.game || "");
-  const allowed = new Set(["baloot","uno","jackaroo","ludo","monopoly"]);
-  if (!allowed.has(game)) return res.status(400).json({ error: "اللعبة غير متاحة" });
+  const rules = GAME_CATALOG.find(g => g.id === game);
+  if (!rules) return res.status(400).json({ error: "اللعبة غير متاحة" });
   const existing = platform.lobbies.find(l => l.status !== "closed" && l.host === req.account.username);
   if (existing) return res.status(409).json({ error: "عندك جلسة ألعاب موجودة بالفعل. ادخل جلستك بدل إنشاء جلسة ثانية." , lobby: existing });
-  const maxPlayers = Math.max(2, Math.min(6, Number(req.body?.maxPlayers || 4)));
+  const maxPlayers = Number(req.body?.maxPlayers || rules.maxPlayers);
+  if (!Number.isInteger(maxPlayers) || maxPlayers < rules.minPlayers || maxPlayers > rules.maxPlayers) {
+    return res.status(400).json({ error: "عدد اللاعبين غير مناسب لهذه اللعبة" });
+  }
   const lobby = {
     id: crypto.randomUUID(), game, host:req.account.username,
     players:[req.account.username], spectators:[], maxPlayers,
-    status:"open", createdAt:new Date().toISOString()
+    status:"open", createdAt:new Date().toISOString(), gameState:null
   };
   platform.lobbies.push(lobby);
   savePlatform();
