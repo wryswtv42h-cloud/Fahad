@@ -230,7 +230,7 @@
     var isOwner=logged && account.role==="owner";
     var isAdmin=logged && (account.role==="owner" || account.admin===true);
     document.querySelectorAll(".auth-only").forEach(function(b){b.classList.toggle("hidden",!logged);});
-    document.querySelectorAll(".guest-only").forEach(function(b){b.classList.toggle("hidden",logged);});
+    document.querySelectorAll(".guest-only,[data-login]").forEach(function(b){b.classList.toggle("hidden",logged);});
     document.querySelectorAll(".admin-only").forEach(function(b){b.classList.toggle("hidden",!isAdmin);});
     document.querySelectorAll(".owner-only,.owner-menu,[data-owner]").forEach(function(b){b.classList.toggle("hidden",!isOwner);});
   }
