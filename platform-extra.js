@@ -253,7 +253,7 @@ app.post("/api/platform/tickets/settings",auth,ownerOnly,(req,res)=>{
   const questions=Array.isArray(req.body?.questions)?req.body.questions.map(x=>clean(x,120)).filter(Boolean).slice(1,10):[];
   data.ticketSettings={questions:questions.length?questions:["عنوان المشكلة","التفاصيل"]}; save(); logPlatform("ticket_questions_updated",req.account.id,String(questions.length)); res.json({questions:data.ticketSettings.questions});
 });
-app.post("/api/platform/tickets",auth,(req,res)=>{
+app.post("/api/platform/tickets",auth,async(req,res)=>{
   const title=clean(req.body?.title,100),message=clean(req.body?.message,2000),category=clean(req.body?.category||"عام",40);
   if(title.length<2||message.length<2)return res.status(400).json({error:"أكمل بيانات التذكرة"});
   const ticket={id:id(),owner:req.account.username,title,category,message,status:"open",claimedBy:null,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),replies:[]};
