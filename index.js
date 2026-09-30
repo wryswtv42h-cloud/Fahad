@@ -930,7 +930,7 @@ app.post("/api/platform/groups", auth, async (req, res) => {
 });
 app.post("/api/platform/groups/:id/join", auth, async (req, res) => {
   const group=platform.groups.find(g=>g.id===req.params.id);if(!group)return res.status(404).json({error:"المجموعة غير موجودة"});
-  if(group.status!=="approved"&&group.owner!==req.account.username)return res.status(409).json({error:"القروب بانتظار اعتماد الأونر"});
+  if(group.status!=="approved"&&group.owner!==req.account.username)return res.status(409).json({error:"القروب بانتظار اعتماد الأونر"});\n  if(group.status==="approved"&&group.discordRoleId){try{const guild=await getGuild();const account=platform.accounts.find(x=>x.username===req.account.username);const member=account?.discordId?await guild.members.fetch(account.discordId).catch(()=>null):null;const role=guild.roles.cache.get(group.discordRoleId);if(member&&role&&!member.roles.cache.has(role.id))await member.roles.add(role,"MLD group membership");}catch(err){console.error("Group role:",err.message);}}
   if(!group.members.includes(req.account.username))group.members.push(req.account.username);savePlatform();logPlatform("group_joined",req.account.id,group.name);
   res.json({ok:true,group});
 });
@@ -938,7 +938,7 @@ app.post("/api/platform/groups/:id/status",auth,ownerOnly,async(req,res)=>{
   const group=platform.groups.find(g=>g.id===req.params.id);if(!group)return res.status(404).json({error:"المجموعة غير موجودة"});
   const status=["approved","rejected","open"].includes(req.body?.status)?req.body.status:"approved";
   if(status==="approved"&&!group.discordCategoryId){
-    const guild=await getGuild();const role=await guild.roles.create({name:"MLD · "+group.name,reason:"MLD group"});const category=await guild.channels.create({name:"MLD · "+group.name,type:4,reason:"MLD group"});const textCh=await guild.channels.create({name:"chat-"+group.name.toLowerCase().replace(/[^a-z0-9-_]/g,"").slice(0,80)||"group-chat",type:0,parent:category.id,reason:"MLD group"});const voice=await guild.channels.create({name:"Voice · "+group.name,type:2,parent:category.id,reason:"MLD group"});group.discordRoleId=role.id;group.discordCategoryId=category.id;group.discordTextId=textCh.id;group.discordVoiceId=voice.id;
+    const guild=await getGuild();const role=await guild.roles.create({name:"MLD · "+group.name,reason:"MLD group"});const category=await guild.channels.create({name:"MLD · "+group.name,type:4,reason:"MLD group"});const textCh=await guild.channels.create({name:"chat-"+group.name.toLowerCase().replace(/[^a-z0-9-_]/g,"").slice(0,80)||"group-chat",type:0,parent:category.id,reason:"MLD group"});const voice=await guild.channels.create({name:"Voice · "+group.name,type:2,parent:category.id,reason:"MLD group"});group.discordRoleId=role.id;group.discordCategoryId=category.id;group.discordTextId=textCh.id;group.discordVoiceId=voice.id;try{const account=platform.accounts.find(a=>a.username===group.owner);const member=account?.discordId?await guild.members.fetch(account.discordId).catch(()=>null):null;if(member)await member.roles.add(role,"MLD group owner");}catch(err){console.error("Group owner role:",err.message);}
   }
   group.status=status;savePlatform();logPlatform("group_status",req.account.id,group.id+":"+status);res.json({group});
 });
