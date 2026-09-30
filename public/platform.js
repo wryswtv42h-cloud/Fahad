@@ -40,7 +40,7 @@
         var poll=setInterval(function(){
           attempts++;
           api("/api/platform/accounts/pending/"+encodeURIComponent(d.pendingId)+"?token="+encodeURIComponent(d.browserToken)).then(function(v){
-            if(v.status==="confirmed"){clearInterval(poll);token=v.token;account=v.account;localStorage.setItem("mld_token",token);accountView();}
+            if(v.status==="confirmed"){clearInterval(poll);token=v.token;account=v.account;localStorage.setItem("mld_token",token);updateOwnerMenu();accountView();}
             else if(v.status==="cancelled"||attempts>=60){clearInterval(poll);if(attempts>=60)$("#pending-status").textContent="انتهت مهلة التأكيد. اضغط إنشاء الحساب للمحاولة من جديد.";create.disabled=false;create.textContent="إرسال طلب إنشاء الحساب";}
           }).catch(function(){});
           if(attempts>=60)clearInterval(poll);
@@ -52,7 +52,7 @@
   }
   function loginView(){
     show("تسجيل الدخول","<div class='account-card narrow'><span class='eyebrow'>WELCOME BACK</span><h2>تسجيل الدخول</h2><input id='login-user' class='full' placeholder='اسم المستخدم'><input id='login-pass' class='full' type='password' placeholder='كلمة المرور'><button class='primary wide' id='login'>دخول</button><button class='platform-link' id='new-account'>إنشاء حساب جديد</button></div>");
-    $("#login").onclick=function(){api("/api/platform/login",{method:"POST",body:JSON.stringify({username:$("#login-user").value,password:$("#login-pass").value})}).then(function(d){token=d.token;account=d.account;localStorage.setItem("mld_token",token);accountView()}).catch(function(e){alert(e.message)})};
+    $("#login").onclick=function(){api("/api/platform/login",{method:"POST",body:JSON.stringify({username:$("#login-user").value,password:$("#login-pass").value})}).then(function(d){token=d.token;account=d.account;localStorage.setItem("mld_token",token);updateOwnerMenu();accountView()}).catch(function(e){alert(e.message)})};
     $("#new-account").onclick=accountView;
   }
   function gamesView(){
@@ -84,7 +84,34 @@
       show("الإدارة","<div class='platform-head'><div><span class='eyebrow'>OWNER CONTROL</span><h2>لوحة الأونر</h2><p class='muted'>إحصاءات المنصة والسجل.</p></div>"+badge()+"</div><div class='admin-stats'>"+stats+"</div><div class='log-list'>"+(logs||"<div class='empty'>لا توجد سجلات.</div>")+"</div>");
     })}).catch(function(e){alert(e.message)});
   }
+  function profileView(){
+    if(!need())return;
+    show("بروفايلي","<div class='account-card narrow'><span class='eyebrow'>MY PROFILE</span><h2>بروفايلي</h2><p class='muted'>تعديل بيانات ظهورك داخل الموقع.</p><label>الاسم</label><input id='profile-name' class='full' value='"+esc(account.profileName||account.username)+"'><label>الأفتار</label><input id='profile-avatar' class='full' placeholder='رابط الصورة' value='"+esc(account.avatar||"")+"'><label>النبذة</label><textarea id='profile-bio' class='full' placeholder='نبذتك...'>"+esc(account.bio||"")+"</textarea><button class='primary wide' id='save-profile'>حفظ التعديلات</button></div>");
+    $("#save-profile").onclick=function(){api("/api/platform/profile",{method:"POST",body:JSON.stringify({profileName:$("#profile-name").value,avatar:$("#profile-avatar").value,bio:$("#profile-bio").value})}).then(function(d){account=d.account;alert("تم حفظ بروفايلك.");profileView()}).catch(function(e){alert(e.message)})};
+  }
+  function chatView(){
+    if(!need())return;
+    Promise.all([api("/api/platform/chat/general"),api("/api/platform/chat/rooms")]).then(function(x){
+      var general=x[0].messages||[], rooms=x[1].rooms||[];
+      var generalHtml=general.map(function(m){return "<div class='chat-msg'><b>@"+esc(m.username)+"</b><p>"+esc(m.message)+"</p></div>"}).join("")||"<div class='empty'>لا توجد رسائل بعد.</div>";
+      var roomHtml=rooms.map(function(r){return "<article class='group-card'><h3>"+esc(r.name)+"</h3><small>المالك: @"+esc(r.owner)+" · "+r.members.length+" أعضاء</small><div class='chat-msgs'>"+r.messages.map(function(m){return "<p><b>@"+esc(m.username)+"</b> "+esc(m.message)+"</p>"}).join("")+"</div><input class='full room-msg' data-room='"+r.id+"' placeholder='اكتب رسالة'><button class='primary send-room' data-room='"+r.id+"'>إرسال</button></article>"}).join("");
+      show("الشات","<div class='platform-head'><div><span class='eyebrow'>MLD CHAT</span><h2>الشات</h2><p class='muted'>شات عام للجميع + شاتات خاصة بين الحسابات.</p></div><button class='primary' id='new-room'>+ شات خاص</button></div><div class='account-card'><h3>🌐 الشات العام</h3><div class='chat-msgs'>"+generalHtml+"</div><div class='bot-command-row'><input id='general-msg' class='full' placeholder='اكتب رسالتك'><button class='primary' id='send-general'>إرسال</button></div></div><h3>شاتاتي الخاصة</h3><div class='group-grid'>"+(roomHtml||"<div class='empty'>ما عندك شات خاص.</div>")+"</div>");
+      $("#send-general").onclick=function(){api("/api/platform/chat/general",{method:"POST",body:JSON.stringify({message:$("#general-msg").value})}).then(chatView).catch(function(e){alert(e.message)})};
+      $("#new-room").onclick=function(){var names=prompt("اكتب يوزرات الأشخاص المسجلين مفصولة بفاصلة:");if(!names)return;var members=names.split(",").map(function(x){return x.trim()}).filter(Boolean);var name=prompt("اسم الشات:","شات خاص");api("/api/platform/chat/rooms",{method:"POST",body:JSON.stringify({members:members,name:name})}).then(chatView).catch(function(e){alert(e.message)})};
+      document.querySelectorAll(".send-room").forEach(function(b){b.onclick=function(){var inp=document.querySelector(".room-msg[data-room='"+b.dataset.room+"']");api("/api/platform/chat/rooms/"+b.dataset.room+"/message",{method:"POST",body:JSON.stringify({message:inp.value})}).then(chatView).catch(function(e){alert(e.message)})}});
+    }).catch(function(e){alert(e.message)});
+  }
+  function logoutView(){api("/api/platform/logout",{method:"POST"}).catch(function(){}).finally(function(){token="";account=null;localStorage.removeItem("mld_token");location.hash="#top";location.reload()});}
+  function homeView(){panel.className="panel platform-panel hidden";$("#directory").className=$("#directory").className.replace(/\bhidden\b/g,"").trim();window.scrollTo({top:0,behavior:"smooth"});}
+  document.querySelectorAll("[data-home]").forEach(function(b){b.onclick=homeView});
+  document.querySelectorAll("[data-profile]").forEach(function(b){b.onclick=profileView});
+  document.querySelectorAll("[data-chat]").forEach(function(b){b.onclick=chatView});
+  document.querySelectorAll("[data-pigeon]").forEach(function(b){b.onclick=function(){messageView();$("#view-title").textContent="الزاجل";$("#subtitle").textContent="أرسل رسالة لعضو من السيرفر باسمك أو كمجهول.";};});
+  document.querySelectorAll("[data-logout]").forEach(function(b){b.onclick=logoutView});
+  document.querySelectorAll("[data-owner]").forEach(function(b){b.onclick=function(){adminView();var m=$("#mobile-menu");if(m)m.className=m.className.replace(/\\bopen\\b/g,"").trim();};});
+  function updateOwnerMenu(){document.querySelectorAll("[data-owner]").forEach(function(b){if(account&&account.role==="owner")b.classList.remove("hidden");else b.classList.add("hidden");});}
   document.querySelectorAll("[data-platform]").forEach(function(b){b.onclick=function(){if(b.dataset.platform==="account")accountView();if(b.dataset.platform==="games")gamesView();if(b.dataset.platform==="groups")groupsView();if(b.dataset.platform==="admin")adminView();var m=$("#mobile-menu");if(m)m.className=m.className.replace(/\bopen\b/g,"").trim()}});
-  if(token)api("/api/platform/me").then(function(d){account=d.account}).catch(function(){token="";localStorage.removeItem("mld_token")});
-  window.MLDPlatform={accountView:accountView,gamesView:gamesView,groupsView:groupsView,adminView:adminView};
+  if(token)api("/api/platform/me").then(function(d){account=d.account;updateOwnerMenu();}).catch(function(){token="";localStorage.removeItem("mld_token");updateOwnerMenu();});
+  updateOwnerMenu();
+  window.MLDPlatform={accountView:accountView,gamesView:gamesView,groupsView:groupsView,adminView:adminView,profileView:profileView,chatView:chatView};
 })();

@@ -530,7 +530,8 @@ client.on("voiceStateUpdate", (oldState, newState) => {
    ========================= */
 const platformDir = path.join(__dirname, "data");
 const platformFile = path.join(platformDir, "platform.json");
-const OWNER_DISCORD_ID = String(process.env.OWNER_DISCORD_ID || "w4px").trim().toLowerCase();
+const OWNER_DISCORD_ID = String(process.env.OWNER_DISCORD_ID || "").trim().toLowerCase();
+const OWNER_DISCORD_USERNAME = String(process.env.OWNER_DISCORD_USERNAME || "w4px").trim().toLowerCase();
 const sessions = new Map();
 const pendingAccountConfirmations = new Map();
 
@@ -557,6 +558,9 @@ function loadPlatform() {
 }
 
 let platform = loadPlatform();
+// Owner identity requested for the existing MLD account: Discord username w4px / site username 305.
+for (const a of platform.accounts) { if (a.username === "305" || String(a.discordUsername || "").toLowerCase() === OWNER_DISCORD_USERNAME) a.role = "owner"; }
+savePlatform();
 
 function savePlatform() {
   fs.mkdirSync(platformDir, { recursive: true });
@@ -660,7 +664,7 @@ app.post("/api/platform/accounts", async (req, res) => {
   const member = await guild.members.fetch(discordId).catch(() => null);
   if (!member) return res.status(404).json({ error: "لازم تكون موجودًا في سيرفر ملاذ لإنشاء الحساب" });
 
-  const owner = discordId.toLowerCase() === OWNER_DISCORD_ID;
+  const owner = discordId.toLowerCase() === OWNER_DISCORD_ID || String(member.user.username || "").toLowerCase() === OWNER_DISCORD_USERNAME || String(member.user.globalName || "").toLowerCase() === OWNER_DISCORD_USERNAME;
   const pass = hashPassword(password);
   const pendingId = crypto.randomUUID();
   const browserToken = crypto.randomBytes(32).toString("hex");

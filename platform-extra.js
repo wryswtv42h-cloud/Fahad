@@ -14,6 +14,7 @@ module.exports = function setupMLDExtra({ app, client, auth, ownerOnly, logPlatf
     applications: [],
     reviews: [],
     privateMessages: [],
+    chats: { general: [], rooms: {} },
     wallets: {},
     streaks: {},
     giveaways: []
@@ -35,6 +36,45 @@ module.exports = function setupMLDExtra({ app, client, auth, ownerOnly, logPlatf
   const id=()=>crypto.randomUUID();
   const clean=(v,n)=>String(v==null?"":v).trim().slice(0,n);
   const staffOnly=(req,res,next)=>req.account?.role==="owner" ? next() : res.status(403).json({error:"هذا القسم للإدارة والأونر"});
+  function chatMember(room, username){ return room.members.includes(username) || room.owner===username; }
+  app.get("/api/platform/chat/general",(req,res)=>res.json({messages:data.chats.general.slice(-200)}));
+  app.post("/api/platform/chat/general",auth,(req,res)=>{
+    const message=clean(req.body?.message,1000); if(!message)return res.status(400).json({error:"اكتب رسالة"});
+    const item={id:id(),username:req.account.username,message,at:new Date().toISOString()};
+    data.chats.general.push(item); data.chats.general=data.chats.general.slice(-500); save(); logPlatform("general_chat_message",req.account.id,message.slice(0,80)); res.status(201).json({message:item});
+  });
+  app.get("/api/platform/chat/rooms",auth,(req,res)=>{
+    const rooms=Object.values(data.chats.rooms).filter(r=>chatMember(r,req.account.username)).map(r=>({id:r.id,name:r.name,owner:r.owner,members:r.members,messages:r.messages.slice(-100)}));
+    res.json({rooms});
+  });
+  app.post("/api/platform/chat/rooms",auth,(req,res)=>{
+    const raw=Array.isArray(req.body?.members)?req.body.members.map(x=>clean(x,24).toLowerCase()).filter(Boolean):[];
+    const members=[...new Set([req.account.username,...raw])];
+    const valid=members.filter(u=>platform.accounts.some(a=>a.username===u));
+    if(valid.length<2)return res.status(400).json({error:"اختر شخصًا واحدًا على الأقل من الحسابات المسجلة"});
+    const room={id:id(),name:clean(req.body?.name,60)||"شات خاص",owner:req.account.username,members:valid,messages:[],createdAt:new Date().toISOString()};
+    data.chats.rooms[room.id]=room; save(); logPlatform("private_chat_created",req.account.id,room.id); res.status(201).json({room});
+  });
+  app.post("/api/platform/chat/rooms/:id/message",auth,(req,res)=>{
+    const room=data.chats.rooms[req.params.id]; if(!room)return res.status(404).json({error:"الشات غير موجود"});
+    if(!chatMember(room,req.account.username))return res.status(403).json({error:"لست عضوًا في هذا الشات"});
+    const message=clean(req.body?.message,1000); if(!message)return res.status(400).json({error:"اكتب رسالة"});
+    const item={id:id(),username:req.account.username,message,at:new Date().toISOString()};
+    room.messages.push(item); room.messages=room.messages.slice(-500); save(); logPlatform("private_chat_message",req.account.id,room.id); res.status(201).json({message:item});
+  });
+  app.post("/api/platform/chat/rooms/:id/members",auth,(req,res)=>{
+    const room=data.chats.rooms[req.params.id]; if(!room)return res.status(404).json({error:"الشات غير موجود"});
+    if(room.owner!==req.account.username)return res.status(403).json({error:"مالك الشات فقط يقدر يعدل الأعضاء"});
+    const username=clean(req.body?.username,24).toLowerCase();
+    if(!platform.accounts.some(a=>a.username===username))return res.status(404).json({error:"الحساب غير موجود"});
+    if(!room.members.includes(username))room.members.push(username); save(); logPlatform("private_chat_member_added",req.account.id,room.id+":"+username); res.json({room});
+  });
+  app.delete("/api/platform/chat/rooms/:id/members/:username",auth,(req,res)=>{
+    const room=data.chats.rooms[req.params.id]; if(!room)return res.status(404).json({error:"الشات غير موجود"});
+    if(room.owner!==req.account.username)return res.status(403).json({error:"مالك الشات فقط يقدر يعدل الأعضاء"});
+    const username=clean(req.params.username,24).toLowerCase(); if(username===room.owner)return res.status(400).json({error:"لا يمكن حذف مالك الشات"});
+    room.members=room.members.filter(x=>x!==username); save(); logPlatform("private_chat_member_removed",req.account.id,room.id+":"+username); res.json({room});
+  });
   require("./bot-manager")({ app, auth, logPlatform, platform, savePlatform });
 
   app.get("/api/platform/bots",(req,res)=>res.json({bots:data.bots.map(b=>Object.assign({},b,{settings:data.botSettings[b.id]||{}}))}));
@@ -48,6 +88,15 @@ module.exports = function setupMLDExtra({ app, client, auth, ownerOnly, logPlatf
     const bot=data.bots.find(b=>b.id===req.params.id); if(!bot)return res.status(404).json({error:"البوت غير موجود"});
     data.botSettings[bot.id]={prefix:clean(req.body?.prefix||"!",3), welcome:Boolean(req.body?.welcome), logs:Boolean(req.body?.logs), automod:Boolean(req.body?.automod)};
     save(); logPlatform("bot_settings",req.account.id,bot.id); res.json({settings:data.botSettings[bot.id]});
+  });
+
+  app.post("/api/platform/profile",auth,(req,res)=>{
+    req.account.profileName=clean(req.body?.profileName,60)||req.account.username;
+    req.account.avatar=clean(req.body?.avatar,500);
+    req.account.bio=clean(req.body?.bio,300);
+    savePlatform();
+    logPlatform("profile_updated",req.account.id,req.account.username);
+    res.json({account:req.account});
   });
 
   app.get("/api/platform/tickets",auth,(req,res)=>{
