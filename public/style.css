@@ -110,3 +110,14 @@ body:before{background:linear-gradient(120deg,#ff79c80b,transparent 42%,#69e4ff0
 @keyframes aiPulse{0%,100%{transform:scale(.96);opacity:.3}50%{transform:scale(1.08);opacity:1}}@media(max-width:600px){}
 
 .discord{position:fixed;right:22px;bottom:22px;z-index:400;display:grid;place-items:center;width:58px;height:58px;border-radius:19px;background:linear-gradient(135deg,#5865f2,#8d7cff 70%,#ff79c8);border:1px solid #ffffff35;color:#fff;text-decoration:none;box-shadow:0 14px 42px #0009,0 0 26px #8d7cff38}
+
+/* MLD repaired overlays / forms */
+.modal-layer{position:fixed;inset:0;z-index:1200;display:grid;place-items:center;padding:18px;background:#030409dd;backdrop-filter:blur(14px)}
+.modal-box{width:min(720px,100%);max-height:90vh;overflow:auto;position:relative;padding:28px;border:1px solid var(--line2);border-radius:28px;background:linear-gradient(145deg,#151722,#090a10);box-shadow:0 30px 120px #000c}
+.modal-box>.modal-close{position:absolute;left:18px;top:18px}
+.modal-box h2{margin:8px 0 22px}
+.mld-intro{position:fixed;inset:0;z-index:2000;display:grid;place-items:center;background:radial-gradient(circle at 50% 45%,#ff79c81c,transparent 35%),#05060be8;backdrop-filter:blur(14px);opacity:1;transition:opacity .45s ease}
+.mld-intro.hide{opacity:0;pointer-events:none}
+.mld-intro>div{padding:34px 42px;border:1px solid #ffffff18;border-radius:28px;background:#10121be8;box-shadow:0 30px 120px #000b;text-align:center}
+.mld-intro b{display:block;font-size:34px;letter-spacing:-1px}
+.mld-intro small{display:block;margin-top:7px;color:var(--pink);letter-spacing:3px;font-size:9px;font-weight:900}
