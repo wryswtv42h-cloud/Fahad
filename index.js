@@ -1256,6 +1256,7 @@ app.get("/api/platform/admin", auth, adminOnly, (req, res) => {
 });
 
 require("./platform-extra")({ app, client, auth, ownerOnly, adminOnly, logPlatform, getGuild, getAllMembers, platform, savePlatform });
+require("./bot-manager")({ app, auth, logPlatform, platform, savePlatform });
 
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
